@@ -21,11 +21,8 @@ export interface GridCellProps {
   className?: string;
   isInteractive?: boolean;
   style?: React.CSSProperties;
-  isConcentric?: boolean;
   isHighlighted?: boolean;
   isDimmed?: boolean;
-  rowSpan?: number;
-  colSpan?: number;
 }
 
 const GridCellComponent: React.FC<GridCellProps> = ({
@@ -35,11 +32,8 @@ const GridCellComponent: React.FC<GridCellProps> = ({
   className = '',
   isInteractive = true,
   style,
-  isConcentric = false,
   isHighlighted = false,
   isDimmed = false,
-  rowSpan,
-  colSpan,
 }) => {
   const [imageError, setImageError] = useState(false);
   // Hover overlays are invisible until a mouse can reach them, so skip all
@@ -50,17 +44,6 @@ const GridCellComponent: React.FC<GridCellProps> = ({
     setMounted(true);
   }, []);
   const tier = getRankTier(slot.rank);
-
-  // Size styling classes for default flow (when style coordinate is not provided)
-  const rankClassMap = isConcentric
-    ? 'w-full h-full'
-    : {
-        king: 'col-span-4 row-span-4 aspect-square',
-        elite: 'col-span-2 row-span-2 aspect-square',
-        lord: 'col-span-2 row-span-1 aspect-video',
-        contender: 'col-span-1 row-span-1 aspect-square',
-        bubble: 'col-span-1 row-span-1 aspect-square',
-      }[tier];
 
   // Refined Neutral Dark Grey borders & glowing accents
   const borderClassMap = {
@@ -99,7 +82,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
         isHighlighted ? 'ring-2 ring-white shadow-2xl shadow-white/30 ring-offset-2 ring-offset-[#121316]' : ''
       } ${
         isDimmed ? 'filter grayscale-[0.4] pointer-events-auto' : ''
-      } ${rankClassMap} ${borderClassMap} ${className}`}
+      } w-full h-full ${borderClassMap} ${className}`}
     >
       {/* Background Image / Fallback */}
       {!imageError && slot.imageUrl ? (

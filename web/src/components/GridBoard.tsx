@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { GridCell } from './ui';
 import { SlotItem } from '../lib/slotTypes';
-import { getSlotCoordinate, GridOrientation } from '../lib/concentricGrid';
+import { getSlotCoordinate, GridOrientation, LANDSCAPE_DIMS, PORTRAIT_DIMS } from '../lib/concentricGrid';
 import { soundEngine } from '../lib/sound';
 
 export interface GridBoardProps {
@@ -80,20 +80,14 @@ export const GridBoard: React.FC<GridBoardProps> = ({
     setZoomLevel(1.0);
   };
 
+  // Grid template derives from the canonical dims in concentricGrid (single source of truth).
   const gridDimensions = useMemo(() => {
-    if (orientation === 'landscape') {
-      return {
-        cols: 16,
-        rows: 12,
-        gridTemplateColumns: 'repeat(16, minmax(0, 1fr))',
-        gridTemplateRows: 'repeat(12, minmax(0, 1fr))',
-      };
-    }
+    const d = orientation === 'landscape' ? LANDSCAPE_DIMS : PORTRAIT_DIMS;
     return {
-      cols: 12,
-      rows: 16,
-      gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
-      gridTemplateRows: 'repeat(16, minmax(0, 1fr))',
+      cols: d.cols,
+      rows: d.rows,
+      gridTemplateColumns: `repeat(${d.cols}, minmax(0, 1fr))`,
+      gridTemplateRows: `repeat(${d.rows}, minmax(0, 1fr))`,
     };
   }, [orientation]);
 
@@ -173,11 +167,8 @@ export const GridBoard: React.FC<GridBoardProps> = ({
                     ...slot,
                     isNew: slot.isNew,
                   }}
-                  isConcentric={true}
                   isHighlighted={isHighlighted}
                   isDimmed={isDimmed}
-                  rowSpan={coord.rowSpan}
-                  colSpan={coord.colSpan}
                   style={{
                     gridColumn: `${coord.col} / span ${coord.colSpan}`,
                     gridRow: `${coord.row} / span ${coord.rowSpan}`,
