@@ -26,7 +26,7 @@ create table categories (
 ---
 
 ### 2. `users`
-Public creator profile wrapping `auth.users`.
+Public creator profile wrapping `auth.users`. Supports direct Instagram-style profile likes/reactions.
 ```sql
 create table users (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -37,11 +37,19 @@ create table users (
   website text,
   twitter text,
   github text,
+  reactions_fire int not null default 0,
+  reactions_eyes int not null default 0,
+  reactions_heart int not null default 0,
+  reactions_laugh int not null default 0,
+  total_reactions int generated always as (
+    reactions_fire + reactions_eyes + reactions_heart + reactions_laugh
+  ) stored,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index idx_users_handle on users (handle);
+create index idx_users_total_reactions on users (total_reactions desc);
 ```
 
 ---
@@ -82,6 +90,13 @@ create table projects (
   image_zoom numeric(3,2) not null default 1.0,
   frame text not null default 'default',
   views_count bigint not null default 0,
+  reactions_fire int not null default 0,
+  reactions_eyes int not null default 0,
+  reactions_heart int not null default 0,
+  reactions_laugh int not null default 0,
+  total_reactions int generated always as (
+    reactions_fire + reactions_eyes + reactions_heart + reactions_laugh
+  ) stored,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -93,6 +108,7 @@ create table projects (
 create index idx_projects_user on projects (user_id);
 create index idx_projects_category on projects (category_id);
 create index idx_projects_ranking_order on projects (current_active_value_minor desc, ranking_sequence asc);
+create index idx_projects_total_reactions on projects (total_reactions desc);
 create unique index idx_projects_active_rank on projects (current_rank) where is_active = true and current_rank is not null;
 ```
 
@@ -212,27 +228,29 @@ create index idx_board_events_created on board_events (created_at desc);
 
 ---
 
-### 9. `reactions` & `reaction_counts`
+### 9. `reactions` (Dual-Target Event Ledger)
+Audit ledger tracking 1-reaction-per-identity across projects (reels) and user profiles. Standalone counts table eliminated in favor of inlined columns on `projects` and `users` for 0-join instant read queries.
 ```sql
 create type reaction_type as enum ('fire', 'eyes', 'heart', 'laugh');
 
 create table reactions (
   id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade,
+  target_user_id uuid references users(id) on delete cascade,
   anonymous_id text not null,
   reaction_type reaction_type not null,
   created_at timestamptz not null default now(),
-  unique (project_id, anonymous_id, reaction_type)
+  constraint chk_reaction_target check (
+    (project_id is not null and target_user_id is null) or
+    (project_id is null and target_user_id is not null)
+  ),
+  constraint uq_project_reaction unique (project_id, anonymous_id, reaction_type),
+  constraint uq_user_reaction unique (target_user_id, anonymous_id, reaction_type)
 );
 
 create index idx_reactions_anonymous on reactions (anonymous_id);
-
-create table reaction_counts (
-  project_id uuid references projects(id) on delete cascade not null,
-  reaction_type reaction_type not null,
-  count int not null default 0,
-  primary key (project_id, reaction_type)
-);
+create index idx_reactions_project on reactions (project_id) where project_id is not null;
+create index idx_reactions_target_user on reactions (target_user_id) where target_user_id is not null;
 ```
 
 ---

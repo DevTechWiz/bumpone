@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 const VALID_REACTIONS = ['fire', 'eyes', 'heart', 'laugh'] as const;
+type ReactionType = (typeof VALID_REACTIONS)[number];
 
 const SECRET = process.env.ANON_COOKIE_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'development-only-anon-secret');
 
@@ -50,11 +51,13 @@ export async function POST(request: NextRequest) {
   try {
     if (!SECRET) return NextResponse.json({ error: 'Anonymous identity service is unavailable' }, { status: 503 });
     const body = await request.json();
-    const targetId = body.projectId || body.profileId;
-    const reaction = body.reaction;
+
+    const isUserTarget = Boolean(body.userId || body.targetType === 'user');
+    const targetId = body.userId || body.projectId || body.profileId;
+    const reaction = body.reaction as ReactionType;
 
     if (!targetId || !VALID_REACTIONS.includes(reaction)) {
-      return NextResponse.json({ error: 'Invalid projectId or reaction type' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid targetId or reaction type' }, { status: 400 });
     }
 
     const rawCookie = request.cookies.get('bumped_anon_id')?.value;
@@ -81,31 +84,37 @@ export async function POST(request: NextRequest) {
     );
 
     let count = 1;
+    let alreadyReacted = false;
 
     if (isSupabaseConfigured) {
-      // Atomic RPC execution: records reaction and increments count in 1 single ACID step
-      const rpcTry1 = await supabaseAdmin.rpc('add_project_reaction', {
-        p_project_id: targetId,
-        p_anonymous_id: anonId,
-        p_reaction_type: reaction,
-      });
-
-      if (!rpcTry1.error && rpcTry1.data && rpcTry1.data.count !== undefined) {
-        count = rpcTry1.data.count;
-      } else {
-        // Fallback to legacy function name
-        const rpcTry2 = await supabaseAdmin.rpc('add_profile_reaction', {
-          p_profile_id: targetId,
+      if (isUserTarget) {
+        // Atomic creator/user profile reaction
+        const rpcRes = await supabaseAdmin.rpc('add_user_reaction', {
+          p_user_id: targetId,
           p_anonymous_id: anonId,
           p_reaction_type: reaction,
         });
-        if (!rpcTry2.error && rpcTry2.data && rpcTry2.data.count !== undefined) {
-          count = rpcTry2.data.count;
+
+        if (!rpcRes.error && rpcRes.data) {
+          count = rpcRes.data.count ?? count;
+          alreadyReacted = Boolean(rpcRes.data.already_reacted);
+        }
+      } else {
+        // Atomic project (reel/slot) reaction
+        const rpcRes = await supabaseAdmin.rpc('add_project_reaction', {
+          p_project_id: targetId,
+          p_anonymous_id: anonId,
+          p_reaction_type: reaction,
+        });
+
+        if (!rpcRes.error && rpcRes.data) {
+          count = rpcRes.data.count ?? count;
+          alreadyReacted = Boolean(rpcRes.data.already_reacted);
         }
       }
     }
 
-    const res = NextResponse.json({ success: true, count });
+    const res = NextResponse.json({ success: true, count, alreadyReacted });
     if (isNewCookie) {
       res.cookies.set('bumped_anon_id', signAnonId(anonId), {
         httpOnly: true,
@@ -125,11 +134,15 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const targetId = searchParams.get('projectId') || searchParams.get('profileId');
-    const reaction = searchParams.get('reaction');
+    const userId = searchParams.get('userId');
+    const projectId = searchParams.get('projectId') || searchParams.get('profileId');
+    const targetType = searchParams.get('targetType');
+    const isUserTarget = Boolean(userId || targetType === 'user');
+    const targetId = userId || projectId;
+    const reaction = searchParams.get('reaction') as ReactionType;
 
-    if (!targetId || !reaction || !VALID_REACTIONS.includes(reaction as any)) {
-      return NextResponse.json({ error: 'Invalid projectId or reaction type' }, { status: 400 });
+    if (!targetId || !reaction || !VALID_REACTIONS.includes(reaction)) {
+      return NextResponse.json({ error: 'Invalid targetId or reaction type' }, { status: 400 });
     }
 
     const rawCookie = request.cookies.get('bumped_anon_id')?.value;
@@ -145,59 +158,31 @@ export async function DELETE(request: NextRequest) {
       !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('your-project')
     );
 
+    let count = 0;
+
     if (isSupabaseConfigured) {
-      // Try projects schema (project_id)
-      const { data: deleted, error: delErr } = await supabaseAdmin
-        .from('reactions')
-        .delete()
-        .select('id')
-        .eq('project_id', targetId)
-        .eq('anonymous_id', anonId)
-        .eq('reaction_type', reaction);
-
-      if (delErr) {
-        // Fallback to legacy profile_id
-        await supabaseAdmin
-          .from('reactions')
-          .delete()
-          .eq('profile_id', targetId)
-          .eq('anonymous_id', anonId)
-          .eq('reaction_type', reaction);
-      }
-
-      // Decrement count
-      const countRes1 = await supabaseAdmin
-        .from('reaction_counts')
-        .select('count')
-        .eq('project_id', targetId)
-        .eq('reaction_type', reaction)
-        .single();
-
-      if (deleted?.length && countRes1.data && countRes1.data.count > 0) {
-        await supabaseAdmin
-          .from('reaction_counts')
-          .update({ count: Math.max(0, countRes1.data.count - 1) })
-          .eq('project_id', targetId)
-          .eq('reaction_type', reaction);
+      if (isUserTarget) {
+        const rpcRes = await supabaseAdmin.rpc('remove_user_reaction', {
+          p_user_id: targetId,
+          p_anonymous_id: anonId,
+          p_reaction_type: reaction,
+        });
+        if (!rpcRes.error && rpcRes.data) {
+          count = rpcRes.data.count ?? count;
+        }
       } else {
-        const countRes2 = await supabaseAdmin
-          .from('reaction_counts')
-          .select('count')
-          .eq('profile_id', targetId)
-          .eq('reaction_type', reaction)
-          .single();
-
-        if (countRes2.data && countRes2.data.count > 0) {
-          await supabaseAdmin
-            .from('reaction_counts')
-            .update({ count: Math.max(0, countRes2.data.count - 1) })
-            .eq('profile_id', targetId)
-            .eq('reaction_type', reaction);
+        const rpcRes = await supabaseAdmin.rpc('remove_project_reaction', {
+          p_project_id: targetId,
+          p_anonymous_id: anonId,
+          p_reaction_type: reaction,
+        });
+        if (!rpcRes.error && rpcRes.data) {
+          count = rpcRes.data.count ?? count;
         }
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, count });
   } catch (err: any) {
     console.error('Error removing reaction:', err);
     return NextResponse.json({ error: 'Failed to remove reaction' }, { status: 500 });

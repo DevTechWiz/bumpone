@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (isSupabaseConfigured) {
-      // Query projects table (clean 2026 schema)
+      // Query projects table (clean 2026 schema with 0-join reaction columns)
       const selectFieldsProject = category && category !== 'All'
         ? `
           id,
@@ -58,8 +58,12 @@ export async function GET(request: NextRequest) {
           total_paid_minor,
           is_active,
           moderation_status,
-          categories!inner(name),
-          reaction_counts(reaction_type, count)
+          reactions_fire,
+          reactions_eyes,
+          reactions_heart,
+          reactions_laugh,
+          total_reactions,
+          categories!inner(name)
         `
         : `
           id,
@@ -74,8 +78,12 @@ export async function GET(request: NextRequest) {
           total_paid_minor,
           is_active,
           moderation_status,
-          categories(name),
-          reaction_counts(reaction_type, count)
+          reactions_fire,
+          reactions_eyes,
+          reactions_heart,
+          reactions_laugh,
+          total_reactions,
+          categories(name)
         `;
 
       let query = supabaseAdmin
@@ -90,7 +98,9 @@ export async function GET(request: NextRequest) {
         query = query.eq('categories.name', category);
       }
 
-      if (sort === 'trending') {
+      if (sort === 'popular') {
+        query = query.order('total_reactions', { ascending: false }).order('current_active_value_minor', { ascending: false });
+      } else if (sort === 'trending') {
         query = query.order('updated_at', { ascending: false }).order('current_active_value_minor', { ascending: false });
       } else {
         query = query.order('current_active_value_minor', { ascending: false }).order('ranking_sequence', { ascending: true });
@@ -110,7 +120,9 @@ export async function GET(request: NextRequest) {
           .not('current_rank', 'is', null)
           .lte('current_rank', 100);
 
-        if (sort === 'trending') {
+        if (sort === 'popular') {
+          legacyQuery = legacyQuery.order('total_reactions', { ascending: false });
+        } else if (sort === 'trending') {
           legacyQuery = legacyQuery.order('updated_at', { ascending: false });
         }
 
@@ -123,14 +135,12 @@ export async function GET(request: NextRequest) {
 
       if (!error && data && data.length > 0) {
         let profiles: Profile[] = data.map((row: any) => {
-          const reactions = { fire: 0, eyes: 0, heart: 0, laugh: 0 };
-          if (Array.isArray(row.reaction_counts)) {
-            for (const r of row.reaction_counts) {
-              if (r.reaction_type in reactions) {
-                reactions[r.reaction_type as keyof typeof reactions] = r.count;
-              }
-            }
-          }
+          const reactions = {
+            fire: Number(row.reactions_fire ?? (Array.isArray(row.reaction_counts) ? row.reaction_counts.find((r: any) => r.reaction_type === 'fire')?.count : 0) ?? 0),
+            eyes: Number(row.reactions_eyes ?? (Array.isArray(row.reaction_counts) ? row.reaction_counts.find((r: any) => r.reaction_type === 'eyes')?.count : 0) ?? 0),
+            heart: Number(row.reactions_heart ?? (Array.isArray(row.reaction_counts) ? row.reaction_counts.find((r: any) => r.reaction_type === 'heart')?.count : 0) ?? 0),
+            laugh: Number(row.reactions_laugh ?? (Array.isArray(row.reaction_counts) ? row.reaction_counts.find((r: any) => r.reaction_type === 'laugh')?.count : 0) ?? 0),
+          };
 
           const categoryName = Array.isArray(row.categories)
             ? row.categories[0]?.name

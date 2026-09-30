@@ -26,11 +26,19 @@ create table if not exists users (
   website text,
   twitter text,
   github text,
+  reactions_fire int not null default 0,
+  reactions_eyes int not null default 0,
+  reactions_heart int not null default 0,
+  reactions_laugh int not null default 0,
+  total_reactions int generated always as (
+    reactions_fire + reactions_eyes + reactions_heart + reactions_laugh
+  ) stored,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists idx_users_handle on users (handle);
+create index if not exists idx_users_total_reactions on users (total_reactions desc);
 
 -- Auto-provision public user profile on Supabase auth signup
 create or replace function handle_new_user()
@@ -125,6 +133,13 @@ create table if not exists projects (
   image_zoom numeric(3,2) not null default 1.0,
   frame text not null default 'default',
   views_count bigint not null default 0,
+  reactions_fire int not null default 0,
+  reactions_eyes int not null default 0,
+  reactions_heart int not null default 0,
+  reactions_laugh int not null default 0,
+  total_reactions int generated always as (
+    reactions_fire + reactions_eyes + reactions_heart + reactions_laugh
+  ) stored,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -133,6 +148,8 @@ create table if not exists projects (
   constraint chk_projects_total_paid_non_negative check (total_paid_minor >= 0),
   constraint chk_projects_current_rank_range check (current_rank is null or (current_rank >= 1 and current_rank <= 100))
 );
+
+create index if not exists idx_projects_total_reactions on projects (total_reactions desc);
 
 create index if not exists idx_projects_user on projects (user_id);
 create index if not exists idx_projects_category on projects (category_id);
@@ -259,7 +276,7 @@ create index if not exists idx_board_events_project on board_events (project_id,
 create index if not exists idx_board_events_created on board_events (created_at desc);
 
 -- ==============================================================================
--- 9. Reactions & Materialized Reaction Counts
+-- 9. Reactions Ledger
 -- ==============================================================================
 do $$ begin
   create type reaction_type as enum ('fire', 'eyes', 'heart', 'laugh');
@@ -269,21 +286,22 @@ end $$;
 
 create table if not exists reactions (
   id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade,
+  target_user_id uuid references users(id) on delete cascade,
   anonymous_id text not null, -- signed cookie UUIDv4
   reaction_type reaction_type not null,
   created_at timestamptz not null default now(),
-  unique (project_id, anonymous_id, reaction_type)
+  constraint chk_reaction_target check (
+    (project_id is not null and target_user_id is null) or
+    (project_id is null and target_user_id is not null)
+  ),
+  constraint uq_project_reaction unique (project_id, anonymous_id, reaction_type),
+  constraint uq_user_reaction unique (target_user_id, anonymous_id, reaction_type)
 );
 
 create index if not exists idx_reactions_anonymous on reactions (anonymous_id);
-
-create table if not exists reaction_counts (
-  project_id uuid references projects(id) on delete cascade not null,
-  reaction_type reaction_type not null,
-  count int not null default 0,
-  primary key (project_id, reaction_type)
-);
+create index if not exists idx_reactions_project on reactions (project_id) where project_id is not null;
+create index if not exists idx_reactions_target_user on reactions (target_user_id) where target_user_id is not null;
 
 -- ==============================================================================
 -- 10. Messages (War Room Trollbox / Live Feed)
@@ -691,7 +709,7 @@ grant execute on function process_dodo_purchase to service_role;
 -- ==============================================================================
 
 -- ==============================================================================
--- 3. Correct Atomic Reaction Recording RPC (Fixed double increment bug)
+-- 3. Atomic Inlined Reaction RPCs (Projects & Users)
 -- ==============================================================================
 create or replace function add_project_reaction(
   p_project_id uuid,
@@ -704,19 +722,16 @@ set search_path = public, pg_temp
 as $$
 declare
   v_is_new boolean := false;
-  v_new_count int := 1;
+  v_new_count int := 0;
 begin
-  -- Validate reaction type enum
   if p_reaction_type not in ('fire', 'eyes', 'heart', 'laugh') then
     return jsonb_build_object('success', false, 'error', 'Invalid reaction type');
   end if;
 
-  -- Only proceed if the project exists
   if not exists (select 1 from projects where id = p_project_id) then
     return jsonb_build_object('success', false, 'error', 'Project not found');
   end if;
 
-  -- Insert reaction only if not already reacted by this anonymous identity
   with inserted as (
     insert into reactions (project_id, anonymous_id, reaction_type)
     values (p_project_id, p_anonymous_id, p_reaction_type::reaction_type)
@@ -725,11 +740,16 @@ begin
   )
   select exists (select 1 from inserted) into v_is_new;
 
-  -- If conflict occurred (already reacted), do NOT increment counter!
   if not v_is_new then
-    select coalesce(count, 0) into v_new_count
-    from reaction_counts
-    where project_id = p_project_id and reaction_type = p_reaction_type::reaction_type;
+    if p_reaction_type = 'fire' then
+      select reactions_fire into v_new_count from projects where id = p_project_id;
+    elsif p_reaction_type = 'eyes' then
+      select reactions_eyes into v_new_count from projects where id = p_project_id;
+    elsif p_reaction_type = 'heart' then
+      select reactions_heart into v_new_count from projects where id = p_project_id;
+    elsif p_reaction_type = 'laugh' then
+      select reactions_laugh into v_new_count from projects where id = p_project_id;
+    end if;
 
     return jsonb_build_object(
       'success', true,
@@ -739,12 +759,15 @@ begin
     );
   end if;
 
-  -- Row was genuinely inserted: safely upsert counter
-  insert into reaction_counts (project_id, reaction_type, count)
-  values (p_project_id, p_reaction_type::reaction_type, 1)
-  on conflict (project_id, reaction_type)
-  do update set count = reaction_counts.count + 1
-  returning count into v_new_count;
+  if p_reaction_type = 'fire' then
+    update projects set reactions_fire = reactions_fire + 1 where id = p_project_id returning reactions_fire into v_new_count;
+  elsif p_reaction_type = 'eyes' then
+    update projects set reactions_eyes = reactions_eyes + 1 where id = p_project_id returning reactions_eyes into v_new_count;
+  elsif p_reaction_type = 'heart' then
+    update projects set reactions_heart = reactions_heart + 1 where id = p_project_id returning reactions_heart into v_new_count;
+  elsif p_reaction_type = 'laugh' then
+    update projects set reactions_laugh = reactions_laugh + 1 where id = p_project_id returning reactions_laugh into v_new_count;
+  end if;
 
   return jsonb_build_object(
     'success', true,
@@ -757,6 +780,190 @@ $$;
 
 revoke execute on function add_project_reaction from public, anon;
 grant execute on function add_project_reaction to authenticated, service_role;
+
+create or replace function remove_project_reaction(
+  p_project_id uuid,
+  p_anonymous_id text,
+  p_reaction_type text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_deleted boolean := false;
+  v_new_count int := 0;
+begin
+  if p_reaction_type not in ('fire', 'eyes', 'heart', 'laugh') then
+    return jsonb_build_object('success', false, 'error', 'Invalid reaction type');
+  end if;
+
+  with deleted as (
+    delete from reactions
+    where project_id = p_project_id
+      and anonymous_id = p_anonymous_id
+      and reaction_type = p_reaction_type::reaction_type
+    returning id
+  )
+  select exists (select 1 from deleted) into v_deleted;
+
+  if not v_deleted then
+    if p_reaction_type = 'fire' then
+      select reactions_fire into v_new_count from projects where id = p_project_id;
+    elsif p_reaction_type = 'eyes' then
+      select reactions_eyes into v_new_count from projects where id = p_project_id;
+    elsif p_reaction_type = 'heart' then
+      select reactions_heart into v_new_count from projects where id = p_project_id;
+    elsif p_reaction_type = 'laugh' then
+      select reactions_laugh into v_new_count from projects where id = p_project_id;
+    end if;
+
+    return jsonb_build_object('success', true, 'reaction', p_reaction_type, 'count', coalesce(v_new_count, 0));
+  end if;
+
+  if p_reaction_type = 'fire' then
+    update projects set reactions_fire = greatest(0, reactions_fire - 1) where id = p_project_id returning reactions_fire into v_new_count;
+  elsif p_reaction_type = 'eyes' then
+    update projects set reactions_eyes = greatest(0, reactions_eyes - 1) where id = p_project_id returning reactions_eyes into v_new_count;
+  elsif p_reaction_type = 'heart' then
+    update projects set reactions_heart = greatest(0, reactions_heart - 1) where id = p_project_id returning reactions_heart into v_new_count;
+  elsif p_reaction_type = 'laugh' then
+    update projects set reactions_laugh = greatest(0, reactions_laugh - 1) where id = p_project_id returning reactions_laugh into v_new_count;
+  end if;
+
+  return jsonb_build_object('success', true, 'reaction', p_reaction_type, 'count', v_new_count);
+end;
+$$;
+
+revoke execute on function remove_project_reaction from public, anon;
+grant execute on function remove_project_reaction to authenticated, service_role;
+
+create or replace function add_user_reaction(
+  p_user_id uuid,
+  p_anonymous_id text,
+  p_reaction_type text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_is_new boolean := false;
+  v_new_count int := 0;
+begin
+  if p_reaction_type not in ('fire', 'eyes', 'heart', 'laugh') then
+    return jsonb_build_object('success', false, 'error', 'Invalid reaction type');
+  end if;
+
+  if not exists (select 1 from users where id = p_user_id) then
+    return jsonb_build_object('success', false, 'error', 'User not found');
+  end if;
+
+  with inserted as (
+    insert into reactions (target_user_id, anonymous_id, reaction_type)
+    values (p_user_id, p_anonymous_id, p_reaction_type::reaction_type)
+    on conflict (target_user_id, anonymous_id, reaction_type) do nothing
+    returning id
+  )
+  select exists (select 1 from inserted) into v_is_new;
+
+  if not v_is_new then
+    if p_reaction_type = 'fire' then
+      select reactions_fire into v_new_count from users where id = p_user_id;
+    elsif p_reaction_type = 'eyes' then
+      select reactions_eyes into v_new_count from users where id = p_user_id;
+    elsif p_reaction_type = 'heart' then
+      select reactions_heart into v_new_count from users where id = p_user_id;
+    elsif p_reaction_type = 'laugh' then
+      select reactions_laugh into v_new_count from users where id = p_user_id;
+    end if;
+
+    return jsonb_build_object(
+      'success', true,
+      'reaction', p_reaction_type,
+      'count', coalesce(v_new_count, 0),
+      'already_reacted', true
+    );
+  end if;
+
+  if p_reaction_type = 'fire' then
+    update users set reactions_fire = reactions_fire + 1 where id = p_user_id returning reactions_fire into v_new_count;
+  elsif p_reaction_type = 'eyes' then
+    update users set reactions_eyes = reactions_eyes + 1 where id = p_user_id returning reactions_eyes into v_new_count;
+  elsif p_reaction_type = 'heart' then
+    update users set reactions_heart = reactions_heart + 1 where id = p_user_id returning reactions_heart into v_new_count;
+  elsif p_reaction_type = 'laugh' then
+    update users set reactions_laugh = reactions_laugh + 1 where id = p_user_id returning reactions_laugh into v_new_count;
+  end if;
+
+  return jsonb_build_object(
+    'success', true,
+    'reaction', p_reaction_type,
+    'count', v_new_count,
+    'already_reacted', false
+  );
+end;
+$$;
+
+revoke execute on function add_user_reaction from public, anon;
+grant execute on function add_user_reaction to authenticated, service_role;
+
+create or replace function remove_user_reaction(
+  p_user_id uuid,
+  p_anonymous_id text,
+  p_reaction_type text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_deleted boolean := false;
+  v_new_count int := 0;
+begin
+  if p_reaction_type not in ('fire', 'eyes', 'heart', 'laugh') then
+    return jsonb_build_object('success', false, 'error', 'Invalid reaction type');
+  end if;
+
+  with deleted as (
+    delete from reactions
+    where target_user_id = p_user_id
+      and anonymous_id = p_anonymous_id
+      and reaction_type = p_reaction_type::reaction_type
+    returning id
+  )
+  select exists (select 1 from deleted) into v_deleted;
+
+  if not v_deleted then
+    if p_reaction_type = 'fire' then
+      select reactions_fire into v_new_count from users where id = p_user_id;
+    elsif p_reaction_type = 'eyes' then
+      select reactions_eyes into v_new_count from users where id = p_user_id;
+    elsif p_reaction_type = 'heart' then
+      select reactions_heart into v_new_count from users where id = p_user_id;
+    elsif p_reaction_type = 'laugh' then
+      select reactions_laugh into v_new_count from users where id = p_user_id;
+    end if;
+
+    return jsonb_build_object('success', true, 'reaction', p_reaction_type, 'count', coalesce(v_new_count, 0));
+  end if;
+
+  if p_reaction_type = 'fire' then
+    update users set reactions_fire = greatest(0, reactions_fire - 1) where id = p_user_id returning reactions_fire into v_new_count;
+  elsif p_reaction_type = 'eyes' then
+    update users set reactions_eyes = greatest(0, reactions_eyes - 1) where id = p_user_id returning reactions_eyes into v_new_count;
+  elsif p_reaction_type = 'heart' then
+    update users set reactions_heart = greatest(0, reactions_heart - 1) where id = p_user_id returning reactions_heart into v_new_count;
+  elsif p_reaction_type = 'laugh' then
+    update users set reactions_laugh = greatest(0, reactions_laugh - 1) where id = p_user_id returning reactions_laugh into v_new_count;
+  end if;
+
+  return jsonb_build_object('success', true, 'reaction', p_reaction_type, 'count', v_new_count);
+end;
+$$;
+
+revoke execute on function remove_user_reaction from public, anon;
+grant execute on function remove_user_reaction to authenticated, service_role;
 
 -- ==============================================================================
 -- 4. Maintenance / Admin Re-ranking Function
@@ -831,7 +1038,6 @@ alter table payments enable row level security;
 alter table payment_events enable row level security;
 alter table board_events enable row level security;
 alter table reactions enable row level security;
-alter table reaction_counts enable row level security;
 alter table messages enable row level security;
 alter table reports enable row level security;
 alter table admin_audit_log enable row level security;
@@ -902,11 +1108,6 @@ create policy "Users can view their own payments"
 -- Board Events: Immutable public audit ledger of displacements & history
 create policy "Board events are publicly readable"
   on board_events for select
-  using (true);
-
--- Reaction Counts: Publicly readable for real-time counters
-create policy "Reaction counts are publicly readable"
-  on reaction_counts for select
   using (true);
 
 -- Messages: Non-deleted war room messages are publicly readable
@@ -1002,7 +1203,7 @@ exception when duplicate_object then null;
 end $$;
 
 do $$ begin
-  alter publication supabase_realtime add table reaction_counts;
+  alter publication supabase_realtime add table users;
 exception when duplicate_object then null;
 end $$;
 
@@ -1116,12 +1317,14 @@ begin
         title, handle, image_path, destination_url,
         category_id, current_rank, current_active_value_minor,
         total_paid_minor, ranking_sequence, is_active,
-        image_pos_x, image_pos_y, image_zoom, frame, views_count
+        image_pos_x, image_pos_y, image_zoom, frame, views_count,
+        reactions_fire, reactions_eyes, reactions_heart, reactions_laugh
       ) values (
         v_title, v_handle, v_img, v_url,
         v_cat, i, v_val_minor,
         v_val_minor, 1000 + i, true,
-        50, 50, 1.0, 'default', (101 - i) * 37
+        50, 50, 1.0, 'default', (101 - i) * 37,
+        (i * 7) % 53, (i * 3) % 29, (i * 5) % 19, (i * 2) % 11
       ) returning id into v_project_id;
 
       -- Initial seed board displacement event
@@ -1133,13 +1336,6 @@ begin
         1000 + i, v_project_id, v_title, v_handle,
         null, i, 0, v_val_minor, v_cat, 0, 'inserted'
       );
-
-      -- Initial reaction count placeholders
-      insert into reaction_counts (project_id, reaction_type, count) values
-        (v_project_id, 'fire', (i * 7) % 53),
-        (v_project_id, 'eyes', (i * 3) % 29),
-        (v_project_id, 'heart', (i * 5) % 19),
-        (v_project_id, 'laugh', (i * 2) % 11);
     end loop;
 
     -- Seed initial War Room messages
