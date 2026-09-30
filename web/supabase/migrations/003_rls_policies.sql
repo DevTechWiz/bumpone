@@ -1,14 +1,16 @@
 -- 003_rls_policies.sql
 -- 2026 Production Row Level Security (RLS) & Realtime Publication for BumpOne.lol
 -- PostgreSQL 16+ / Supabase Engine
--- Clean Architecture: users, projects, payments, board_events, messages
+-- Security Hardened: Anonymous direct write policies removed, RPC/service-role enforced
 
 -- ==============================================================================
 -- 1. Enable RLS on all tables
 -- ==============================================================================
 alter table categories enable row level security;
 alter table users enable row level security;
+alter table admin_users enable row level security;
 alter table projects enable row level security;
+alter table purchase_quotes enable row level security;
 alter table payments enable row level security;
 alter table payment_webhook_events enable row level security;
 alter table board_events enable row level security;
@@ -20,7 +22,7 @@ alter table admin_audit_log enable row level security;
 alter table system_state enable row level security;
 
 -- ==============================================================================
--- 2. Public Read Policies (High-performance CDN & anon client reads)
+-- 2. Public & Authenticated Read Policies
 -- ==============================================================================
 
 -- Categories: Viewable by anyone
@@ -45,6 +47,12 @@ create policy "Users can update their own user account"
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
+-- Admin Users: Only admins can view admin membership
+create policy "Admin users are viewable by admins"
+  on admin_users for select
+  to authenticated
+  using (auth.uid() in (select id from admin_users));
+
 -- Projects: Public can view active approved projects
 create policy "Public can view active approved projects"
   on projects for select
@@ -56,14 +64,20 @@ create policy "Users can view their own projects"
   to authenticated
   using (auth.uid() = user_id);
 
--- Projects: Owners can update their own project metadata (title, destination_url, artwork)
+-- Projects: Owners can update their own project (guarded by trg_protect_project_fields)
 create policy "Users can update their own project metadata"
   on projects for update
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- Payments: Users can view their own payment transactions
+-- Purchase Quotes: Users can view their own quotes
+create policy "Users can view their own quotes"
+  on purchase_quotes for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+-- Payments: Users can view their own payments
 create policy "Users can view their own payments"
   on payments for select
   to authenticated
@@ -90,28 +104,22 @@ create policy "System state is publicly readable"
   using (true);
 
 -- ==============================================================================
--- 3. Public Insert Policies (Anonymous interaction & moderation)
+-- 3. Strict Write Policies
+-- Direct anon inserts on reactions, reports, messages, quotes, and payments
+-- are intentionally NOT permitted via public RLS. All writes MUST route through
+-- validated Next.js API endpoints using service_role to enforce HMAC cookies,
+-- rate limits, content moderation, and fraud protection.
 -- ==============================================================================
 
--- Reactions: Insertable by anyone (protected by unique cookie constraint in schema)
-create policy "Anyone can add reactions"
-  on reactions for insert
-  with check (true);
-
--- Reports: Anyone can flag a project for moderation
-create policy "Anyone can submit a moderation report"
-  on reports for insert
-  with check (true);
-
--- Messages: Authenticated or anonymous users can post war room messages
-create policy "Anyone can post war room messages"
+-- Authenticated creators can insert their own messages with ownership link
+create policy "Authenticated users can post war room messages"
   on messages for insert
-  with check (true);
+  to authenticated
+  with check (auth.uid() = user_id);
 
 -- ==============================================================================
 -- 4. Enable Supabase Realtime Broadcast on Core War Room Tables
 -- ==============================================================================
--- Clients subscribe directly to postgres_changes on these publication tables
 do $$ begin
   alter publication supabase_realtime add table projects;
 exception

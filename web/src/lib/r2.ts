@@ -31,6 +31,9 @@ export async function uploadImageToR2(
   const key = `profiles/${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
   if (!r2) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('R2 storage is not configured');
+    }
     // Dev fallback: convert buffer to base64 data URI if R2 is not configured
     const base64 = buffer.toString('base64');
     return `data:${contentType};base64,${base64}`;

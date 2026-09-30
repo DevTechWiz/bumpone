@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import crypto from 'crypto';
+import { allowRequest } from '@/lib/rateLimit';
 
 const ReportSchema = z.object({
   projectId: z.string().optional(),
@@ -13,6 +15,8 @@ const ReportSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!allowRequest(`report:${ip}`, 5, 60 * 60_000)) return NextResponse.json({ error: 'Too many reports' }, { status: 429, headers: { 'Retry-After': '3600' } });
     const json = await request.json();
     const result = ReportSchema.safeParse(json);
 
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const { projectId, profileId, reason, details } = result.data;
     const targetId = (projectId || profileId)!;
-    const reporterId = request.cookies.get('bumped_anon_id')?.value || 'anon_reporter';
+    const reporterId = crypto.createHash('sha256').update(`${process.env.ANON_COOKIE_SECRET || 'development'}:${ip}`).digest('hex');
 
     const isSupabaseConfigured = Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -31,7 +35,6 @@ export async function POST(request: NextRequest) {
     );
 
     if (isSupabaseConfigured) {
-      // 1. Try project_id column (clean schema)
       const { error: err1 } = await supabaseAdmin.from('reports').insert({
         project_id: targetId,
         reporter_id: reporterId,
@@ -41,19 +44,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (err1) {
-        // Fallback to legacy profile_id column
-        const { error: err2 } = await supabaseAdmin.from('reports').insert({
-          profile_id: targetId,
-          reporter_id: reporterId,
-          reason,
-          details: details || null,
-          status: 'open',
-        });
-
-        if (err2) {
-          console.error('Error inserting report:', err1 || err2);
-          return NextResponse.json({ error: 'Failed to record report' }, { status: 500 });
-        }
+        console.error('Error inserting report:', err1);
+        return NextResponse.json({ error: 'Failed to record report' }, { status: 500 });
       }
     }
 

@@ -1,5 +1,7 @@
 # BumpOne.lol — API Specification
 
+> **Production security override:** see [25_PRODUCTION_ARCHITECTURE.md](25_PRODUCTION_ARCHITECTURE.md). Checkout values are server-derived and admins use authenticated `admin_users` roles, never PINs.
+
 All endpoints communicate using JSON over HTTPS with ISO-8601 UTC timestamps.
 
 ---

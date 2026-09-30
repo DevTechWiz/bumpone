@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 const VALID_REACTIONS = ['fire', 'eyes', 'heart', 'laugh'] as const;
 
-const SECRET = process.env.ANON_COOKIE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'bumpone_anon_cookie_secret_salt_2026';
+const SECRET = process.env.ANON_COOKIE_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'development-only-anon-secret');
 
 function signAnonId(id: string): string {
   const hmac = crypto.createHmac('sha256', SECRET).update(id).digest('hex');
@@ -48,6 +48,7 @@ function checkRateLimit(id: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!SECRET) return NextResponse.json({ error: 'Anonymous identity service is unavailable' }, { status: 503 });
     const body = await request.json();
     const targetId = body.projectId || body.profileId;
     const reaction = body.reaction;
@@ -146,9 +147,10 @@ export async function DELETE(request: NextRequest) {
 
     if (isSupabaseConfigured) {
       // Try projects schema (project_id)
-      const { error: delErr } = await supabaseAdmin
+      const { data: deleted, error: delErr } = await supabaseAdmin
         .from('reactions')
         .delete()
+        .select('id')
         .eq('project_id', targetId)
         .eq('anonymous_id', anonId)
         .eq('reaction_type', reaction);
@@ -171,7 +173,7 @@ export async function DELETE(request: NextRequest) {
         .eq('reaction_type', reaction)
         .single();
 
-      if (countRes1.data && countRes1.data.count > 0) {
+      if (deleted?.length && countRes1.data && countRes1.data.count > 0) {
         await supabaseAdmin
           .from('reaction_counts')
           .update({ count: Math.max(0, countRes1.data.count - 1) })

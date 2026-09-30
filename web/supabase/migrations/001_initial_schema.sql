@@ -33,7 +33,16 @@ create table if not exists users (
 create index if not exists idx_users_handle on users (handle);
 
 -- ==============================================================================
--- 3. Projects (100 Slots on the Grid + Graveyard archive)
+-- 3. Admin Users (Role-based administrator authorization)
+-- ==============================================================================
+create table if not exists admin_users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  role text not null default 'admin', -- 'admin', 'super_admin'
+  created_at timestamptz not null default now()
+);
+
+-- ==============================================================================
+-- 4. Projects (100 Slots on the Grid + Graveyard archive)
 -- ==============================================================================
 do $$ begin
   create type project_moderation_status as enum ('approved', 'suspended', 'rejected');
@@ -73,7 +82,31 @@ create unique index if not exists idx_projects_active_rank on projects (current_
 where is_active = true and current_rank is not null;
 
 -- ==============================================================================
--- 4. Payments (Financial gateway transaction lifecycle)
+-- 5. Purchase Quotes (Authoritative Server-Generated Purchase Offers)
+-- ==============================================================================
+do $$ begin
+  create type purchase_quote_status as enum ('checkout_open', 'paid', 'expired', 'cancelled');
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists purchase_quotes (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete restrict,
+  user_id uuid not null references users(id) on delete restrict,
+  target_rank int not null check (target_rank between 1 and 100),
+  quoted_amount_minor bigint not null check (quoted_amount_minor >= 1000 and quoted_amount_minor % 100 = 0),
+  expected_rank int not null check (expected_rank between 1 and 101),
+  expires_at timestamptz not null,
+  status purchase_quote_status not null default 'checkout_open',
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
+);
+
+create index if not exists idx_purchase_quotes_project_status on purchase_quotes(project_id, status);
+create index if not exists idx_purchase_quotes_expires on purchase_quotes(expires_at);
+
+-- ==============================================================================
+-- 6. Payments (Financial gateway transaction lifecycle)
 -- ==============================================================================
 do $$ begin
   create type payment_status as enum (
@@ -87,8 +120,8 @@ create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete restrict not null, -- Never delete financial history
   user_id uuid references users(id) on delete set null,
+  quote_id uuid references purchase_quotes(id) on delete set null,
   provider text not null default 'dodo',
-  quote_id text, -- Ephemeral client quote token (stored statelessly in gateway metadata)
   provider_payment_id text unique,
   provider_checkout_id text,
   amount_minor bigint not null, -- Amount paid in cents
@@ -114,7 +147,7 @@ create index if not exists idx_payments_provider_payment on payments (provider_p
 create index if not exists idx_payments_status_created on payments (status, created_at desc);
 
 -- ==============================================================================
--- 5. Payment Webhook Events (Idempotency Ledger)
+-- 7. Payment Webhook Events (Idempotency Ledger)
 -- ==============================================================================
 create table if not exists payment_webhook_events (
   id uuid primary key default gen_random_uuid(),
@@ -130,7 +163,7 @@ create table if not exists payment_webhook_events (
 create index if not exists idx_payment_webhook_events_payment_id on payment_webhook_events (payment_id);
 
 -- ==============================================================================
--- 6. Board Events (Monotonic displacement audit journal)
+-- 8. Board Events (Monotonic displacement audit journal)
 -- ==============================================================================
 do $$ begin
   create type board_event_type as enum (
@@ -164,7 +197,7 @@ create index if not exists idx_board_events_project on board_events (project_id,
 create index if not exists idx_board_events_created on board_events (created_at desc);
 
 -- ==============================================================================
--- 7. Reactions & Materialized Reaction Counts
+-- 9. Reactions & Materialized Reaction Counts
 -- ==============================================================================
 do $$ begin
   create type reaction_type as enum ('fire', 'eyes', 'heart', 'laugh');
@@ -175,7 +208,7 @@ end $$;
 create table if not exists reactions (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade not null,
-  anonymous_id text not null, -- signed cookie UUIDv4 to prevent spamming
+  anonymous_id text not null, -- signed cookie UUIDv4
   reaction_type reaction_type not null,
   created_at timestamptz not null default now(),
   unique (project_id, anonymous_id, reaction_type)
@@ -191,7 +224,7 @@ create table if not exists reaction_counts (
 );
 
 -- ==============================================================================
--- 8. Messages (War Room Trollbox / Live Feed)
+-- 10. Messages (War Room Trollbox / Live Feed)
 -- ==============================================================================
 create table if not exists messages (
   id uuid primary key default gen_random_uuid(),
@@ -212,7 +245,7 @@ create index if not exists idx_messages_created_at on messages (created_at desc)
 create index if not exists idx_messages_user on messages (user_id);
 
 -- ==============================================================================
--- 9. Moderation Reports
+-- 11. Moderation Reports
 -- ==============================================================================
 do $$ begin
   create type report_status as enum ('open', 'under_review', 'resolved_actioned', 'resolved_no_action', 'dismissed');
@@ -223,7 +256,7 @@ end $$;
 create table if not exists reports (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade not null,
-  reporter_id text, -- hashed anon id / token
+  reporter_id text,
   reason text not null,
   details text,
   status report_status not null default 'open',
@@ -238,7 +271,7 @@ create index if not exists idx_reports_project on reports (project_id);
 create index if not exists idx_reports_status_created on reports (status, created_at desc);
 
 -- ==============================================================================
--- 10. Admin Audit Log (Immutable Administrative Action History)
+-- 12. Admin Audit Log (Immutable Administrative Action History)
 -- ==============================================================================
 create table if not exists admin_audit_log (
   id uuid primary key default gen_random_uuid(),
@@ -256,7 +289,7 @@ create index if not exists idx_admin_audit_log_created on admin_audit_log (creat
 create index if not exists idx_admin_audit_log_target on admin_audit_log (target_type, target_id);
 
 -- ==============================================================================
--- 11. System Global State (Emergency Killswitch & Operational Config)
+-- 13. System Global State (Emergency Killswitch & Operational Config)
 -- ==============================================================================
 create table if not exists system_state (
   id text primary key default 'global',
@@ -269,7 +302,33 @@ insert into system_state (id, purchases_paused) values ('global', false)
 on conflict (id) do nothing;
 
 -- ==============================================================================
--- 12. Automated Timestamp Trigger Function
+-- 14. Protection Trigger: Prevent unauthorized client modifications
+-- ==============================================================================
+create or replace function protect_project_authoritative_fields()
+returns trigger as $$
+begin
+  -- Only postgres / service_role can modify ranking, monetary, and moderation fields
+  if (current_user not in ('postgres', 'service_role')) and (
+    new.current_rank is distinct from old.current_rank or
+    new.current_active_value_minor is distinct from old.current_active_value_minor or
+    new.total_paid_minor is distinct from old.total_paid_minor or
+    new.ranking_sequence is distinct from old.ranking_sequence or
+    new.moderation_status is distinct from old.moderation_status or
+    new.is_active is distinct from old.is_active
+  ) then
+    raise exception 'Security violation: Authoritative ranking and financial fields can only be modified by the service role';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_protect_project_fields on projects;
+create trigger trg_protect_project_fields
+  before update on projects
+  for each row execute function protect_project_authoritative_fields();
+
+-- ==============================================================================
+-- 15. Automated Timestamp Trigger Function
 -- ==============================================================================
 create or replace function set_updated_at()
 returns trigger as $$

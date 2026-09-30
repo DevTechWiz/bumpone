@@ -4,115 +4,90 @@ import { createDodoCheckoutSession } from '@/lib/dodo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { MIN_TOP_UP } from '@/lib/board';
+import { allowRequest } from '@/lib/rateLimit';
 
-const PurchaseCreateSchema = z.object({
-  userId: z.string().optional(),
-  mode: z.enum(['new', 'top_up', 'existing']).default('new'),
-  profileId: z.string().optional(),
-  topUpAmount: z.number().min(MIN_TOP_UP, `Minimum top-up is $${MIN_TOP_UP}`),
-  currentValue: z.number().default(0),
-  targetRank: z.number().optional(),
-  title: z.string().min(1).max(100),
-  handle: z.string().min(1).max(50),
-  linkUrl: z.string().url().startsWith('https://', { message: 'URL must start with https://' }),
-  imageUrl: z.string().min(1),
-  category: z.string().default('Tech'),
+const schema = z.object({
+  mode: z.enum(['new', 'top_up']), projectId: z.string().uuid().optional(),
+  topUpAmount: z.number().int().min(MIN_TOP_UP).max(100_000), targetRank: z.number().int().min(1).max(100),
+  title: z.string().trim().min(1).max(100), handle: z.string().trim().min(1).max(50),
+  linkUrl: z.string().url().refine((v) => new URL(v).protocol === 'https:', 'URL must use HTTPS'),
+  imageUrl: z.string().url().max(2048), category: z.string().trim().min(1).max(50),
 });
 
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Authentication is required' }, { status: 401 });
+  if (!allowRequest(`checkout:${user.id}`, 5, 60_000)) return NextResponse.json({ error: 'Too many checkout attempts' }, { status: 429, headers: { 'Retry-After': '60' } });
   try {
-    const json = await request.json();
-    const result = PurchaseCreateSchema.safeParse(json);
+    const parsed = schema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: 'Invalid purchase parameters', details: parsed.error.flatten() }, { status: 400 });
+    const input = parsed.data;
+    const { data: state, error: stateError } = await supabaseAdmin.from('system_state').select('purchases_paused').eq('id', 'global').single();
+    if (stateError) throw new Error('Unable to verify purchase availability');
+    if (state.purchases_paused) return NextResponse.json({ error: 'Purchases are temporarily paused.' }, { status: 503 });
+    const { data: existingUser, error: existingUserError } = await supabaseAdmin.from('users').select('id').eq('id', user.id).maybeSingle();
+    if (existingUserError) throw new Error('Unable to verify user account');
+    if (!existingUser) {
+      const { error: userError } = await supabaseAdmin.from('users').insert({
+        id: user.id, handle: String(user.user_metadata.user_name || user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`).slice(0, 50),
+        display_name: String(user.user_metadata.full_name || user.email?.split('@')[0] || 'BumpOne user').slice(0, 100),
+      });
+      if (userError) throw new Error('Unable to provision user account');
+    }
+    const { data: category } = await supabaseAdmin.from('categories').select('id').eq('name', input.category).maybeSingle();
+    if (!category) return NextResponse.json({ error: 'Unknown category' }, { status: 400 });
+    let projectId = input.projectId; let currentValueMinor = 0;
+    if (input.mode === 'top_up') {
+      if (!projectId) return NextResponse.json({ error: 'Project ID is required for a top-up' }, { status: 400 });
+      const { data: project } = await supabaseAdmin.from('projects').select('id,current_active_value_minor').eq('id', projectId).eq('user_id', user.id).maybeSingle();
+      if (!project) return NextResponse.json({ error: 'Project not found or not owned by you' }, { status: 403 });
+      currentValueMinor = Number(project.current_active_value_minor);
+    } else {
+      const { data: project, error } = await supabaseAdmin.from('projects').insert({ user_id: user.id, title: input.title, handle: input.handle, image_path: input.imageUrl, destination_url: input.linkUrl, category_id: category.id, is_active: false, moderation_status: 'approved' }).select('id').single();
+      if (error || !project) throw new Error('Unable to create draft project');
+      projectId = project.id;
+    }
+    const { data: target } = await supabaseAdmin.from('projects').select('current_active_value_minor').eq('current_rank', input.targetRank).eq('is_active', true).eq('moderation_status', 'approved').maybeSingle();
+    const targetValueMinor = target ? Number(target.current_active_value_minor) : (101 - input.targetRank) * 100;
+    const requiredMinor = Math.max(MIN_TOP_UP * 100, targetValueMinor - currentValueMinor + MIN_TOP_UP * 100);
+    const suppliedMinor = input.topUpAmount * 100;
+    if (suppliedMinor < requiredMinor) return NextResponse.json({ error: `Minimum required top-up is $${requiredMinor / 100}` }, { status: 409 });
+    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    const { data: quote, error: quoteError } = await supabaseAdmin.from('payment_quotes').insert({
+      project_id: projectId,
+      user_id: user.id,
+      top_up_amount_minor: suppliedMinor,
+      expected_previous_value_minor: currentValueMinor,
+      projected_active_value_minor: currentValueMinor + suppliedMinor,
+      currency: 'USD',
+      expires_at: expiresAt,
+      status: 'pending',
+    }).select('id').single();
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: 'Invalid purchase parameters', details: result.error.format() },
-        { status: 400 }
-      );
+    if (quoteError || !quote) {
+      console.error('Failed to create payment quote:', quoteError);
+      throw new Error('Unable to create payment quote');
     }
 
-    const {
-      userId: clientUserId,
-      mode: rawMode,
-      profileId,
-      topUpAmount,
-      currentValue,
-      targetRank,
-      title,
-      handle,
-      linkUrl,
-      imageUrl,
-      category,
-    } = result.data;
-
-    const mode = rawMode === 'existing' ? 'top_up' : rawMode;
-
-    // Detect authenticated user ID from server session (preferred) or request body
-    let authenticatedUserId = clientUserId;
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) {
-        authenticatedUserId = user.id;
-      }
-    } catch {
-      // Unauthenticated session, proceed with guest or client-supplied ID
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    if (process.env.NODE_ENV === 'production' && !appUrl.startsWith('https://')) {
+      throw new Error('APP_URL must use HTTPS in production');
     }
 
-    // Check system state
-    try {
-      const { data: sys } = await supabaseAdmin
-        .from('system_state')
-        .select('purchases_paused')
-        .eq('id', 'global')
-        .single();
-
-      if (sys?.purchases_paused) {
-        return NextResponse.json(
-          { error: 'Purchases are temporarily paused for maintenance.' },
-          { status: 503 }
-        );
-      }
-    } catch {
-      // Continue if table not yet migrated
-    }
-
-    const resultingValue = currentValue + topUpAmount;
-    const amountMinor = Math.round(topUpAmount * 100);
-
-    const quoteId = `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const origin = request.nextUrl.origin || 'http://localhost:3000';
-    const returnUrl = `${origin}/?status=pending_payment&quote_id=${quoteId}`;
-
-    // Create Dodo Checkout Session
     const session = await createDodoCheckoutSession({
-      amountMinor,
-      returnUrl,
+      amountMinor: suppliedMinor,
+      returnUrl: `${appUrl}/?status=pending_payment&quote_id=${quote.id}`,
       metadata: {
-        project_id: profileId,
-        profile_id: profileId,
-        user_id: authenticatedUserId,
-        quote_id: quoteId,
-        target_rank: targetRank?.toString(),
-        resulting_value: resultingValue.toString(),
-        title,
-        handle,
-        link_url: linkUrl,
-        image_url: imageUrl,
-        category,
-        mode,
+        quote_id: quote.id,
+        project_id: projectId,
+        user_id: user.id,
+        mode: input.mode,
       },
     });
-
-    return NextResponse.json({
-      quote_id: quoteId,
-      checkout_url: session.checkoutUrl,
-      session_id: session.sessionId,
-      resulting_value: resultingValue,
-      top_up_amount: topUpAmount,
-    });
-  } catch (err: any) {
-    console.error('Error creating purchase session:', err);
-    return NextResponse.json({ error: err.message || 'Failed to create checkout' }, { status: 500 });
+    return NextResponse.json({ quote_id: quote.id, checkout_url: session.checkoutUrl, session_id: session.sessionId, expires_at: expiresAt });
+  } catch (error) {
+    console.error('Purchase checkout creation failed', error);
+    return NextResponse.json({ error: 'Unable to create checkout session' }, { status: 500 });
   }
 }

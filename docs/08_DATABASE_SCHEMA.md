@@ -1,14 +1,15 @@
-# BumpOne.lol — 2026 Database & Realtime Architecture
+# BumpOne.lol — Canonical Database & Realtime Architecture
 
 ## Overview
 BumpOne.lol runs on PostgreSQL 16+ via Supabase. The database architecture is designed for:
 1. **Zero Race-Condition Concurrency:** Serialized rank displacement transactions using PostgreSQL transaction advisory locks (`pg_advisory_xact_lock`).
-2. **Native 2026 Supabase Realtime:** Built-in publication broadcasting directly to client WebSockets without custom worker poller daemons.
-3. **Stateless Edge Delivery:** Heavy read operations (such as `/api/board`) are served with HTTP stale-while-revalidate edge cache headers for ultra-fast TTFB.
+2. **Strict Financial & Rank Integrity:** Monetary values are modeled exclusively as `bigint` minor units (USD cents). Ranks are strictly unique via partial index and bounded by CHECK constraints.
+3. **Immutable Journals & Protected Foreign Keys:** Financial transactions (`payments`) and displacement audit history (`board_events`) use `ON DELETE RESTRICT` so history can never be silently erased.
+4. **Native 2026 Supabase Realtime:** Built-in publication broadcasting changes on `projects`, `board_events`, `reaction_counts`, and `messages` directly to client WebSockets.
 
 ---
 
-## Tables
+## Canonical Tables
 
 ### 1. `categories`
 Stores allowed categories for slots.
@@ -24,210 +25,258 @@ create table categories (
 
 ---
 
-### 2. `profiles`
-The primary entity representing grid slots (1–100) and off-board Graveyard profiles.
+### 2. `users`
+Public creator profile wrapping `auth.users`.
 ```sql
-create type profile_moderation_status as enum ('approved', 'suspended', 'rejected');
-
-create table profiles (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
+create table users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  handle text unique not null,
   display_name text not null,
+  avatar_url text,
+  bio text,
+  website text,
+  twitter text,
+  github text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index idx_users_handle on users (handle);
+```
+
+---
+
+### 3. `admin_users`
+Role-based administrator authorization.
+```sql
+create table admin_users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  role text not null default 'admin', -- 'admin', 'super_admin'
+  created_at timestamptz not null default now()
+);
+```
+
+---
+
+### 4. `projects`
+The primary entity representing grid slots (1–100) and off-board Graveyard projects (`current_rank IS NULL`).
+```sql
+create type project_moderation_status as enum ('approved', 'suspended', 'rejected');
+
+create table projects (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete set null,
+  title text not null,
   handle text not null,
   image_path text not null,
   destination_url text not null,
   category_id uuid references categories(id) on delete restrict not null,
   current_rank int, -- materialized rank (1-100), null if unranked/Graveyard
-  current_active_value int not null default 0, -- Whole USD
-  current_active_value_minor int not null default 0, -- USD cents (active_value * 100)
-  total_paid_minor int not null default 0, -- Lifetime spend in USD cents
-  sequence bigint not null default 0, -- monotonic sequence of latest rank event (tiebreaker)
+  current_active_value_minor bigint not null default 0, -- USD cents (sole monetary representation)
+  total_paid_minor bigint not null default 0, -- Lifetime spend in USD cents
+  ranking_sequence bigint not null default 0, -- monotonic sequence of latest rank event (tiebreaker)
   is_active boolean not null default true,
-  moderation_status profile_moderation_status not null default 'approved',
+  moderation_status project_moderation_status not null default 'approved',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  constraint chk_projects_active_value_non_negative check (current_active_value_minor >= 0),
+  constraint chk_projects_total_paid_non_negative check (total_paid_minor >= 0),
+  constraint chk_projects_current_rank_range check (current_rank is null or (current_rank >= 1 and current_rank <= 100))
 );
 
-create index idx_profiles_user on profiles (user_id);
-create index idx_profiles_active_rank on profiles (current_rank) where is_active = true and current_rank is not null;
-create index idx_profiles_active_value on profiles (current_active_value desc, sequence asc);
-create index idx_profiles_category on profiles (category_id);
+create index idx_projects_user on projects (user_id);
+create index idx_projects_category on projects (category_id);
+create index idx_projects_ranking_order on projects (current_active_value_minor desc, ranking_sequence asc);
+create unique index idx_projects_active_rank on projects (current_rank) where is_active = true and current_rank is not null;
 ```
 
 ---
 
-### 3. `purchases`
-Immutable financial ledger of completed checkout payments.
+### 5. `payment_quotes`
+Authoritative server-generated purchase quotes with strict TTL.
 ```sql
-create type purchase_status as enum (
+create table payment_quotes (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete set null,
+  user_id uuid references users(id) on delete set null,
+  top_up_amount_minor bigint not null,
+  expected_previous_value_minor bigint not null,
+  projected_active_value_minor bigint not null,
+  currency text not null default 'USD',
+  expires_at timestamptz not null,
+  status text not null default 'pending', -- 'pending', 'paid', 'expired'
+  created_at timestamptz not null default now(),
+  constraint chk_quotes_amount_positive check (top_up_amount_minor > 0)
+);
+
+create index idx_payment_quotes_expires on payment_quotes (expires_at);
+```
+
+---
+
+### 6. `payments`
+Gateway financial transactions and lifecycle ledger.
+```sql
+create type payment_status as enum (
   'created', 'pending', 'paid', 'failed', 'cancelled', 'refunded', 'disputed', 'chargeback'
 );
 
-create table purchases (
+create table payments (
   id uuid primary key default gen_random_uuid(),
-  profile_id uuid references profiles(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete set null,
-  quote_id text, -- Ephemeral quote token stored in Dodo metadata
-  dodo_payment_id text unique,
-  dodo_checkout_session_id text,
-  amount_minor int not null,
+  project_id uuid references projects(id) on delete restrict not null,
+  user_id uuid references users(id) on delete set null,
+  quote_id uuid references payment_quotes(id) on delete set null,
+  provider text not null default 'dodo',
+  provider_payment_id text unique,
+  provider_checkout_id text,
+  amount_minor bigint not null,
   currency text not null default 'USD',
-  previous_active_value_minor int not null,
-  new_active_value_minor int not null,
+  previous_active_value_minor bigint not null default 0,
+  new_active_value_minor bigint not null default 0,
   previous_rank int,
   new_rank int not null,
-  status purchase_status not null default 'created',
+  status payment_status not null default 'created',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  constraint chk_payments_amount_positive check (amount_minor > 0),
+  constraint chk_payments_prev_value_non_negative check (previous_active_value_minor >= 0),
+  constraint chk_payments_new_value_non_negative check (new_active_value_minor >= 0),
+  constraint chk_payments_new_rank_range check (new_rank >= 1 and new_rank <= 100)
 );
 
-create index idx_purchases_profile on purchases (profile_id);
-create index idx_purchases_dodo_payment on purchases (dodo_payment_id);
+create index idx_payments_project_created on payments (project_id, created_at desc);
+create index idx_payments_user_created on payments (user_id, created_at desc);
+create index idx_payments_provider_payment on payments (provider_payment_id);
+create index idx_payments_status_created on payments (status, created_at desc);
 ```
 
 ---
 
-### 4. `payment_events` (Webhook Idempotency)
-Ensures Dodo webhook retries are processed exactly once.
+### 7. `payment_webhook_events`
+Multi-provider webhook delivery and idempotency ledger.
 ```sql
-create table payment_events (
+create table payment_webhook_events (
   id uuid primary key default gen_random_uuid(),
-  event_id text unique not null,
-  payment_id text not null,
+  provider text not null default 'dodo',
+  provider_event_id text not null,
+  payment_id text,
   event_type text not null,
   payload jsonb not null,
-  processed_at timestamptz not null default now()
+  processed_at timestamptz not null default now(),
+  unique (provider, provider_event_id)
 );
 
-create index idx_payment_events_event_id on payment_events (event_id);
+create index idx_payment_webhook_events_payment_id on payment_webhook_events (payment_id);
 ```
 
 ---
 
-### 5. `rank_events`
-Monotonic event journal of all ranking displacements. Powers War Room feeds, audio triggers, and history charts.
+### 8. `board_events`
+Monotonic rank displacement journal and historical trajectory record.
 ```sql
-create type rank_event_type as enum (
+create type board_event_type as enum (
   'inserted', 'bumped', 'left_top_100', 'returned_to_top_100', 'refund_rollback', 'admin_override'
 );
 
-create sequence global_event_sequence_seq start 1000;
-
-create table rank_events (
+create table board_events (
   id uuid primary key default gen_random_uuid(),
-  sequence bigint not null default nextval('global_event_sequence_seq'),
-  purchase_id uuid references purchases(id) on delete set null,
-  profile_id uuid references profiles(id) on delete cascade not null,
+  event_sequence bigint not null default nextval('global_event_sequence_seq'),
+  payment_id uuid references payments(id) on delete set null,
+  project_id uuid references projects(id) on delete restrict not null,
+  project_title_snapshot text,
+  project_handle_snapshot text,
   previous_rank int,
   new_rank int not null,
-  previous_active_value int not null,
-  new_active_value int not null,
+  previous_active_value_minor bigint not null default 0,
+  new_active_value_minor bigint not null default 0,
   category_id uuid references categories(id) on delete set null,
   profiles_displaced int not null default 0,
-  event_type rank_event_type not null,
+  event_type board_event_type not null,
   created_at timestamptz not null default now()
 );
 
-create unique index idx_rank_events_sequence on rank_events (sequence);
-create index idx_rank_events_profile on rank_events (profile_id, created_at desc);
+create unique index idx_board_events_sequence on board_events (event_sequence);
+create index idx_board_events_project on board_events (project_id, created_at desc);
+create index idx_board_events_created on board_events (created_at desc);
 ```
 
 ---
 
-### 6. `reactions` & `reaction_counts`
-Anti-spam anonymous emoji reactions with atomic materialized counter cache.
+### 9. `reactions` & `reaction_counts`
 ```sql
 create type reaction_type as enum ('fire', 'eyes', 'heart', 'laugh');
 
 create table reactions (
   id uuid primary key default gen_random_uuid(),
-  profile_id uuid references profiles(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade not null,
   anonymous_id text not null,
   reaction_type reaction_type not null,
   created_at timestamptz not null default now(),
-  unique (profile_id, anonymous_id, reaction_type)
+  unique (project_id, anonymous_id, reaction_type)
 );
 
+create index idx_reactions_anonymous on reactions (anonymous_id);
+
 create table reaction_counts (
-  profile_id uuid references profiles(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade not null,
   reaction_type reaction_type not null,
   count int not null default 0,
-  primary key (profile_id, reaction_type)
+  primary key (project_id, reaction_type)
 );
 ```
 
 ---
 
-### 7. `reports`
-User moderation reports.
+### 10. `messages`
+War Room live trollbox feed.
 ```sql
-create type report_status as enum ('open', 'under_review', 'resolved_actioned', 'resolved_no_action', 'dismissed');
+create table messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete set null,
+  author_name text not null,
+  author_handle text,
+  avatar_color text not null default '#ef4444',
+  text text not null,
+  slot_tag int,
+  is_official boolean not null default false,
+  is_deleted boolean not null default false,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint chk_messages_slot_tag check (slot_tag is null or (slot_tag >= 1 and slot_tag <= 100))
+);
 
+create index idx_messages_created_at on messages (created_at desc);
+```
+
+---
+
+### 11. `reports` & `admin_audit_log`
+```sql
 create table reports (
   id uuid primary key default gen_random_uuid(),
-  profile_id uuid references profiles(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade not null,
   reporter_id text,
   reason text not null,
   details text,
-  status report_status not null default 'open',
+  status text not null default 'open',
   admin_notes text,
   resolved_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint chk_reports_reason check (reason in ('scam', 'spam', 'offensive', 'broken_link', 'other'))
 );
-```
 
----
-
-### 8. `admin_actions`
-Audit log of admin PIN operations.
-```sql
-create table admin_actions (
+create table admin_audit_log (
   id uuid primary key default gen_random_uuid(),
+  admin_user_id uuid references auth.users(id) on delete set null,
   admin_identifier text not null default 'admin',
   action text not null,
-  target_id uuid not null,
+  target_type text not null,
+  target_id text not null,
   reason text,
   metadata jsonb,
   created_at timestamptz not null default now()
 );
 ```
-
----
-
-### 9. `system_state`
-Single-row table storing global operational killswitches.
-```sql
-create table system_state (
-  id text primary key default 'global',
-  purchases_paused boolean not null default false,
-  updated_at timestamptz not null default now()
-);
-
-insert into system_state (id, purchases_paused) values ('global', false) on conflict do nothing;
-```
-
----
-
-## PostgreSQL Stored Procedures & Triggers
-
-### 1. `process_dodo_purchase()`
-Atomic webhook handler with serializing transaction lock:
-* Executes `pg_advisory_xact_lock(hashtext('board_ranking_mutation'))`
-* Validates webhook idempotency
-* Recomputes ranks & shifts displaced profiles
-* Updates buyer profile and bumps profiles > 100 to null
-* Records in `rank_events`, `purchases`, and `payment_events`
-
-### 2. `add_profile_reaction()`
-Atomic single-query reaction recording and counter increment:
-* Avoids multi-step read-modify-write race conditions
-* Records in `reactions` (`on conflict do nothing`)
-* Upserts `reaction_counts` atomically (`do update set count = count + 1`)
-
-### 3. `recalculate_board_ranks()`
-Maintenance procedure:
-* Re-compacts positions 1–100 after moderation suspensions or payment refunds.
-
-### 4. `set_updated_at()`
-Trigger function ensuring `updated_at` timestamps update on every `UPDATE` operation across all tables.

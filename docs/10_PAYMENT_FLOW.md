@@ -1,5 +1,7 @@
 # BumpOne.lol — Payment Flow
 
+> **Canonical persistence names:** `purchase_quotes`, `projects`, `payments`, `payment_webhook_events`, and `board_events`. See [25_PRODUCTION_ARCHITECTURE.md](25_PRODUCTION_ARCHITECTURE.md).
+
 ## Payment Provider
 
 **Dodo Payments** (Merchant of Record / Hosted Checkout).

@@ -42,6 +42,9 @@ export async function createDodoCheckoutSession(params: CreateCheckoutParams): P
   const productId = params.productId || process.env.DODO_PRODUCT_ID || 'p_bumped_top_up';
 
   if (!client) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Dodo Payments is not configured');
+    }
     // Dev Mode Fallback: return mock checkout session redirecting to local returnUrl with payment confirmation
     const mockSessionId = `mock_cks_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const returnUrlObj = new URL(params.returnUrl);
@@ -75,6 +78,9 @@ export async function createDodoCheckoutSession(params: CreateCheckoutParams): P
 export function verifyDodoWebhook(rawBody: string, headers: Record<string, string>): any {
   const webhookKey = process.env.DODO_PAYMENTS_WEBHOOK_KEY || process.env.DODO_PAYMENTS_WEBHOOK_SECRET;
   if (!webhookKey || webhookKey.startsWith('whsec_your_dodo') || webhookKey.startsWith('whsec_placeholder')) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Dodo webhook secret is not configured');
+    }
     // In local dev without real webhook key, allow parsing directly
     return JSON.parse(rawBody);
   }

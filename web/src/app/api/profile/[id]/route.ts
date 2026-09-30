@@ -90,7 +90,7 @@ export async function GET(
           linkUrl: project.destination_url,
           rank: project.current_rank,
           reactions,
-          board_events: (project as any).board_events || (project as any).rank_events || [],
+          board_events: (project as any).board_events || [],
         });
       }
     }

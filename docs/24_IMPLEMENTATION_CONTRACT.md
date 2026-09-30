@@ -1,5 +1,7 @@
 # BumpOne.lol — Implementation Contract
 
+> **Production naming override:** [25_PRODUCTION_ARCHITECTURE.md](25_PRODUCTION_ARCHITECTURE.md) supersedes planning-era `profiles`, `purchases`, `payment_events`, `rank_events`, `admin_actions`, and `realtime_outbox` names.
+
 ## Purpose
 
 This document turns the product documentation into an implementation-ready contract.

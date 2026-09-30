@@ -82,7 +82,9 @@ export async function GET(request: NextRequest) {
         .from('projects')
         .select(selectFieldsProject)
         .eq('is_active', true)
-        .eq('moderation_status', 'approved');
+        .eq('moderation_status', 'approved')
+        .not('current_rank', 'is', null)
+        .lte('current_rank', 100);
 
       if (category && category !== 'All') {
         query = query.eq('categories.name', category);
@@ -98,13 +100,15 @@ export async function GET(request: NextRequest) {
       let data: any[] | null = projectData as any;
       let error = projectErr;
 
-      // Fallback to legacy schema if projects table is not yet migrated
+      // Retry without relation embeds only; do not ever return mock data in production.
       if (error || !data || data.length === 0) {
         let legacyQuery = supabaseAdmin
           .from('projects')
           .select('*')
           .eq('is_active', true)
-          .eq('moderation_status', 'approved');
+          .eq('moderation_status', 'approved')
+          .not('current_rank', 'is', null)
+          .lte('current_rank', 100);
 
         if (sort === 'trending') {
           legacyQuery = legacyQuery.order('updated_at', { ascending: false });
@@ -189,7 +193,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fallback: In-memory simulation with all 3 sorting modes (Power, Popular, Trending)
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Board service unavailable' }, { status: 503 });
+    }
+    // Development-only in-memory simulation.
     let pool = [...getFallbackProfiles()];
 
     if (category && category !== 'All') {

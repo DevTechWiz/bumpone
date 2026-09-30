@@ -339,15 +339,6 @@ export default function Home() {
             }
           }
         )
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'rank_events' },
-          () => {
-            if (isMounted) {
-              fetchBoard(false);
-            }
-          }
-        )
         .subscribe();
     } catch {
       // Local fallback if Supabase unconfigured

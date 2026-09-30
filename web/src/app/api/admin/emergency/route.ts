@@ -1,36 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase/admin';
-
+import { z } from 'zod'; import { supabaseAdmin } from '@/lib/supabase/admin'; import { requireAdmin } from '@/lib/adminAuth';
 export async function POST(request: NextRequest) {
-  const pin = request.headers.get('x-admin-pin');
-  const expectedPin = process.env.ADMIN_ACCESS_PIN || 'bumped2026admin';
-
-  if (!pin || pin !== expectedPin) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid Admin PIN' }, { status: 401 });
-  }
-
-  try {
-    const { paused } = await request.json();
-
-    const isSupabaseConfigured = Boolean(
-      process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY &&
-      !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('your-project')
-    );
-
-    if (isSupabaseConfigured) {
-      const { error } = await supabaseAdmin
-        .from('system_state')
-        .upsert({ id: 'global', purchases_paused: Boolean(paused), updated_at: new Date().toISOString() });
-
-      if (error) {
-        return NextResponse.json({ error: 'Failed to update system state' }, { status: 500 });
-      }
-    }
-
-    return NextResponse.json({ success: true, purchases_paused: Boolean(paused) });
-  } catch (err: any) {
-    console.error('Error toggling emergency state:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  const auth = await requireAdmin(); if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.error === 'Unauthenticated' ? 401 : 403 });
+  const body = z.object({ paused: z.boolean() }).safeParse(await request.json()); if (!body.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  const { error } = await supabaseAdmin.from('system_state').upsert({ id: 'global', purchases_paused: body.data.paused, updated_by: auth.user.id }); if (error) return NextResponse.json({ error: 'Unable to update system state' }, { status: 500 });
+  await supabaseAdmin.from('admin_audit_log').insert({ admin_user_id: auth.user.id, admin_identifier: auth.user.id, action: body.data.paused ? 'purchases_paused' : 'purchases_resumed', target_type: 'system', target_id: 'global' });
+  return NextResponse.json({ success: true, purchases_paused: body.data.paused });
 }
