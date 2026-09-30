@@ -135,11 +135,17 @@ grant insert (user_id, text, slot_tag, avatar_color) on messages to authenticate
 create or replace function populate_message_author()
 returns trigger as $$
 begin
-  select display_name, handle into new.author_name, new.author_handle
-  from users where id = new.user_id;
+  if new.user_id is not null then
+    select display_name, handle into new.author_name, new.author_handle
+    from users where id = new.user_id;
+  end if;
 
-  -- Only service_role can set is_official = true
-  if coalesce(auth.role(), '') <> 'service_role' then
+  if new.author_name is null then
+    new.author_name := coalesce(new.author_handle, 'Anonymous');
+  end if;
+
+  -- Only service_role or admin can set is_official = true
+  if coalesce(auth.role(), '') <> 'service_role' and current_user not in ('postgres', 'supabase_admin') then
     new.is_official := false;
   end if;
 

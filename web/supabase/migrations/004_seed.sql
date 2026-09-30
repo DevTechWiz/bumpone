@@ -2,6 +2,27 @@
 -- Seed categories, Genesis projects, initial board events, and initial messages
 -- Clean Architecture: operates on categories, projects, board_events, messages
 
+-- Ensure populate_message_author preserves seed and system messages where user_id is null
+create or replace function populate_message_author()
+returns trigger as $$
+begin
+  if new.user_id is not null then
+    select display_name, handle into new.author_name, new.author_handle
+    from users where id = new.user_id;
+  end if;
+
+  if new.author_name is null then
+    new.author_name := coalesce(new.author_handle, 'Anonymous');
+  end if;
+
+  if coalesce(auth.role(), '') <> 'service_role' and current_user not in ('postgres', 'supabase_admin') then
+    new.is_official := false;
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
 -- ==============================================================================
 -- PART 1: Production-Essential Reference Data (Required in all environments)
 -- ==============================================================================
