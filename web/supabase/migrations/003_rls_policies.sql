@@ -12,7 +12,7 @@ alter table admin_users enable row level security;
 alter table projects enable row level security;
 alter table purchase_quotes enable row level security;
 alter table payments enable row level security;
-alter table payment_webhook_events enable row level security;
+alter table payment_events enable row level security;
 alter table board_events enable row level security;
 alter table reactions enable row level security;
 alter table reaction_counts enable row level security;

@@ -162,10 +162,10 @@ create index idx_payments_status_created on payments (status, created_at desc);
 
 ---
 
-### 7. `payment_webhook_events`
+### 7. `payment_events`
 Multi-provider webhook delivery and idempotency ledger.
 ```sql
-create table payment_webhook_events (
+create table payment_events (
   id uuid primary key default gen_random_uuid(),
   provider text not null default 'dodo',
   provider_event_id text not null,
@@ -176,7 +176,7 @@ create table payment_webhook_events (
   unique (provider, provider_event_id)
 );
 
-create index idx_payment_webhook_events_payment_id on payment_webhook_events (payment_id);
+create index idx_payment_events_payment_id on payment_events (payment_id);
 ```
 
 ---
@@ -308,12 +308,12 @@ create table system_state (
 
 1. **`process_dodo_purchase(p_event_id, p_payment_id, p_amount_minor, p_payload, p_project_id, p_quote_id)`**:
    - `pg_advisory_xact_lock(733100, 1)` dedicated numeric lock namespace
-   - Validates webhook idempotency (`payment_webhook_events`)
+   - Validates webhook idempotency (`payment_events`)
    - Enforces authoritative quote validation: existence, `checkout_open` status, expiration check, quote amount match (`p_amount_minor = v_quote_amount`), and project binding
    - Enforces pre-created project validation and safeguards against reactivating suspended/rejected projects
    - Updates project `current_active_value_minor` and `ranking_sequence`
    - Atomically recalculates ranks 1..100 (`ORDER BY current_active_value_minor DESC, ranking_sequence ASC`)
-   - Inserts into `payments`, `board_events` (buyer bump + graveyard casualty `left_top_100` displacement), and `payment_webhook_events`
+   - Inserts into `payments`, `board_events` (buyer bump + graveyard casualty `left_top_100` displacement), and `payment_events`
    - Restricted to `service_role`
 2. **`add_project_reaction(p_project_id, p_anonymous_id, p_reaction_type)`**:
    - Atomically records reaction and safely increments count only on genuine insert (eliminates duplicate-count bug)

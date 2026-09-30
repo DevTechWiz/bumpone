@@ -209,9 +209,9 @@ create index if not exists idx_payments_provider_payment on payments (provider_p
 create index if not exists idx_payments_status_created on payments (status, created_at desc);
 
 -- ==============================================================================
--- 7. Payment Webhook Events (Idempotency Ledger)
+-- 7. Payment Events (Idempotency Ledger)
 -- ==============================================================================
-create table if not exists payment_webhook_events (
+create table if not exists payment_events (
   id uuid primary key default gen_random_uuid(),
   provider text not null default 'dodo',
   provider_event_id text not null, -- Dodo webhook-id header
@@ -222,7 +222,7 @@ create table if not exists payment_webhook_events (
   unique (provider, provider_event_id)
 );
 
-create index if not exists idx_payment_webhook_events_payment_id on payment_webhook_events (payment_id);
+create index if not exists idx_payment_events_payment_id on payment_events (payment_id);
 
 -- ==============================================================================
 -- 8. Board Events (Monotonic displacement audit journal)

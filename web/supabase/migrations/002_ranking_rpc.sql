@@ -36,7 +36,7 @@ declare
 begin
   -- 1. Webhook Idempotency Check: Don't re-process duplicate events
   if exists (
-    select 1 from payment_webhook_events 
+    select 1 from payment_events 
     where provider = 'dodo' and provider_event_id = p_event_id
   ) then
     return jsonb_build_object('status', 'already_processed');
@@ -228,8 +228,8 @@ begin
   where (p.current_rank is null or p.current_rank > 100)
     and pr.id <> v_project_id;
 
-  -- 10. Record webhook event for multi-tier idempotency
-  insert into payment_webhook_events (
+  -- 10. Record webhook event for multi-tier idempotency in payment_events
+  insert into payment_events (
     provider, provider_event_id, payment_id, event_type, payload
   ) values (
     'dodo', p_event_id, p_payment_id, 'payment.succeeded', p_payload
@@ -379,7 +379,7 @@ as $$
 declare
   v_deleted int;
 begin
-  delete from payment_webhook_events
+  delete from payment_events
   where processed_at < now() - (p_days || ' days')::interval;
   get diagnostics v_deleted = row_count;
   return v_deleted;

@@ -169,6 +169,6 @@ Tracked deviations between the shipped UI prototype and the canonical docs. All 
 - [x] **GAP-1 — Admin system missing.** RESOLVED: Full `/admin` dashboard restored with overview metrics, moderation controls, and emergency purchase pause toggle.
 - [x] **GAP-2 — No authentication.** RESOLVED: Supabase Auth integration, multi-profile ownership, Google One-Tap, and user session handling implemented.
 - [x] **GAP-3 — Post-bump result screen partial.** RESOLVED: Dedicated `BumpResultModal` displaying trajectory (#X -> #Y), number of profiles displaced, live cascade details, and one-click `/share/:id` action.
-- [x] **GAP-4 — Server authority is mocked.** RESOLVED: Webhook-authoritative transaction via `process_dodo_purchase`, webhook idempotency via `payment_webhook_events`, advisory locking, and RLS policies.
+- [x] **GAP-4 — Server authority is mocked.** RESOLVED: Webhook-authoritative transaction via `process_dodo_purchase`, webhook idempotency via `payment_events`, advisory locking, and RLS policies.
 - [x] **GAP-5 — LeaderboardModal subtitle.** RESOLVED: Updated to "Ranked by active value…".
 - [x] **GAP-6 — `07_BOARD_LAYOUT` tiers.** RESOLVED: Adopted concentric 5-batch arena geometry engine (#1 King, #2-#5 Champions, #6-#15 Elite Council, #16-#40 Vanguard, #41-#100 Drop Brink).
