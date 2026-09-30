@@ -97,6 +97,12 @@ const AlertSettingsModal = dynamic(
   { ssr: false }
 );
 
+const BumpResultModal = dynamic(
+  () => import('../components/BumpResultModal').then((m) => m.BumpResultModal),
+  { ssr: false }
+);
+import type { BumpResultData } from '../components/BumpResultModal';
+
 
 const STORAGE_KEY_PROFILES = 'bumped_profiles_v2';
 const STORAGE_KEY_OFFBOARD = 'bumped_offboard_v2';
@@ -181,6 +187,7 @@ export default function Home() {
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
+  const [bumpResult, setBumpResult] = useState<BumpResultData | null>(null);
 
   const isBackdropActive = Boolean(
     selectedSlot ||
@@ -189,7 +196,8 @@ export default function Home() {
     isGraveyardOpen ||
     isLeaderboardOpen ||
     isRulesOpen ||
-    isAlertSettingsOpen
+    isAlertSettingsOpen ||
+    bumpResult
   );
 
   const handleCloseProfile = useCallback(() => {
@@ -685,6 +693,28 @@ export default function Home() {
       );
     }
     recordBump({ profile: { ...base }, previousRank, newRank, casualty });
+
+    const displacedCount = previousRank === null
+      ? Math.max(0, 101 - newRank)
+      : Math.max(0, previousRank - newRank);
+
+    const displacedList = ordered
+      .filter((p) => p.id !== base.id)
+      .map((p) => ({
+        rank: ordered.findIndex((x) => x.id === p.id) + 1,
+        title: p.name,
+        imageUrl: p.imageUrl,
+      }))
+      .filter((x) => x.rank > newRank && (previousRank === null || x.rank <= (previousRank || 101)))
+      .slice(0, 5);
+
+    setBumpResult({
+      profile: { ...base, active_value: base.active_value },
+      previousRank,
+      newRank,
+      displacedCount,
+      displacedProfiles: displacedList,
+    });
   }, [recordBump]);
 
   // Live simulation: existing-holder top-ups (carry-forward demo), new entries, off-board reclaims.
@@ -1343,6 +1373,18 @@ export default function Home() {
           isOpen={isAlertSettingsOpen}
           onClose={() => setIsAlertSettingsOpen(false)}
           userEmail={user?.email || ''}
+        />
+      )}
+
+      {bumpResult && (
+        <BumpResultModal
+          isOpen={!!bumpResult}
+          onClose={() => setBumpResult(null)}
+          result={bumpResult}
+          onLocateOnBoard={(rank) => {
+            setHighlightedRank(rank);
+            setTimeout(() => setHighlightedRank(null), 4000);
+          }}
         />
       )}
 
