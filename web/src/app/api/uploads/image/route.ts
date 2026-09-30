@@ -46,8 +46,8 @@ export async function POST(request: NextRequest) {
       .webp({ quality: 85 })
       .toBuffer();
 
-    const originalName = file.name.replace(/\.[^/.]+$/, '');
-    const cleanFilename = `${originalName}.webp`;
+    const safeId = crypto.randomUUID();
+    const cleanFilename = `${safeId}.webp`;
 
     const imageUrl = await uploadImageToR2(processedBuffer, cleanFilename, 'image/webp');
 
