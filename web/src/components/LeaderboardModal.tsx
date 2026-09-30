@@ -8,6 +8,7 @@ export interface LeaderboardModalProps {
   onClose: () => void;
   slots: SlotItem[];
   onSelectSlot: (slot: SlotItem) => void;
+  hasBackdrop?: boolean;
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -15,6 +16,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onClose,
   slots,
   onSelectSlot,
+  hasBackdrop = true,
 }) => {
   const [search, setSearch] = useState('');
   const [filterTier, setFilterTier] = useState<'all' | 'king' | 'elite' | 'lord' | 'contender' | 'bubble'>('all');
@@ -39,8 +41,9 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Active 100-Slot Leaderboard"
-      subtitle="Ranked by active value, highest first, with live concentric tier classifications."
+      hasBackdrop={hasBackdrop}
+      title="Top 100 Leaderboard"
+      subtitle="Ranked by active value, highest first. Top up anytime to climb."
       maxWidth="lg"
     >
       <div className="space-y-4">
@@ -56,61 +59,55 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1">
             <button
               onClick={() => setFilterTier('all')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
-                filterTier === 'all'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${filterTier === 'all'
                   ? 'bg-white text-slate-950 font-semibold'
                   : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
-              }`}
+                }`}
             >
               All 100 Slots
             </button>
             <button
               onClick={() => setFilterTier('king')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
-                filterTier === 'king'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'king'
                   ? 'bg-amber-950/40 text-amber-200 border border-amber-400/50'
                   : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
-              }`}
+                }`}
             >
               <Crown className="w-3 h-3 text-amber-400" /> King (#1)
             </button>
             <button
               onClick={() => setFilterTier('elite')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
-                filterTier === 'elite'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'elite'
                   ? 'bg-white/[0.1] text-white border border-white/[0.2]'
                   : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
-              }`}
+                }`}
             >
-              <Sparkles className="w-3 h-3 text-slate-300" /> Elites (#2-13)
+              <Sparkles className="w-3 h-3 text-slate-300" /> Top 10 (#2–10)
             </button>
             <button
               onClick={() => setFilterTier('lord')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
-                filterTier === 'lord'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'lord'
                   ? 'bg-zinc-800 text-zinc-100 border border-zinc-500/50'
                   : 'bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
-              }`}
+                }`}
             >
-              Lords (#14-54)
+              Top 50 (#11–50)
             </button>
             <button
               onClick={() => setFilterTier('contender')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
-                filterTier === 'contender'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'contender'
                   ? 'bg-zinc-700 text-zinc-100 border border-zinc-600'
                   : 'bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
-              }`}
+                }`}
             >
-              Contenders (#55-99)
+              Contenders (#51–99)
             </button>
             <button
               onClick={() => setFilterTier('bubble')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
-                filterTier === 'bubble'
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'bubble'
                   ? 'bg-rose-950/40 text-rose-300 border border-rose-500/40'
                   : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
-              }`}
+                }`}
             >
               <AlertTriangle className="w-3 h-3 text-rose-400" /> Drop Brink (#100)
             </button>
@@ -152,14 +149,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 </span>
                 <span className="text-[10px] text-slate-400">
                   {slot.rank === 1
-                    ? '4x4 King Citadel'
-                    : slot.rank <= 13
-                    ? '2x2 Inner Orbit'
-                    : slot.rank <= 54
-                    ? '2x1 / 1x2 Domino Lord'
-                    : slot.rank === 100
-                    ? 'Drop Brink (#100)'
-                    : '1x1 Contender'}
+                    ? '👑 Center King'
+                    : slot.rank <= 10
+                      ? '⚡ Top 10 Spot'
+                      : slot.rank <= 50
+                        ? 'Top 50 Spot'
+                        : slot.rank === 100
+                          ? '⚠️ Danger Zone'
+                          : 'Grid Spot'}
                 </span>
               </div>
             </div>

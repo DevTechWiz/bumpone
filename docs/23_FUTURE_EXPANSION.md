@@ -1,4 +1,4 @@
-# Bumped.lol — Future Expansion
+# BumpOne.lol — Future Expansion
 
 Do not build these into MVP unless validated.
 
@@ -44,7 +44,7 @@ Show how the wall looked at a specific point in time.
 
 Potential future model:
 
-Bumped.lol
+BumpOne.lol
 ├── Global
 ├── Creators
 ├── Startups

@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { GridCell } from './ui';
 import { SlotItem } from '../lib/slotTypes';
-import { getSlotCoordinate, GridOrientation, LANDSCAPE_DIMS, PORTRAIT_DIMS } from '../lib/concentricGrid';
+import {
+  computeBoardLayout,
+  type GridOrientation,
+} from '../lib/boardLayout';
 import { soundEngine } from '../lib/sound';
 
 export interface GridBoardProps {
@@ -15,7 +18,11 @@ export interface GridBoardProps {
   onOrientationChange?: (orientation: GridOrientation) => void;
 }
 
-export const GridBoard: React.FC<GridBoardProps> = ({
+/** Cards are flush: adjacent rects touch exactly (no gutter, no overlap). */
+const GAP = 0;
+const GAP_INSET = GAP / 2;
+
+const GridBoardComponent: React.FC<GridBoardProps> = ({
   slots,
   onSlotClick,
   highlightedRank,
@@ -24,7 +31,6 @@ export const GridBoard: React.FC<GridBoardProps> = ({
   onHoverRank,
   onOrientationChange,
 }) => {
-  // Determine landscape vs portrait based on viewport aspect ratio
   const [orientation, setOrientation] = useState<GridOrientation>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth < window.innerHeight ? 'portrait' : 'landscape';
@@ -32,21 +38,19 @@ export const GridBoard: React.FC<GridBoardProps> = ({
     return 'landscape';
   });
 
-  // Google Maps-style zoom level state: 1.0 (Fit), 1.25 (Close-up), 1.5 (Macro)
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleCellClick = useCallback(
-    (cellData: { rank: number }) => {
-      const fullSlot = slots.find((s) => s.rank === cellData.rank);
-      if (fullSlot) {
-        onSlotClick?.(fullSlot);
-      }
+    (cellData: any) => {
+      onSlotClick?.(cellData as SlotItem);
     },
-    [slots, onSlotClick]
+    [onSlotClick]
   );
 
   const handleCellHover = useCallback(
-    (cellData: { rank: number } | null) => {
+    (cellData: any) => {
       onHoverRank?.(cellData ? cellData.rank : null);
     },
     [onHoverRank]
@@ -65,6 +69,57 @@ export const GridBoard: React.FC<GridBoardProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [onOrientationChange]);
 
+  // Measure board → dynamic treemap (fills every pixel of the container).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const apply = (w: number, h: number) => {
+      setSize((prev) =>
+        Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5
+          ? prev
+          : { w, h }
+      );
+    };
+
+    apply(el.clientWidth, el.clientHeight);
+
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) apply(rect.width, rect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const layout = useMemo(() => {
+    if (size.w <= 0 || size.h <= 0) return null;
+    return computeBoardLayout(size.w, size.h, Math.min(100, slots.length || 100));
+  }, [size.w, size.h, slots.length]);
+
+  const cellStyles = useMemo(() => {
+    if (!layout) return null;
+    const styles: Record<number, React.CSSProperties> = {};
+    for (let rank = 1; rank <= 100; rank++) {
+      const rect = layout.slots[rank];
+      if (rect) {
+        styles[rank] = {
+          position: 'absolute',
+          left: rect.x + GAP_INSET,
+          top: rect.y + GAP_INSET,
+          width: Math.max(1, rect.w - GAP),
+          height: Math.max(1, rect.h - GAP),
+        };
+      }
+    }
+    return styles;
+  }, [layout]);
+
   const handleZoomIn = () => {
     soundEngine.playClick();
     setZoomLevel((prev) => Math.min(Number((prev + 0.25).toFixed(2)), 1.75));
@@ -80,26 +135,12 @@ export const GridBoard: React.FC<GridBoardProps> = ({
     setZoomLevel(1.0);
   };
 
-  // Grid template derives from the canonical dims in concentricGrid (single source of truth).
-  const gridDimensions = useMemo(() => {
-    const d = orientation === 'landscape' ? LANDSCAPE_DIMS : PORTRAIT_DIMS;
-    return {
-      cols: d.cols,
-      rows: d.rows,
-      gridTemplateColumns: `repeat(${d.cols}, minmax(0, 1fr))`,
-      gridTemplateRows: `repeat(${d.rows}, minmax(0, 1fr))`,
-    };
-  }, [orientation]);
-
   return (
-    <div className="w-full h-full relative overflow-hidden rounded-2xl bg-[#141519]/90 backdrop-blur-xl border border-white/[0.09] p-1.5 sm:p-2 md:p-2.5 shadow-2xl shadow-black/90 flex flex-col group/board">
+    <div className="w-full h-full relative overflow-hidden rounded-2xl bg-[#141519]/90 backdrop-blur-xl border border-white/[0.09] shadow-2xl shadow-black/90 flex flex-col group/board">
       {/* Center Gravitational Celestial Halo */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-        {/* Core Amber/Gold Starlight Glow for King */}
         <div className="w-[320px] h-[320px] rounded-full bg-amber-500/[0.07] blur-3xl" />
-        {/* Outer Orbit Ring 1 (Elites) */}
         <div className="absolute w-[60%] h-[60%] rounded-full border border-white/[0.03] pointer-events-none" />
-        {/* Outer Orbit Ring 2 (Perimeter boundary) */}
         <div className="absolute w-[90%] h-[90%] rounded-full border border-white/[0.02] pointer-events-none" />
       </div>
 
@@ -113,13 +154,13 @@ export const GridBoard: React.FC<GridBoardProps> = ({
         }}
       />
 
-      {/* Google Maps-style Floating Zoom & Viewport Overlay (Top Left of Board) */}
+      {/* Zoom controls */}
       <div className="absolute top-3 left-3 z-30 flex items-center gap-1 bg-[#18191d]/90 backdrop-blur-md p-1 rounded-xl border border-white/[0.12] shadow-xl text-neutral-300">
         <button
           onClick={handleZoomIn}
           disabled={zoomLevel >= 1.75}
           className="p-1.5 rounded-lg hover:bg-white/[0.1] hover:text-white disabled:opacity-30 transition-all cursor-pointer"
-          title="Zoom In (Google Maps viewport)"
+          title="Zoom In"
         >
           <ZoomIn className="w-3.5 h-3.5" />
         </button>
@@ -128,7 +169,7 @@ export const GridBoard: React.FC<GridBoardProps> = ({
           onClick={handleZoomOut}
           disabled={zoomLevel <= 0.85}
           className="p-1.5 rounded-lg hover:bg-white/[0.1] hover:text-white disabled:opacity-30 transition-all cursor-pointer"
-          title="Zoom Out (Google Maps viewport)"
+          title="Zoom Out"
         >
           <ZoomOut className="w-3.5 h-3.5" />
         </button>
@@ -136,48 +177,41 @@ export const GridBoard: React.FC<GridBoardProps> = ({
         <button
           onClick={handleResetZoom}
           className="px-1.5 py-1 rounded-lg text-[10px] font-mono hover:bg-white/[0.1] hover:text-white transition-all cursor-pointer flex items-center gap-1"
-          title="Reset Zoom Scale"
+          title="Reset Zoom"
         >
           <Maximize2 className="w-3 h-3 text-slate-400" />
           <span>{Math.round(zoomLevel * 100)}%</span>
         </button>
       </div>
 
-      {/* 
-        The Concentric 100-Slot Grid Container with smooth transform-origin center scaling
-      */}
-      <div className="relative z-10 w-full h-full overflow-auto flex items-center justify-center">
+      {/* Full-bleed treemap board */}
+      <div className="relative z-10 w-full h-full overflow-hidden">
         <div
-          className="w-full h-full grid gap-1 sm:gap-1.5 transition-transform duration-300 ease-out origin-center"
-          style={{
-            transform: `scale(${zoomLevel})`,
-            gridTemplateColumns: gridDimensions.gridTemplateColumns,
-            gridTemplateRows: gridDimensions.gridTemplateRows,
-          }}
+          ref={containerRef}
+          className="absolute inset-0 origin-center transition-transform duration-300 ease-out"
+          style={{ transform: `scale(${zoomLevel})` }}
         >
-          {slots.slice(0, 100).map((slot) => {
+          {cellStyles &&
+            slots.slice(0, 100).map((slot) => {
+              const style = cellStyles[slot.rank];
+              if (!style) return null;
+
               const isHighlighted = highlightedRank === slot.rank || hoveredRank === slot.rank;
               const isDimmed = matchingRanks !== null && !matchingRanks.has(slot.rank);
-              const coord = getSlotCoordinate(slot.rank, orientation);
 
               return (
                 <GridCell
                   key={slot.id}
-                  slot={{
-                    ...slot,
-                    isNew: slot.isNew,
-                  }}
+                  slot={slot}
                   isHighlighted={isHighlighted}
                   isDimmed={isDimmed}
-                  style={{
-                    gridColumn: `${coord.col} / span ${coord.colSpan}`,
-                    gridRow: `${coord.row} / span ${coord.rowSpan}`,
-                  }}
+                  isClient={mounted}
+                  style={style}
                   onClick={handleCellClick}
                   onHover={handleCellHover}
                   className={
                     isHighlighted
-                      ? 'ring-2 ring-white/90 z-30 scale-[1.02] shadow-2xl shadow-white/30'
+                      ? 'ring-2 ring-white/90 z-30 shadow-2xl shadow-white/30'
                       : ''
                   }
                 />
@@ -188,3 +222,5 @@ export const GridBoard: React.FC<GridBoardProps> = ({
     </div>
   );
 };
+
+export const GridBoard = React.memo(GridBoardComponent);

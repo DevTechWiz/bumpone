@@ -1,4 +1,4 @@
-# Bumped.lol — Image and Link Rules
+# BumpOne.lol — Image and Link Rules
 
 ## Image
 
@@ -18,11 +18,11 @@ Images should be resized/compressed after upload.
 
 # Image Storage
 
-Use object storage.
+Use Cloudflare R2 (S3-compatible bucket: `profile-images`).
 
-Recommended MVP:
-
-Supabase Storage.
+* **Zero Egress Fees**: Free bandwidth regardless of viral spectator spikes.
+* **10 GB Free Storage**.
+* **Edge Delivery**: Served directly through Cloudflare Global CDN.
 
 ---
 

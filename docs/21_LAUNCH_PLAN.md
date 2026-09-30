@@ -1,4 +1,4 @@
-# Bumped.lol — Launch Plan
+# BumpOne.lol — Launch Plan
 
 ## Prelaunch
 

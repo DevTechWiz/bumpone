@@ -1,4 +1,4 @@
-# Bumped.lol — Security and Moderation
+# BumpOne.lol — Security and Moderation
 
 ## Authentication
 

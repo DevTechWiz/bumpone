@@ -1,4 +1,4 @@
-# Bumped.lol — Core Mechanics
+# BumpOne.lol — Core Mechanics
 
 ## Conceptual Model
 

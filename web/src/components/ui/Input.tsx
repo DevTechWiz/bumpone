@@ -45,7 +45,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             id={inputId}
             ref={ref}
-            className={`w-full bg-black/50 text-neutral-100 placeholder:text-neutral-500 rounded-xl text-sm border transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-offset-1 focus:ring-offset-[#121316] ${
+            className={`w-full bg-black/50 text-neutral-100 placeholder:text-neutral-500 rounded-xl text-sm border transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-offset-1 focus:ring-offset-[#121316] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-white/[0.02] ${
               leftAddon ? 'pl-10' : 'pl-3.5'
             } ${rightAddon ? 'pr-10' : 'pr-3.5'} py-2.5 ${
               error

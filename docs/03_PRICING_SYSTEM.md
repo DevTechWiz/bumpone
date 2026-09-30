@@ -1,4 +1,4 @@
-# Bumped.lol — Pricing System
+# BumpOne.lol — Pricing System
 
 ## Core Principle
 
@@ -84,7 +84,7 @@ The user does not repay the original $500.
 
 Historical purchases remain historical transaction records and are not separately reusable as additional credit.
 
-> Minimum-amount rule: Bumped.lol always increases by **+$10** — a **$10** minimum entry value and **$10** minimum increment, whole USD only.
+> Minimum-amount rule: BumpOne.lol always increases by **+$10** — a **$10** minimum entry value and **$10** minimum increment, whole USD only.
 
 ---
 
@@ -178,10 +178,10 @@ Store monetary values as integer USD units for the MVP.
 
 ---
 
-## Stripe Fees
+## Payment Provider Fees
 
-Stripe/payment processing fees are separate from the Bumped ranking logic.
+Payment processing fees (e.g. Dodo Payments / card fees) are separate from the Bumped ranking logic.
 
-The ranking system operates on the amount the product defines as the purchase value.
+The ranking system operates strictly on the whole USD amount the product defines as the purchase value.
 
 Payment-provider fees must never alter ranking calculations.

@@ -16,20 +16,22 @@ import {
   AtSign,
   Hash
 } from 'lucide-react';
-import { BumpEvent, ChatMessage, SlotItem } from '../lib/slotTypes';
+import { BumpEvent, Message, SlotItem } from '../lib/slotTypes';
 import { soundEngine } from '../lib/sound';
+import { createClient } from '../lib/supabase/client';
 
 export interface WarRoomDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   bumpHistory: BumpEvent[];
   slots: SlotItem[];
-  chatMessages: ChatMessage[];
-  onSendMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  messages: Message[];
+  onSendMessage: (msg: Omit<Message, 'id' | 'timestamp'>) => void;
   onTriggerReaction: (emoji: string, e?: React.MouseEvent) => void;
   onSelectSlot: (slot: SlotItem) => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  senderHandle?: string;
 }
 
 type WarRoomChannel = 'dispatch' | 'lounge' | 'kings';
@@ -39,17 +41,25 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
   onClose,
   bumpHistory,
   slots,
-  chatMessages,
+  messages = [],
   onSendMessage,
   onTriggerReaction,
   onSelectSlot,
   isMuted,
   onToggleMute,
+  senderHandle,
 }) => {
+  const activeMessages = messages;
   const [activeChannel, setActiveChannel] = useState<WarRoomChannel>('dispatch');
-  const [senderName, setSenderName] = useState('@spectator');
-  // Stored handle loads post-mount: server render must match first client render.
+  const [senderName, setSenderName] = useState(
+    senderHandle ? (senderHandle.startsWith('@') ? senderHandle : `@${senderHandle}`) : '@spectator'
+  );
+
   useEffect(() => {
+    if (senderHandle) {
+      setSenderName(senderHandle.startsWith('@') ? senderHandle : `@${senderHandle}`);
+      return;
+    }
     if (typeof window !== 'undefined') {
       try {
         const saved = window.localStorage.getItem('bumped_user_handle');
@@ -58,17 +68,45 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
         // ignore
       }
     }
-  }, []);
+  }, [senderHandle]);
   const [messageInput, setMessageInput] = useState('');
   const [selectedSlotTag, setSelectedSlotTag] = useState<number | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const realtimeChannelRef = useRef<any>(null);
+
+  // Connect Supabase Realtime Broadcast for multi-user chat synchronization
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const supabase = createClient();
+      const channel = supabase.channel('war_room', {
+        config: { broadcast: { self: false } },
+      });
+
+      channel.on('broadcast', { event: 'message' }, ({ payload }) => {
+        if (payload && payload.text) {
+          onSendMessage(payload);
+        }
+      });
+
+      channel.subscribe();
+      realtimeChannelRef.current = channel;
+
+      return () => {
+        supabase.removeChannel(channel);
+        realtimeChannelRef.current = null;
+      };
+    } catch {
+      // Local fallback if Supabase is offline
+    }
+  }, [isOpen, onSendMessage]);
 
   // Auto-scroll on new messages
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [chatMessages, bumpHistory, isOpen, activeChannel]);
+  }, [activeMessages, bumpHistory, isOpen, activeChannel]);
 
   if (!isOpen) return null;
 
@@ -83,12 +121,31 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
     const colors = ['bg-indigo-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-    onSendMessage({
+    const msgPayload = {
       sender: handle || '@anonymous',
       avatarColor: randomColor,
       text: messageInput.trim(),
       slotTag: selectedSlotTag,
-    });
+    };
+
+    onSendMessage(msgPayload);
+
+    // Broadcast across realtime channel
+    if (realtimeChannelRef.current) {
+      try {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'message',
+          payload: {
+            ...msgPayload,
+            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            timestamp: Date.now(),
+          },
+        });
+      } catch {
+        // Safe silent fallback
+      }
+    }
 
     setMessageInput('');
   };
@@ -220,9 +277,9 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
             {bumpHistory.length === 0 ? (
               <div className="text-center py-12 text-slate-500 space-y-2">
                 <Swords className="w-8 h-8 mx-auto opacity-30 text-slate-400" />
-                <p className="font-medium">No combat displacement recorded yet.</p>
+                <p className="font-medium">No bumps recorded yet.</p>
                 <p className="text-[11px] text-slate-600">
-                  Take over any slot or click Auto-Simulate to watch live turf battles unfold!
+                  Bump any slot or click Auto-Simulate to watch live battles unfold!
                 </p>
               </div>
             ) : (
@@ -282,7 +339,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
         {/* CHANNEL 2: SPECTATOR LOUNGE / SHOUTOUTS */}
         {activeChannel === 'lounge' && (
           <div className="space-y-3">
-            {chatMessages.map((msg) => (
+            {activeMessages.map((msg) => (
               <div
                 key={msg.id}
                 className={`p-3 rounded-xl border ${
@@ -362,7 +419,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
                   className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all"
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  Challenge the King (${kingSlot.amountPaid + 50})
+                  Bump the King (${kingSlot.amountPaid + 10})
                 </button>
               </div>
             </div>

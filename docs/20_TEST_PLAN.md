@@ -1,4 +1,4 @@
-# Bumped.lol — Test Plan
+# BumpOne.lol — Test Plan
 
 ## Ranking Tests
 

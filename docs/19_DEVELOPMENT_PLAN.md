@@ -1,4 +1,4 @@
-# Bumped.lol — Development Plan
+# BumpOne.lol — Development Plan
 
 ## Phase 0 — Rules Lock
 
@@ -60,7 +60,7 @@ Implement:
 - strict-exceed validation
 - transaction safety
 
-Write automated tests before Stripe integration.
+Write automated tests before Dodo Payments integration.
 
 ---
 
@@ -68,10 +68,10 @@ Write automated tests before Stripe integration.
 
 Implement:
 
-- sign in
-- profile ownership
-- profile creation
-- profile editing
+- sign in (Supabase Auth: Magic Link + Social OAuth)
+- multi-profile ownership (1 account can own and manage multiple slots)
+- profile creation and claim
+- profile editing & top-up
 
 ---
 
@@ -87,15 +87,15 @@ Implement:
 
 ---
 
-# Phase 6 — Stripe
+# Phase 6 — Dodo Payments
 
 Implement:
 
-- checkout session
-- webhook
+- checkout session (Dodo Hosted Checkout)
+- webhook verification (standard webhook headers)
 - payment verification
-- idempotency
-- purchase transaction
+- idempotency (payment_events)
+- atomic ranking transaction RPC
 
 ---
 

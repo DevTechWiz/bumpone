@@ -1,4 +1,4 @@
-# Bumped.lol — Ranking and Bumping
+# BumpOne.lol — Ranking and Bumping
 
 ## Ranking Model
 
@@ -11,6 +11,12 @@ Ranking is sorted by current_active_value descending.
 ## Sorting Rule
 
 The canonical ranking source is `current_active_value DESC`. Equal values are ordered by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher). `current_rank` is a materialized cache of this ordering, never the source of truth.
+
+### Simultaneous Purchases & Equal Active Value Handling
+If two users buy for the same slot simultaneously and pay the same top-up (e.g. Alice and Bob both pay $110 to claim #1):
+1. **1st confirmed webhook (Alice)** receives sequence #1042 -> takes **Rank #1**.
+2. **2nd confirmed webhook (Bob)** receives sequence #1043 -> takes **Rank #2** (because both have $110, but #1042 < #1043).
+3. Neither payment is rejected or refunded; both users are live on the board.
 
 ---
 

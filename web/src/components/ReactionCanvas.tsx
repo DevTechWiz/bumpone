@@ -6,28 +6,16 @@ export interface ReactionCanvasProps {
   onRemoveReaction: (id: string) => void;
 }
 
-export const ReactionCanvas: React.FC<ReactionCanvasProps> = ({ reactions, onRemoveReaction }) => {
-  return (
-    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
-      {reactions.map((r) => (
-        <ReactionItem key={r.id} reaction={r} onComplete={() => onRemoveReaction(r.id)} />
-      ))}
-    </div>
-  );
-};
-
-interface ReactionItemProps {
+const ReactionItemComponent: React.FC<{
   reaction: FloatingReaction;
-  onComplete: () => void;
-}
-
-const ReactionItem: React.FC<ReactionItemProps> = ({ reaction, onComplete }) => {
+  onRemove: (id: string) => void;
+}> = ({ reaction, onRemove }) => {
   const [style, setStyle] = useState<React.CSSProperties>({
     left: `${reaction.x}px`,
     top: `${reaction.y}px`,
     opacity: 1,
     transform: 'translate(-50%, -50%) scale(0.6)',
-    transition: 'all 1.6s cubic-bezier(0.2, 0.8, 0.2, 1)',
+    transition: 'transform 1.6s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 1.6s cubic-bezier(0.2, 0.8, 0.2, 1)',
   });
 
   useEffect(() => {
@@ -41,19 +29,19 @@ const ReactionItem: React.FC<ReactionItemProps> = ({ reaction, onComplete }) => 
         top: `${reaction.y - driftY}px`,
         opacity: 0,
         transform: `translate(-50%, -50%) scale(1.4) rotate(${driftX * 0.3}deg)`,
-        transition: 'all 1.6s cubic-bezier(0.1, 0.9, 0.2, 1)',
+        transition: 'transform 1.6s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 1.6s cubic-bezier(0.1, 0.9, 0.2, 1)',
       });
     });
 
     const timer = setTimeout(() => {
-      onComplete();
+      onRemove(reaction.id);
     }, 1600);
 
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
     };
-  }, [reaction, onComplete]);
+  }, [reaction.id, reaction.x, reaction.y, onRemove]);
 
   return (
     <div
@@ -64,3 +52,15 @@ const ReactionItem: React.FC<ReactionItemProps> = ({ reaction, onComplete }) => 
     </div>
   );
 };
+
+const ReactionItem = React.memo(ReactionItemComponent);
+
+export const ReactionCanvas: React.FC<ReactionCanvasProps> = React.memo(({ reactions, onRemoveReaction }) => {
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {reactions.map((r) => (
+        <ReactionItem key={r.id} reaction={r} onRemove={onRemoveReaction} />
+      ))}
+    </div>
+  );
+});

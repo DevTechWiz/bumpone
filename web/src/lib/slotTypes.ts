@@ -11,6 +11,17 @@ export interface SlotItem {
   aspectRatio?: number;
   naturalWidth?: number;
   naturalHeight?: number;
+  imageZoom?: number;
+  imagePosX?: number;
+  imagePosY?: number;
+  imageFit?: "cover" | "contain";
+  imageRotation?: number;
+  owner_id?: string;
+  owner_name?: string;
+  owner_handle?: string;
+  owner_avatar?: string;
+  category?: string;
+  reactions?: Record<string, number>;
 }
 
 export interface BumpEvent {
@@ -31,7 +42,7 @@ export interface BoardStats {
   totalBumpsCount: number;
 }
 
-export interface ChatMessage {
+export interface Message {
   id: string;
   sender: string;
   avatarColor: string;

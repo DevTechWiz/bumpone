@@ -1,8 +1,8 @@
-# Bumped.lol — UI/UX Specification
+# BumpOne.lol — UI/UX Specification
 
 ## Design Direction
 
-Bumped.lol should feel:
+BumpOne.lol should feel:
 
 - internet-native
 - playful
@@ -215,7 +215,7 @@ The result feels like an event, not a generic payment confirmation.
 
 After a successful bump, a shareable visual card is generated:
 
-I just bumped to #7 on Bumped.lol
+I just bumped to #7 on BumpOne.lol
 
 46 profiles moved.
 
@@ -223,7 +223,7 @@ The card:
 
 - Matches the Bumped Wall visual identity
 - Shows new rank and profiles displaced
-- Includes Bumped.lol branding
+- Includes BumpOne.lol branding
 - Is publicly accessible via URL
 - Can be shared to social platforms
 

@@ -1,4 +1,4 @@
-# Bumped.lol — Realtime System
+# BumpOne.lol — Realtime System
 
 ## Goal
 
@@ -67,21 +67,18 @@ timestamp
 
 ---
 
-# Recommended Architecture
+# Dual-Tier Realtime Architecture (Viral-Scale)
 
-Stripe webhook
-↓
-Database transaction
-↓
-Commit
-↓
-Realtime events (board + bump feed + reactions)
-↓
-Connected clients
-↓
-Wall animation + feed update
-↓
-New wall state
+### 1. Spectator Tier (100,000+ Viewers) — Cloudflare Edge SWR
+* **Mechanism**: Clients poll `GET /api/board` every 5 seconds.
+* **Edge Cache**: Responses carry `Cache-Control: public, s-maxage=5, stale-while-revalidate=10`.
+* **Zero Database Load**: Cloudflare Edge absorbs 100% of spectator queries.
+* **UI Animation**: When the edge snapshot updates with a new sequence number, the client automatically triggers the tile rearrangement and bump sound FX.
+* **Zero WebSocket Limits**: Eliminates Supabase Free's 200 concurrent connection limit.
+
+### 2. Interactive Tier — Supabase Realtime Channels
+* **Scope**: Reserved exclusively for active authenticated users participating in the **War Room** (`WarRoomDrawer.tsx`) chat channels (Dispatch, Lounge, Kings).
+* Stays well below the 200 concurrent connection ceiling on the free tier.
 
 ---
 

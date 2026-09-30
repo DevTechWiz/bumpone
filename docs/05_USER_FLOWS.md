@@ -1,4 +1,4 @@
-# Bumped.lol — User Flows
+# BumpOne.lol — User Flows
 
 ## Flow 1 — Visitor (Browsing, No Account Required)
 

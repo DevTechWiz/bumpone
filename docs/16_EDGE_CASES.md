@@ -1,34 +1,24 @@
-# Bumped.lol — Edge Cases
+# BumpOne.lol — Edge Cases
 
-## Simultaneous Purchases
+## Simultaneous Purchases (Concurrent Bumps)
 
-Two users purchase the same position simultaneously.
+Two users purchase the same position (e.g. Slot #1) simultaneously.
 
-Solution:
-
-Serialize ranking transactions.
-
-The second transaction sees the updated board.
-
-### Concurrent Bumps
-
-Two users attempting to take similar positions must be resolved atomically.
-
-At payment confirmation, each purchase is recomputed against the current ranking state using the amount actually paid; quotes never reserve ranks.
-
-Final ranking must remain valid:
-
-```text
-higher active value >= lower active value
-```
-
-and equal values are ordered by earliest rank-event sequence (monotonic `global_event_sequence`).
+### The Rule:
+1. **Never Reject a Payment**: Every successful payment received via Dodo Payments is credited. No payment is cancelled or refunded due to race conditions.
+2. **Database Advisory Locking**: PostgreSQL serializes concurrent webhook transactions using `pg_advisory_xact_lock(hashtext('board_ranking_mutation'))`.
+3. **Monotonic Sequence Tiebreaker**: The first transaction to acquire the lock receives the earlier monotonic sequence (`global_event_sequence`), e.g. #1042. The second transaction receives #1043.
+4. **Rank Allocation**:
+   * **1st Transaction (Alice)**: Takes **Slot #1**.
+   * **2nd Transaction (Bob)**: Active value ties with Alice ($110), but because Bob's sequence is later (#1043 > #1042), Bob takes **Slot #2**.
+   * Intermediate profiles shift down by 1.
+5. **Outcome**: Both profiles are live on the board, both users have their full paid active value credited, and the platform retains 100% of the revenue.
 
 ---
 
 ## Service Shutdown
 
-Bumped.lol does NOT have to operate forever.
+BumpOne.lol does NOT have to operate forever.
 
 Document:
 
@@ -93,13 +83,13 @@ Webhook idempotency prevents duplicate insertion.
 
 ---
 
-## Stripe Webhook Delayed
+## Dodo Webhook Delayed
 
 Board does not update until payment is verified.
 
 ---
 
-## Stripe Webhook Replayed
+## Dodo Webhook Replayed
 
 Same event ID must be ignored after first successful processing.
 
@@ -127,19 +117,13 @@ Use idempotent processing.
 
 ---
 
-## User Already Has a Profile
+## User Top-Up vs New Profile
 
-A user can own one active profile.
+A user account can own and manage multiple profiles (one per slot).
 
-When purchasing again, the system MOVES their existing profile to the new position rather than creating a duplicate.
-
-Algorithm:
-1. Remove profile from current position.
-2. Shift profiles between old and new positions.
-3. Insert profile at new position.
-4. Update active_value.
-
-Alex must not exist twice on the board.
+When a user purchases:
+1. **Top-Up Existing**: If the user selects one of their existing profiles, the system carries forward that profile's active value and climbs to the higher rank.
+2. **New Profile**: If the user creates a fresh profile (e.g. for a second product), it enters the board independently at its paid active value.
 
 ---
 

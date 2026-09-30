@@ -1,4 +1,4 @@
-# Bumped.lol — Animation Specification
+# BumpOne.lol — Animation Specification
 
 ## Animation Is Core Product Behavior
 

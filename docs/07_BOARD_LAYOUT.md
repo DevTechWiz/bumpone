@@ -1,4 +1,4 @@
-# Bumped.lol — Board Layout
+# BumpOne.lol — Board Layout
 
 ## Goal
 
@@ -10,7 +10,7 @@ The wall is NOT a conventional leaderboard. It is a dynamic visual arena.
 
 # The Bumped Wall
 
-The wall is the primary visual identity of Bumped.lol.
+The wall is the primary visual identity of BumpOne.lol.
 
 ### Global Board
 
@@ -80,6 +80,10 @@ Twelve 2×2 tiles (4 units each) directly adjacent to the citadel, silver/platin
 ## Rank #100 — Drop Brink
 
 1×1 tile with crimson beacon treatment: the next climb pushes #100 off the wall (profile kept off-board, never deleted).
+
+## Rank #101+ — The Graveyard (Off-Board Archive)
+
+Profiles displaced past rank #100 are archived in the **Graveyard Drawer**. Their profiles, metrics, and active values are preserved permanently. A 1-click **"Reclaim Turf"** button allows them to calculate the top-up needed to re-enter the live Top 100.
 
 ## Layout Geometry
 

@@ -1,4 +1,4 @@
-# Bumped.lol — Product Rules
+# BumpOne.lol — Product Rules
 
 ## Rule 1 — Infinite Ranking
 
@@ -249,11 +249,13 @@ Each top-up is calculated independently based on the buyer's current active valu
 
 ---
 
-## Rule 17 — One Active Profile
+## Rule 17 — Profile Ownership and Multi-Slot Support
 
-A user can own one active profile on the board.
+A user account can own and manage multiple profiles/slots on the board (e.g. promoting different apps or projects).
 
-Purchasing again updates/repositions that profile rather than creating duplicate profiles.
+Each profile maintains its own independent active value and rank journey:
+- When topping up an existing profile, its active value carries forward.
+- When creating a new profile for another product, it starts fresh with its own active value.
 
 ---
 
@@ -319,17 +321,13 @@ History is public and permanent.
 
 ---
 
-## Rule 23 — Social Reactions
+## Rule 23 — Three Discovery Signals (Power, Popular, Trending)
 
-Visitors can react to profiles with emoji reactions.
+The platform provides three distinct discovery views:
 
-Reactions NEVER change rank.
-Reactions NEVER affect Active Value.
-Reactions are purely social/discovery signals.
-
-Reactions are rate-limited to prevent abuse.
-
-A user can react to the same profile once per reaction type.
+1. 💰 **Power (Primary)**: Authoritative ranking by `current_active_value DESC`. Paid attention rules the board.
+2. ❤️ **Popular**: Community-sorted view by total emoji reactions (`fire + eyes + heart + laugh`). Reactions provide social proof but NEVER alter active value or the primary Power ranking.
+3. 📈 **Trending**: Momentum-based view sorted by climb velocity (number of ranks climbed in the last 24 hours).
 
 ---
 
@@ -341,11 +339,10 @@ The card shows:
 
 - New rank
 - Number of profiles displaced
-- Bumped.lol branding
+- Active value and handle
+- BumpOne.lol branding
 
-The card is designed for social sharing.
-
-Sharing is optional and does not affect ranking.
+The card is designed for social sharing on X/Twitter and LinkedIn. Sharing is optional and does not affect ranking.
 
 ---
 
@@ -357,59 +354,64 @@ The passport shows:
 
 - Peak Rank
 - Current Rank
-- Current Active Value
+- Current Active Value (Current ranking power)
+- Total Lifetime Spend (`total_paid`)
 - Joined date
 - Times Bumped
 - Times Climbed
 - Profile Views
-- Full Rank Journey
+- Full Rank Journey (chronological sequence of events)
 
-The profile's ranking journey becomes part of its identity.
+The profile's ranking journey becomes part of its digital prestige.
 
 ---
 
-## Rule 26 — Post-Bump Result
+## Rule 26 — Post-Bump Result Screen
 
-After a successful purchase, the buyer sees a result screen showing:
+After a successful purchase, the buyer sees a celebratory result screen showing:
 
-- Previous rank
-- New rank
+- Previous rank → New rank
 - Number of profiles displaced
 - New active value
 - Profiles that were pushed down
+- 1-click share card
 
-The result feels like an event, not a generic payment confirmation.
+The result feels like a victory event, not a generic payment receipt.
 
 ---
 
-## Rule 27 — Paid Ranking Is a Service
+## Rule 27 — The Concentric Board Tiers & Graveyard
 
-Users pay to increase the Active Value of their profile and obtain a higher ranking position.
+The board physically represents status across 4 visual tiers:
+
+1. **#1 The King Throne**: A colossal 4×4 center citadel dominating the board.
+2. **#2–#13 Inner Orbit Elites**: 2×2 prominent display tiles surrounding the King.
+3. **#14–#40 Mid-Orbit Vanguard**: Enhanced 1×1 tiles.
+4. **#41–#100 Outer Perimeter Contenders**: Standard 1×1 tiles.
+5. **#101+ The Graveyard**: Profiles pushed beyond #100 drop into the Graveyard Drawer. Their active value is preserved permanently, and they can top up at any time to reclaim a spot on the live board.
+
+---
+
+## Rule 28 — Paid Ranking Is an Attention Service
+
+Users pay to increase the Active Value of their profile and obtain higher visual prominence on the live attention board.
 
 The payment does NOT represent:
 
 * ownership of the platform
-* ownership of a ranking position forever
-* an investment
-* a financial asset
-* a redeemable balance
-* a cash-value wallet
+* permanent guarantee of rank (competitors can bump you)
+* an investment, security, or financial instrument
+* a redeemable cash balance or wallet
 * a prize entry
 
 ---
 
-## Rule 28 — Ranking Is Dynamic
+## Rule 29 — Ranking Is Dynamic (Player vs. Player)
 
-A user's position is not permanently guaranteed.
-
-Another user may pay enough to move above them.
-
-The product must clearly communicate that ranking is dynamic.
+A user's position is never static. Another user can pay enough to overtake them. Active value carries forward permanently; there is no artificial time-decay or coin-burn. Bumping occurs purely when another real competitor outspends you.
 
 ---
 
-## Rule 29 — Service Availability
+## Rule 30 — Service Availability
 
-Bumped.lol may modify, suspend, or discontinue the service subject to its Terms and applicable law.
-
-Do not describe rankings as lifetime guarantees unless explicitly intended and legally reviewed.
+BumpOne.lol may modify, suspend, or discontinue the service subject to its Terms and applicable law. Do not describe rankings as lifetime guarantees.

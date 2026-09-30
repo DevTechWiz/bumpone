@@ -3,25 +3,37 @@ import {
   Compass,
   ChevronDown,
   ChevronUp,
-  Crosshair,
-  Maximize2
 } from 'lucide-react';
 import { SlotItem } from '../lib/slotTypes';
-import { LANDSCAPE_GRID_LAYOUT, PORTRAIT_GRID_LAYOUT, GridOrientation } from '../lib/concentricGrid';
+import {
+  computeNormalizedLayout,
+  type GridOrientation,
+} from '../lib/boardLayout';
 
 export interface RadarMiniMapProps {
   slots: SlotItem[];
   orientation?: GridOrientation;
   highlightedRank: number | null;
+  matchingRanks?: Set<number> | null;
   hoveredRank: number | null;
   onSelectSlot: (slot: SlotItem) => void;
   onHoverRank?: (rank: number | null) => void;
 }
 
-export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
+/** Virtual board size used only to normalize radar rects (matches screen aspect). */
+const RADAR_VIEWS = {
+  landscape: { w: 1600, h: 900, label: '16×9' },
+  portrait: { w: 900, h: 1600, label: '9×16' },
+} as const;
+
+const VB = 100; // SVG viewBox units
+const RANKS = Array.from({ length: 100 }, (_, i) => i + 1);
+
+const RadarMiniMapComponent: React.FC<RadarMiniMapProps> = ({
   slots,
   orientation = 'landscape',
   highlightedRank,
+  matchingRanks = null,
   hoveredRank,
   onSelectSlot,
   onHoverRank,
@@ -36,33 +48,89 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
     y: number;
   } | null>(null);
 
-  const layout = orientation === 'landscape' ? LANDSCAPE_GRID_LAYOUT : PORTRAIT_GRID_LAYOUT;
-  const cols = orientation === 'landscape' ? 16 : 12;
-  const rows = orientation === 'landscape' ? 12 : 16;
+  const view = RADAR_VIEWS[orientation];
+  const layout = useMemo(
+    () => computeNormalizedLayout(view.w, view.h, 100),
+    [view.w, view.h]
+  );
 
-  // Map slots by rank for fast lookup
   const slotMap = useMemo(() => {
     const map = new Map<number, SlotItem>();
     slots.forEach((s) => map.set(s.rank, s));
     return map;
   }, [slots]);
 
-  // Color mapping per tier
-  const getCellColor = (rank: number, tier: string) => {
-    if (rank === highlightedRank || rank === hoveredRank) {
-      return '#ffffff';
+  // Stealth Obsidian color tokens & orange filter highlights
+  const STEALTH_PALETTE = {
+    king: {
+      fill: '#CBD5E1', // Soft Platinum Slate (toned down from harsh bright white)
+      fillOpacity: 0.88,
+      stroke: 'rgba(255, 255, 255, 0.45)',
+      strokeWidth: 0.5,
+    },
+    champion: {
+      fill: '#94A3B8', // Polished Titanium Slate
+      fillOpacity: 0.82,
+      stroke: 'rgba(255, 255, 255, 0.3)',
+      strokeWidth: 0.4,
+    },
+    elite: {
+      fill: '#64748B', // Cool Slate Steel
+      fillOpacity: 0.72,
+      stroke: 'rgba(255, 255, 255, 0.18)',
+      strokeWidth: 0.3,
+    },
+    vanguard: {
+      fill: '#334155', // Muted Graphite
+      fillOpacity: 0.65,
+      stroke: 'rgba(255, 255, 255, 0.1)',
+      strokeWidth: 0.25,
+    },
+    contender: {
+      fill: '#1E222D', // Deep Stealth Obsidian
+      fillOpacity: 0.7,
+      stroke: 'rgba(255, 255, 255, 0.07)',
+      strokeWidth: 0.2,
+    },
+    active: {
+      fill: '#EA580C', // Deep Vibrant Orange for hovered/selected slot
+      fillOpacity: 0.95,
+      stroke: 'rgba(254, 215, 170, 0.6)',
+      strokeWidth: 0.45,
+    },
+    filterMatch: {
+      fill: '#F97316', // Sleek warm orange highlight for filtered slots
+      fillOpacity: 0.85,
+      stroke: 'rgba(251, 146, 60, 0.4)', // Subtle matching orange rim, no harsh white
+      strokeWidth: 0.35,
+    },
+  };
+
+  const getCellStyle = (
+    rank: number,
+    tier: string,
+    isHovered: boolean,
+    isHighlighted: boolean
+  ) => {
+    if (isHovered || isHighlighted) {
+      return STEALTH_PALETTE.active;
     }
+    // Highlight matching slots without isolating the rest of the grid
+    if (matchingRanks !== null && matchingRanks.has(rank)) {
+      return STEALTH_PALETTE.filterMatch;
+    }
+    // Grid stays exactly the same for all other cells (no dimming or isolating)
     switch (tier) {
       case 'king':
-        return '#f59e0b'; // Amber 500
+        return STEALTH_PALETTE.king;
+      case 'champion':
+        return STEALTH_PALETTE.champion;
       case 'elite':
-        return '#e5e7eb'; // Platinum Silver
-      case 'lord':
-        return '#9ca3af'; // Neutral Zinc 400
-      case 'bubble':
-        return '#f43f5e'; // Rose 500
+        return STEALTH_PALETTE.elite;
+      case 'vanguard':
+        return STEALTH_PALETTE.vanguard;
       default:
-        return '#52525b'; // Zinc 600
+        return STEALTH_PALETTE.contender;
     }
   };
 
@@ -75,8 +143,13 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
             <Compass className="w-3.5 h-3.5 text-neutral-300 animate-[spin_12s_linear_infinite]" />
             <span className="text-[11px] font-semibold tracking-wider text-neutral-200">RADAR HUD</span>
             <span className="text-[9px] text-neutral-400 font-normal">
-              [{cols}&times;{rows}]
+              [{view.label}]
             </span>
+            {matchingRanks !== null && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                {matchingRanks.size} highlighted
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1">
@@ -92,9 +165,8 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
 
         {isExpanded && (
           <div className="p-3 space-y-2.5">
-            {/* SVG Miniature Concentric Radar Canvas */}
+            {/* SVG Miniature Treemap Radar Canvas */}
             <div className="relative bg-black/60 rounded-xl border border-white/[0.08] p-1.5 flex items-center justify-center overflow-hidden">
-              {/* Radar Sweep Animation Line */}
               <div className="absolute inset-0 pointer-events-none opacity-20">
                 <div
                   className="w-full h-full"
@@ -105,47 +177,30 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
                 />
               </div>
 
-              {/* Grid SVG */}
               <svg
-                viewBox={`0 0 ${cols * 10} ${rows * 10}`}
+                viewBox={`0 0 ${VB} ${VB}`}
+                preserveAspectRatio="none"
                 className="w-44 h-33 sm:w-48 sm:h-36 block relative z-10"
                 onMouseLeave={() => {
                   setActiveTooltip(null);
                   onHoverRank?.(null);
                 }}
               >
-                {/* Concentric guide rings */}
-                <circle
-                  cx={(cols * 10) / 2}
-                  cy={(rows * 10) / 2}
-                  r={rows * 2}
-                  fill="none"
-                  stroke="rgba(255,255,255,0.06)"
-                  strokeDasharray="2 2"
-                />
-                <circle
-                  cx={(cols * 10) / 2}
-                  cy={(rows * 10) / 2}
-                  r={rows * 3.8}
-                  fill="none"
-                  stroke="rgba(255,255,255,0.04)"
-                  strokeDasharray="2 2"
-                />
-
-                {/* Render all 100 slots */}
-                {Array.from({ length: 100 }, (_, i) => i + 1).map((rank) => {
+                {RANKS.map((rank) => {
                   const coord = layout[rank];
                   if (!coord) return null;
                   const slot = slotMap.get(rank);
                   const isHovered = hoveredRank === rank;
                   const isHighlighted = highlightedRank === rank;
 
-                  const x = (coord.col - 1) * 10;
-                  const y = (coord.row - 1) * 10;
-                  const width = coord.colSpan * 10 - 1;
-                  const height = coord.rowSpan * 10 - 1;
+                  // Normalized 0–1 → viewBox, with ~0.4 unit inset for gutters.
+                  const inset = 0.004;
+                  const x = (coord.x + inset) * VB;
+                  const y = (coord.y + inset) * VB;
+                  const width = Math.max(0.2, (coord.w - inset * 2) * VB);
+                  const height = Math.max(0.2, (coord.h - inset * 2) * VB);
 
-                  const fill = getCellColor(rank, coord.tier);
+                  const cellStyle = getCellStyle(rank, coord.tier, isHovered, isHighlighted);
 
                   return (
                     <g key={rank}>
@@ -154,11 +209,11 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
                         y={y}
                         width={width}
                         height={height}
-                        rx={coord.tier === 'king' ? 2 : 1}
-                        fill={fill}
-                        fillOpacity={isHovered || isHighlighted ? 1 : coord.tier === 'king' ? 0.95 : 0.75}
-                        stroke={isHovered || isHighlighted ? '#ffffff' : 'rgba(255,255,255,0.15)'}
-                        strokeWidth={isHovered || isHighlighted ? 1.5 : 0.5}
+                        rx={coord.tier === 'king' ? 1.5 : 0.5}
+                        fill={cellStyle.fill}
+                        fillOpacity={cellStyle.fillOpacity}
+                        stroke={cellStyle.stroke}
+                        strokeWidth={cellStyle.strokeWidth}
                         className="cursor-pointer transition-all duration-150 hover:opacity-100"
                         onMouseEnter={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
@@ -176,13 +231,13 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
                           if (slot) onSelectSlot(slot);
                         }}
                       />
-                      {coord.tier === 'king' && (
+                      {(isHovered || isHighlighted) && (
                         <circle
                           cx={x + width / 2}
                           cy={y + height / 2}
-                          r="2.5"
-                          fill="#ffffff"
-                          className="animate-ping"
+                          r={2.5}
+                          fill="#EA580C"
+                          className="animate-ping pointer-events-none"
                         />
                       )}
                     </g>
@@ -200,14 +255,14 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
                 amount: king?.amountPaid ?? 0,
               };
               return (
-              <div className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.1] flex items-center justify-between text-[10px] font-mono">
-                <span className="text-neutral-300 truncate max-w-[110px]">
-                  #{tip.rank} {tip.title}
-                </span>
-                <span className="font-bold text-emerald-400 shrink-0">
-                  ${tip.amount}
-                </span>
-              </div>
+                <div className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.1] flex items-center justify-between text-[10px] font-mono">
+                  <span className="text-neutral-300 truncate max-w-[110px]">
+                    #{tip.rank} {tip.title}
+                  </span>
+                  <span className="font-bold text-emerald-400 shrink-0">
+                    ${tip.amount}
+                  </span>
+                </div>
               );
             })()}
           </div>
@@ -216,3 +271,5 @@ export const RadarMiniMap: React.FC<RadarMiniMapProps> = ({
     </div>
   );
 };
+
+export const RadarMiniMap = React.memo(RadarMiniMapComponent);

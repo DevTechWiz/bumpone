@@ -1,10 +1,10 @@
-# Bumped.lol — Implementation Contract
+# BumpOne.lol — Implementation Contract
 
 ## Purpose
 
 This document turns the product documentation into an implementation-ready contract.
 
-An implementation agent must follow explicit rules in this document and must not infer product behavior from examples, mock data, or UI copy. A section marked **Decision required** blocks implementation of the affected feature until the product owner defines it.
+An implementation agent must follow explicit rules in this document and must not infer product behavior from examples, mock data, or UI copy. All build decisions have been resolved and locked by the product owner.
 
 ---
 
@@ -12,16 +12,17 @@ An implementation agent must follow explicit rules in this document and must not
 
 ### MVP is in scope
 
-- public global and category boards
-- one owned profile per user
-- profile creation and editing
-- image upload and destination link
-- exact-position purchase flow
-- Stripe Checkout and webhook processing
-- live board and bump feed updates
-- public profile passport and rank history
-- anonymous reactions with abuse controls
-- reporting, moderation, and an admin dashboard
+- public global and category boards with three discovery views: Power (paid), Popular (reactions), Trending (momentum)
+- user authentication (Supabase Auth) with multi-profile ownership (users can own and manage multiple slots)
+- profile creation, editing, and destination link
+- image upload pipeline (5MB, JPEG/PNG/WebP, EXIF stripping via sharp)
+- concentric 100-slot board (King 4x4, Elites 2x2, Vanguard, Contenders) + Graveyard (#101+)
+- exact-position purchase flow with informational 10-minute quotes
+- Dodo Payments Hosted Checkout and webhook processing
+- live board and bump feed updates via Supabase Realtime
+- public profile passport with rank journey and lifetime spend transparency (`total_paid`)
+- anonymous reactions with abuse controls (HttpOnly signed cookie)
+- reporting, moderation, and an admin dashboard (`/admin`)
 
 ### Explicitly out of scope
 
@@ -31,7 +32,7 @@ An implementation agent must follow explicit rules in this document and must not
 - paid visual enhancements
 - advanced user analytics
 - public write API
-- multi-currency support
+- multi-currency support (MVP is USD only)
 
 Do not add an out-of-scope feature without a new approved specification.
 
@@ -47,6 +48,7 @@ The product owner has resolved the purchase and ranking model as follows. These 
 - Ties are broken by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher).
 - `current_active_value` both calculates the top-up AND determines ordering.
 - `current_rank` may exist as a materialized cache for performance, but it is never the source of truth. It must always be recomputed from value DESC + sequence order, never independently assigned.
+- **Zero Payment Rejection**: No confirmed payment is ever cancelled or refunded due to race conditions. If two users buy for the same slot simultaneously (e.g. Alice and Bob both pay $110 for #1), the 1st processed payment receives Rank #1 and the 2nd receives Rank #2. Both payments are credited in full.
 
 ### Target selection and final position
 
@@ -63,8 +65,8 @@ The product owner has resolved the purchase and ranking model as follows. These 
 
 ### Payment edge handling
 
-- Insufficient payment (top-up below the $1 minimum): reject with no ranking change.
-- Duplicate/delayed webhooks: Stripe event idempotency (unique `stripe_event_id`).
+- Insufficient payment (top-up below the $10 minimum): reject with no ranking change.
+- Duplicate/delayed webhooks: Dodo event idempotency (unique `event_id` in `payment_events`).
 - Disputed payments: refund/chargeback rollback mechanism in `10_PAYMENT_FLOW.md`.
 
 ### Minimum amount
@@ -72,50 +74,37 @@ The product owner has resolved the purchase and ranking model as follows. These 
 - Genesis pricing: empty slots start at face values $1–$100 (#1 = $100 … #100 = $1).
 - Once a slot is filled, every takeover adds +$10: minimum top-up **$10**, minimum increment **$10**, whole USD only.
 
-### Still open
-
-- Fraudulent charges and payment-provider disputes beyond the standard rollback.
-- Legal or administrative cancellation language and customer-facing receipt/support copy (see payment policy below).
-
-Do not implement fallback behavior for any item still marked open.
-
 ### Payment policy
 
-The documented refund policy is the rollback mechanism in `10_PAYMENT_FLOW.md`: a refunded purchase is marked `refunded`, the profile's active value is restored to its pre-purchase amount, rank is recalculated, and a `refund_event` is recorded without rewriting history. Chargebacks follow the same mechanism and create an administrative event. The policy still needs definitions for:
-
-- duplicate Stripe charges
-- fraudulent charges and payment-provider disputes
-- payment completed but ranking transaction failed
-- legal or administrative cancellation
-- customer-facing receipt/support language
+The documented refund policy is the rollback mechanism in `10_PAYMENT_FLOW.md`: a refunded purchase is marked `refunded`, the profile's active value is restored to its pre-purchase amount, rank is recalculated, and a `refund_event` is recorded without rewriting history. Chargebacks follow the same mechanism and create an administrative event.
 
 ---
 
-## 3. Product State Machines
+## 3. Product State Machines — RESOLVED
 
 ### Profile lifecycle
 
 | State | Public board | Can purchase | Allowed transition |
 | --- | --- | --- | --- |
 | draft | no | no | draft → pending_payment, deleted |
-| pending_payment | no | no | pending_payment → pending_moderation, expired, cancelled |
-| pending_moderation | no | no | pending_moderation → approved, rejected |
+| pending_payment | no | no | pending_payment → approved, expired, cancelled |
 | approved | yes | yes | approved → suspended, archived |
 | suspended | no | no | suspended → approved, archived |
-| rejected | no | no | rejected → draft, archived |
 | archived | no | no | terminal, except explicit admin restore |
 
-**Decision required:** confirm whether moderation is pre-publication, post-publication, or both; and whether an approved profile can remain unranked.
+**Moderation Model (RESOLVED):**
+- **Instant Live Publishing with Post-Moderation**: Upon verified `payment.succeeded` from Dodo Payments, the profile is immediately set to `approved` and appears live on the board.
+- When an admin suspends a profile via `/admin`, `is_active` becomes `false`, `moderation_status = 'suspended'`, and the profile is removed from the active board. Ranks below shift up by 1 to fill the vacant slot.
 
 ### Purchase lifecycle
 
 `draft → quoted → checkout_open → payment_processing → paid → ranking_processed`
 
-Terminal states: `expired`, `cancelled`, `payment_failed`, `processing_failed`, `disputed`, `administratively_cancelled`.
+Terminal states: `expired`, `cancelled`, `payment_failed`, `processing_failed`, `disputed`, `refunded`, `administratively_cancelled`.
 
 Quotes expire 10 minutes after creation (`expires_at`). An expired quote moves toward `expired` for display purposes but never blocks a completed payment from being recomputed at confirmation.
 
-Each transition must record `occurred_at`, actor/source, and an immutable audit record. Only a verified Stripe webhook may transition a purchase to `paid`.
+Each transition must record `occurred_at`, actor/source, and an immutable audit record. Only a verified Dodo webhook (`payment.succeeded`) may transition a purchase to `paid`.
 
 ### Report lifecycle
 
@@ -129,35 +118,39 @@ Reports must retain reporter ID, reason, free-text details, timestamps, and the 
 
 Use PostgreSQL migrations. Every migration must be reversible where safely possible and must include indexes required by its query paths.
 
-### Required tables beyond the current outline
+### Required tables
 
-- `users`: application-level user metadata keyed to Supabase Auth user ID.
+- `users`: application-level user metadata keyed to Supabase Auth `auth.users.id`.
+- `profiles`: id, user_id (unique, 1 profile per user), display_name, handle, image_path, destination_url, category_id, current_rank, current_active_value, is_active, moderation_status, created_at, updated_at.
+- `categories`: id, name, slug, display_order.
 - `purchase_quotes`: buyer profile, target profile/rank, calculation inputs, quoted amount, expiry (creation + 10 minutes), quote version, and status.
-- `stripe_events`: unique Stripe event ID, event type, received timestamp, processing status, payload reference/hash, error, and processed timestamp.
+- `purchases`: id, profile_id, user_id, quote_id, dodo_payment_id, dodo_checkout_session_id, amount_minor, currency, previous_active_value_minor, new_active_value_minor, previous_rank, new_rank, status, created_at.
+- `payment_events`: unique event ID (`webhook-id`), payment ID, event type, received timestamp, processing status, payload reference/hash, processed timestamp.
 - `rank_mutations`: immutable operation ID, initiating purchase/admin action, sequence number, before/after references, and timestamp.
-- `profile_rank_history`: one immutable row per profile whose rank changes, including old and new global rank, reason, mutation ID, and timestamp.
-- `rate_limit_events` or an external rate-limit store: identity key, action, timestamp, and decision.
-- `admin_users` or a role claim policy: explicit administrator authorization source.
+- `rank_events`: one immutable row per profile whose rank changes, including old and new global rank, reason, sequence number, mutation ID, and timestamp.
+- `reactions`: profile_id, anonymous_id, reaction_type, created_at. Unique constraint on `(profile_id, anonymous_id, reaction_type)`.
+- `reaction_counts`: profile_id, reaction_type, count.
+- `reports`: profile_id, reporter_ip_hash/anon_id, reason, details, status, admin_notes, created_at.
+- `admin_users`: explicit administrator authorization source (`user_id`, `role`).
+- `realtime_outbox`: id, event_type, payload, status, created_at.
 
 ### Required fields and constraints
 
 - All identifiers use UUIDs unless an external provider supplies the ID.
-- Monetary values are integer values; never use floating point.
+- Monetary values are integer values (USD cents / minor units); never use floating point.
 - All timestamps are `timestamptz` in UTC.
-- `profiles.user_id` is unique for non-archived owned profiles, enforcing one active profile per user.
-- `profiles.category_id` is a foreign key to `categories`; do not store a free-text category.
-- `purchases.stripe_checkout_session_id` and `purchases.stripe_payment_intent_id` are unique when present.
-- `stripe_events.stripe_event_id` is unique.
-- Reactions have a unique identity constraint appropriate to the approved anonymous-identity design.
-- Every status field is a database enum or checked value set.
+- `profiles.user_id` is a foreign key to `auth.users(id)` (1-to-many: one user can own and manage multiple profiles/slots, each with its own independent active value).
+- `profiles.category_id` is a foreign key to `categories`.
+- `purchases.dodo_payment_id` is unique when present.
+- `payment_events.event_id` is unique.
 - Use foreign keys with explicitly selected delete behavior; never rely on defaults.
 
 ### Ranking transaction
 
 The final purchase model must be implemented as one trusted database transaction/RPC with:
 
-1. idempotency check by Stripe event ID;
-2. transaction-level serialization/locking for the affected ranking state;
+1. idempotency check by Dodo event ID (`webhook-id`);
+2. transaction-level serialization/locking (`SELECT ... FOR UPDATE`) for affected ranking rows;
 3. verification of the approved quote rules;
 4. payment and profile state changes;
 5. rank mutation and all affected history rows;
@@ -166,15 +159,13 @@ The final purchase model must be implemented as one trusted database transaction
 
 Do not update ranks from browser code or with multiple independently committed queries.
 
-### Row Level Security
+### Row Level Security (RLS)
 
-- Public: read only approved, public-safe profiles and public aggregate data.
+- Public: read only approved, public-safe profiles (`is_active = true`, `moderation_status = 'approved'`) and public aggregate data.
 - Owner: read/update only their own draft/profile fields explicitly permitted by policy.
 - Owner must never directly write rank, active value, purchase status, metrics, moderation status, aggregate reaction counts, or admin records.
-- Admin: use an explicit server-side role, not a client-provided flag.
-- Stripe webhook: use server-side credentials only.
-
-Every RLS policy requires an automated authorization test.
+- Admin: use an explicit server-side role (`admin_users`), not a client-provided flag.
+- Dodo webhook: execute via server-side service role only.
 
 ---
 
@@ -194,68 +185,50 @@ All endpoints must specify a Zod request schema, response schema, authentication
 - Unexpected server failure: `500`, with a request ID but no sensitive detail.
 - List endpoints use cursor pagination and a bounded default/max limit.
 
-### Required endpoints not yet specified
+### Core Endpoints
 
-- authenticated profile create/update/delete/archive
-- upload-initiate, upload-complete, and image processing status
-- current-user profile and purchase status
-- purchase quote creation, quote status, and Checkout-session creation
-- post-purchase result lookup
-- moderation/report administration endpoints
-- admin purchase/profile/report search with cursor pagination
-- health/readiness endpoint restricted appropriately
-
-### Idempotency
-
-Every state-changing client request must accept an idempotency key. Store the key, actor, request hash, response, and expiry. Retrying the same key must return the original successful result, not repeat the mutation.
+- `GET /api/board`: Returns top 100 profiles (optional `category` filter).
+- `GET /api/categories`: Returns categories and profile counts.
+- `GET /api/profile/:id`: Returns profile passport, metrics, rank history, and reactions.
+- `GET /api/bump-feed`: Returns recent rank movement events.
+- `POST /api/purchase/create`: Validates target, creates informational quote, creates Dodo Hosted Checkout session, returns `checkout_url`.
+- `POST /api/webhooks/dodo`: Verifies standard webhook signature, enforces idempotency, recomputes rank, updates DB, writes outbox event.
+- `POST /api/reactions`: Adds reaction using HttpOnly signed cookie anonymous identity.
+- `DELETE /api/reactions/:id`: Removes reaction for the identity.
+- `POST /api/uploads/image`: Uploads and validates image file (max 5MB, JPEG/PNG/WebP, min 400x400), strips EXIF, resizes, uploads to Supabase Storage.
+- `POST /api/reports`: Submits abuse/content report for a profile.
+- Admin Endpoints:
+  - `GET /api/admin/overview`: Revenue, purchases, top 100, active value stats.
+  - `POST /api/admin/profiles/:id/moderate`: Approve, suspend, or restore profile.
+  - `POST /api/admin/emergency/pause`: Toggle purchase emergency pause.
 
 ---
 
-## 6. Upload, Link, and Moderation Contract
+## 6. Upload, Link, and Moderation Contract — RESOLVED
 
-### Image upload
+### Image upload specifications (RESOLVED)
 
-Before launch, specify exact values for:
-
-- maximum upload bytes
-- minimum and maximum pixel dimensions
-- permitted formats
-- output format and dimensions
-- animation/metadata handling
-- image-processing timeout and failure behavior
-- temporary object expiry
-
-The server must validate file signature, decoded image, dimensions, and size. It must strip metadata, generate server-owned derivatives, and never make an unvalidated original publicly addressable.
+- **Maximum upload size**: 5 MB.
+- **Allowed MIME types**: `image/jpeg`, `image/png`, `image/webp`. (SVGs and animated GIFs are strictly prohibited).
+- **Pixel dimensions**: Minimum 400×400 px, Maximum 2560×2560 px. Aspect ratio: square (1:1) recommended; letterboxed with blurred fill if non-square.
+- **Server-side processing**: Using `sharp` to strip all EXIF metadata, re-encode to high-efficiency WebP (quality: 85), and write to Supabase Storage bucket `profile-images`.
+- Unvalidated original files are never exposed publicly.
 
 ### Destination links
 
-- Permit only `https` for the MVP unless HTTP is explicitly approved.
+- Permit only `https://` URLs.
 - Normalize and validate URLs server-side.
-- Do not fetch arbitrary URLs from a privileged server context.
-- Use an interstitial or appropriate `rel` attributes for external links if needed.
-
-### Moderation behavior — Decision required
-
-Define whether a suspended/rejected profile is removed from ranking and all profiles below shift up, or whether it remains ranked but is hidden. Also define appeal handling, enforcement SLA, and whether prior public share cards remain viewable.
+- Render on the frontend with `rel="noopener noreferrer"`.
 
 ---
 
-## 7. Anonymous Reactions and Profile Views
+## 7. Anonymous Reactions and Identity — RESOLVED
 
-Anonymous reactions are permitted for the MVP.
-
-Before implementation, select the anonymous identity mechanism: signed, HttpOnly first-party cookie; privacy-preserving device token; or authenticated account. Do not use raw IP address as the unique identity.
-
-Required protections:
-
-- one reaction per profile, anonymous identity, and reaction type;
-- server-side rate limits by identity and coarse abuse signal;
-- CSRF protection for cookie-authenticated mutations;
-- reaction removal for the same identity;
-- no exposure of identity keys in public APIs;
-- reviewable abuse telemetry.
-
-Profile-view counting must define a deduplication window, bot exclusion method, and privacy notice before implementation.
+- **Identity Mechanism**: Signed, HttpOnly first-party cookie (`bumped_anon_id`) containing a cryptographically random UUIDv4 signed with an application secret.
+- **Abuse Controls**:
+  - One reaction per profile, anonymous identity, and reaction type.
+  - In-memory / Redis / DB rate-limiting: max 30 reactions per minute per identity.
+  - Identity tokens are never exposed in public APIs.
 
 ---
 
@@ -264,128 +237,42 @@ Profile-view counting must define a deduplication window, bot exclusion method, 
 Publish realtime events only from the outbox after the ranking transaction commits.
 
 Every event must include:
-
 - `event_id` UUID
 - monotonically increasing `sequence`
-- `event_type`
+- `event_type` (`board.updated`, `bump.feed`, `reaction.updated`)
 - `occurred_at`
-- schema version
-- affected global/category board identifiers
 - minimal public payload
 
-Clients must deduplicate by `event_id`, detect sequence gaps, and refetch authoritative board/feed data after reconnect or a gap. Clients may animate an event only after rendering the authoritative state.
-
-Define payload schemas for `board.updated`, `bump.feed`, `reaction.updated`, `profile.moderated`, and `purchase.result` before coding clients.
+Clients deduplicate by `event_id` and refetch authoritative state on reconnect or detected sequence gaps.
 
 ---
 
-## 9. UI and Accessibility Acceptance Criteria
+## 9. Operations and Security Contract
 
-Every screen must define: loading, empty, error, offline, signed-out, pending-payment, success, and permission-denied states.
+### Infrastructure Architecture (Cloudflare + Vercel Hybrid)
+- **Edge Layer**: Cloudflare (Free DNS Proxy, WAF, Bot Fight Mode, and Unlimited Free Bandwidth CDN caching).
+- **Compute Layer**: Vercel (Next.js 15 App Router serverless execution and sharp image processing).
+- **Database Layer**: Supabase PostgreSQL (Connection pooled, RLS-enforced).
+- **Payment Layer**: Dodo Payments (Merchant of Record / Hosted Checkout).
+- **Traffic Scaling & Database Protection**:
+  - All public reads (`/api/board`) must use HTTP Cache-Control headers (`public, s-maxage=5, stale-while-revalidate=10`).
+  - Viral traffic spikes of 100k+ spectators are absorbed by Cloudflare Edge CDN without crashing PostgreSQL or triggering Vercel bandwidth fees.
+  - Active viewers receive real-time bump updates via lightweight Supabase Realtime WebSocket messages.
+- **Cost Profile**: Baseline operating cost is $0/month across free tiers; scales smoothly with zero surprise bandwidth charges.
 
-Required accessibility behavior:
+### Environment variables
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (secret)
+- `DODO_PAYMENTS_API_KEY` (secret)
+- `DODO_PAYMENTS_WEBHOOK_SECRET` (secret)
+- `DODO_PAYMENTS_ENVIRONMENT` (`test_mode` or `live_mode`)
+- `APP_URL`
+- `ANON_COOKIE_SECRET` (secret)
 
-- full keyboard navigation and visible focus state;
-- semantic labels for rank, profile, reaction, external link, and purchase controls;
-- screen-reader announcement strategy for live board changes without excessive interruption;
-- WCAG AA color contrast;
-- `prefers-reduced-motion` disables nonessential wall movement;
-- no interaction depends on hover, drag, color alone, or animation alone;
-- responsive acceptance at mobile, tablet, and desktop widths.
-
-Do not claim a UI complete until these states have component and end-to-end tests.
-
----
-
-## 10. Operations and Security Contract
-
-### Environment and deployment
-
-Document required environment variables by name, purpose, environment, and secret owner. Never commit values.
-
-The repository must provide:
-
-- local setup instructions
-- migration and seed commands
-- test Stripe configuration instructions
-- production deployment procedure
-- rollback and migration-failure procedure
-- backup/restore procedure and recovery target
-
-### Monitoring and alerts
-
-Monitor and alert on:
-
-- failed/lagging webhook processing
-- unprocessed outbox events
-- ranking-transaction failures
-- payment/Checkout error rate
-- upload processing failures
-- moderation backlog
-- authentication/rate-limit abuse spikes
-- database errors and resource saturation
-
-Specify owners and actionable thresholds before launch.
-
-### Security requirements
-
-- verify Stripe webhook signatures against the raw request body;
-- enforce RLS and server-side authorization;
-- rate-limit uploads, quotes, Checkout creation, reactions, reports, profile edits, and authentication;
-- apply content-security policy and secure headers;
-- protect mutating cookie-authenticated routes from CSRF;
-- redact secrets and payment data from logs;
-- audit every administrative mutation;
-- perform dependency and secret scanning in CI.
-
----
-
-## 11. Test Contract
-
-Before implementation, select the unit, integration, and end-to-end test tools and add commands to the repository README.
-
-Required coverage:
-
-- database/RPC tests for every rank and payment state transition;
-- race tests for serialized purchases and webhook replays;
-- webhook signature and idempotency tests using Stripe fixtures;
-- RLS and authorization tests for every table/endpoint;
-- upload validation tests with malformed and oversized files;
-- anonymous-reaction identity, duplicate, removal, and rate-limit tests;
-- realtime duplicate, out-of-order, missed-event, and reconnect tests;
-- end-to-end flows for create profile, payment success/failure, moderation, reporting, and accessibility;
-- regression tests for every resolved purchase/ranking decision.
-
-All CI checks must pass before deployment. Tests must use separate development/test Stripe and Supabase credentials from production.
-
----
-
-## 12. Legal and Support Launch Requirements
-
-Before public launch, provide and link:
-
-- terms of service;
-- privacy and cookie notice;
-- acceptable-use/content policy;
-- reporting and appeal process;
-- copyright/DMCA contact and process where applicable;
-- refund/cancellation policy (rollback mechanism defined in `10_PAYMENT_FLOW.md`);
-- support contact;
-- data retention/deletion policy.
-
-Have qualified legal and tax advice review the final product, payment, user-generated-content, and marketing flows before launch.
-
----
-
-## 13. Autonomous Build Gate
-
-An AI may autonomously implement a feature only when its relevant decisions are no longer marked **Decision required** and it has:
-
-1. an approved data model and migration;
-2. API schemas and authorization rules;
-3. state transitions and error behavior;
-4. UI acceptance criteria;
-5. automated test cases; and
-6. operational/monitoring requirements.
-
-Until then, the AI must ask the product owner rather than choose a workflow.
+### Security checklist
+- Verify Dodo webhook signatures against raw request body using Svix / HMAC headers.
+- Enforce RLS on all Supabase tables.
+- Rate-limit checkout creation, quotes, reactions, uploads, and reports.
+- Redact payment secrets and PII from logs.
+- Audit every administrative action in `admin_actions`.

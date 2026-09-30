@@ -12,9 +12,13 @@ import {
   Volume2,
   VolumeX,
   HelpCircle,
+  User as UserIcon,
 } from 'lucide-react';
 import { Button } from '../components/ui';
-import type { SlotItem, BumpEvent, BoardStats, ChatMessage, FloatingReaction } from '../lib/slotTypes';
+import { useAuth } from '../lib/useAuth';
+import { createClient } from '../lib/supabase/client';
+import { UserMenu } from '../components/UserMenu';
+import type { SlotItem, BumpEvent, BoardStats, Message, FloatingReaction } from '../lib/slotTypes';
 import {
   CATEGORIES,
   MIN_TOP_UP,
@@ -24,30 +28,82 @@ import {
   quoteTopUp,
   recomputeRank,
   toSlotItem,
+  formatNumber,
   type Profile,
 } from '../lib/board';
-import { safeGetJSON, safeSet, safeRemove } from '../lib/storage';
+import dynamic from 'next/dynamic';
+import { safeGetJSON, safeSetJSON, sessionGetJSON, sessionSetJSON, safeSet, safeRemove } from '../lib/storage';
 import { GridBoard } from '../components/GridBoard';
-import { TakeOverModal, type TopUpOrder } from '../components/TakeOverModal';
+import { ProfileView } from '../components/ProfileView';
+import type { TopUpOrder } from '../components/TakeOverModal';
 import { BumpNotification } from '../components/BumpNotification';
-import { GraveyardDrawer } from '../components/GraveyardDrawer';
-import { LeaderboardModal } from '../components/LeaderboardModal';
-import { SlotDetailModal } from '../components/SlotDetailModal';
-import { CosmicBackground } from '../components/CosmicBackground';
 import { RadarMiniMap } from '../components/RadarMiniMap';
 import { GridFilterBar, type GridFilterState } from '../components/GridFilterBar';
-import { WarRoomDrawer } from '../components/WarRoomDrawer';
-import { ReactionCanvas } from '../components/ReactionCanvas';
-import { RulesModal } from '../components/RulesModal';
 import { soundEngine } from '../lib/sound';
-import { getSlotCoordinate, type GridOrientation } from '../lib/concentricGrid';
+import type { GridOrientation } from '../lib/boardLayout';
+
+const CosmicBackground = dynamic(
+  () => import('../components/CosmicBackground').then((m) => m.CosmicBackground),
+  { ssr: false }
+);
+
+const ReactionCanvas = dynamic(
+  () => import('../components/ReactionCanvas').then((m) => m.ReactionCanvas),
+  { ssr: false }
+);
+
+const TakeOverModal = dynamic(
+  () => import('../components/TakeOverModal').then((m) => m.TakeOverModal),
+  { ssr: false }
+);
+
+const GraveyardDrawer = dynamic(
+  () => import('../components/GraveyardDrawer').then((m) => m.GraveyardDrawer),
+  { ssr: false }
+);
+
+const LeaderboardModal = dynamic(
+  () => import('../components/LeaderboardModal').then((m) => m.LeaderboardModal),
+  { ssr: false }
+);
+
+const SlotDetailModal = dynamic(
+  () => import('../components/SlotDetailModal').then((m) => m.SlotDetailModal),
+  { ssr: false }
+);
+
+const RulesModal = dynamic(
+  () => import('../components/RulesModal').then((m) => m.RulesModal),
+  { ssr: false }
+);
+
+const WarRoomDrawer = dynamic(
+  () => import('../components/WarRoomDrawer').then((m) => m.WarRoomDrawer),
+  { ssr: false }
+);
+
+const AuthModal = dynamic(
+  () => import('../components/AuthModal').then((m) => m.AuthModal),
+  { ssr: false }
+);
+
+const GoogleOneTap = dynamic(
+  () => import('../components/GoogleOneTap').then((m) => m.GoogleOneTap),
+  { ssr: false }
+);
+
+const AlertSettingsModal = dynamic(
+  () => import('../components/AlertSettingsModal').then((m) => m.AlertSettingsModal),
+  { ssr: false }
+);
+
 
 const STORAGE_KEY_PROFILES = 'bumped_profiles_v2';
 const STORAGE_KEY_OFFBOARD = 'bumped_offboard_v2';
 
-const INITIAL_WAR_ROOM_CHATS: ChatMessage[] = [
+const INITIAL_MESSAGES: Message[] = [
   {
-    id: 'chat-init-1',
+    id: 'msg-init-1',
     sender: '@grid_sentinel',
     avatarColor: 'bg-indigo-500',
     text: 'WAR ROOM ACTIVE. Active Value decides everything. King rules the 4x4 center.',
@@ -55,7 +111,7 @@ const INITIAL_WAR_ROOM_CHATS: ChatMessage[] = [
     isOfficial: true,
   },
   {
-    id: 'chat-init-2',
+    id: 'msg-init-2',
     sender: '@solana_surfer',
     avatarColor: 'bg-sky-500',
     text: 'Watching the Center King #1 throne. Who is going to top up past the sovereign?',
@@ -63,7 +119,7 @@ const INITIAL_WAR_ROOM_CHATS: ChatMessage[] = [
     timestamp: Date.now() - 3600000,
   },
   {
-    id: 'chat-init-3',
+    id: 'msg-init-3',
     sender: '@neon_hunter',
     avatarColor: 'bg-rose-500',
     text: 'Rank #100 is dangerously close to getting shoved off the wall!',
@@ -81,18 +137,40 @@ const SIM_COMPETITORS = [
 
 export default function Home() {
   // 1. Core state: profiles (canonical domain) + off-board keep-list.
-  const [profiles, setProfiles] = useState<Profile[]>(() => {
-    const saved = safeGetJSON<Profile[]>(STORAGE_KEY_PROFILES);
-    if (saved && Array.isArray(saved) && saved.length > 0 && typeof saved[0].active_value === 'number') {
-      return saved;
-    }
-    return buildProfiles();
-  });
-  const [offboard, setOffboard] = useState<Profile[]>(() => {
-    const saved = safeGetJSON<Profile[]>(STORAGE_KEY_OFFBOARD);
-    return Array.isArray(saved) ? saved : [];
-  });
+  // Initial state matches SSR exactly to eliminate React hydration mismatch error #418.
+  const [profiles, setProfiles] = useState<Profile[]>(buildProfiles);
+  const [offboard, setOffboard] = useState<Profile[]>([]);
   const seqRef = useRef(100000);
+
+  useEffect(() => {
+    // 1. Session cache: instant 0ms restoration when navigating back from profiles
+    const cachedSession = sessionGetJSON<Profile[]>('bumped_board_cache');
+    if (cachedSession && Array.isArray(cachedSession) && cachedSession.length > 0) {
+      setProfiles(cachedSession);
+    } else {
+      const saved = safeGetJSON<Profile[]>(STORAGE_KEY_PROFILES);
+      if (saved && Array.isArray(saved) && saved.length > 0 && typeof saved[0].active_value === 'number') {
+        setProfiles(saved);
+      }
+    }
+    const savedOffboard = safeGetJSON<Profile[]>(STORAGE_KEY_OFFBOARD);
+    if (Array.isArray(savedOffboard) && savedOffboard.length > 0) {
+      setOffboard(savedOffboard);
+    }
+
+    // Preload modal bundles in background so 1st click is instantaneous with zero chunk fetch delay
+    if (typeof window !== 'undefined') {
+      import('../components/TakeOverModal');
+      import('../components/SlotDetailModal');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (profiles && profiles.length > 0) {
+      sessionSetJSON('bumped_board_cache', profiles);
+      safeSetJSON(STORAGE_KEY_PROFILES, profiles);
+    }
+  }, [profiles]);
 
   // 2. UI and modal state (mirrors reference App).
   const [isTakeOverOpen, setIsTakeOverOpen] = useState(false);
@@ -101,12 +179,47 @@ export default function Home() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
+
+  const isBackdropActive = Boolean(
+    selectedSlot ||
+    viewingProfileId ||
+    isTakeOverOpen ||
+    isGraveyardOpen ||
+    isLeaderboardOpen ||
+    isRulesOpen ||
+    isAlertSettingsOpen
+  );
+
+  const handleCloseProfile = useCallback(() => {
+    setViewingProfileId(null);
+    if (typeof window !== 'undefined') {
+      if (window.history.state?.viewingProfile) {
+        window.history.back();
+      } else {
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setViewingProfileId(null);
+      setSelectedSlot(null);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [highlightedRank, setHighlightedRank] = useState<number | null>(null);
   const [hoveredRank, setHoveredRank] = useState<number | null>(null);
   const [gridOrientation, setGridOrientation] = useState<GridOrientation>('landscape');
   const [latestBumpEvent, setLatestBumpEvent] = useState<BumpEvent | null>(null);
   const [isAutoSimulate, setIsAutoSimulate] = useState(false);
   const [isWarRoomOpen, setIsWarRoomOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const { user, signOut } = useAuth();
   // Mute preference loads post-mount: server has no localStorage, so the
   // first render must match the server (unmuted) to avoid hydration mismatch.
   const [isMuted, setIsMuted] = useState(false);
@@ -114,7 +227,7 @@ export default function Home() {
     setIsMuted(soundEngine.getIsMuted());
   }, []);
   const [bumpHistory, setBumpHistory] = useState<BumpEvent[]>([]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_WAR_ROOM_CHATS);
+  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
   const [filterState, setFilterState] = useState<GridFilterState>({
     searchQuery: '',
@@ -124,6 +237,152 @@ export default function Home() {
     category: 'All',
     timeRange: 'all',
   });
+  const [paymentBanner, setPaymentBanner] = useState<{ type: 'success' | 'pending'; text: string } | null>(null);
+
+  // Handle incoming redirect parameters (payment status, target slot)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status');
+      const target = params.get('target');
+
+      if (status === 'success' || status === 'paid') {
+        setPaymentBanner({
+          type: 'success',
+          text: 'Payment processed successfully! Your active value has been credited and your slot is live.',
+        });
+        setTimeout(() => setPaymentBanner(null), 8000);
+      } else if (status === 'pending_payment') {
+        setPaymentBanner({
+          type: 'pending',
+          text: 'Checkout initiated. Recomputing live wall position upon Dodo confirmation.',
+        });
+        setTimeout(() => setPaymentBanner(null), 8000);
+      }
+
+      if (target) {
+        const found = profiles.find((p) => p.id === target);
+        if (found) {
+          setTargetSlotToBump(toSlotItem(found, 1));
+          setIsTakeOverOpen(true);
+        }
+      }
+
+      const rankParam = params.get('rank');
+      if (rankParam) {
+        const r = Number(rankParam);
+        const match = profiles.find((_, idx) => idx + 1 === r);
+        if (match) {
+          setSelectedSlot(toSlotItem(match, r));
+        }
+      }
+
+      if (params.get('claim') === 'true') {
+        setIsTakeOverOpen(true);
+      }
+      if (params.get('alerts') === 'true') {
+        setIsAlertSettingsOpen(true);
+      }
+      if (params.get('graveyard') === 'true') {
+        setIsGraveyardOpen(true);
+      }
+      if (params.get('rules') === 'true') {
+        setIsRulesOpen(true);
+      }
+    }
+  }, [profiles]);
+
+  // Live Board Synchronizer: Supabase Realtime event streaming + Edge SWR Polling fallback
+  useEffect(() => {
+    let isMounted = true;
+    let interval: NodeJS.Timeout | null = null;
+    let realtimeChannel: any = null;
+
+    const fetchBoard = async (silent = false) => {
+      // Don't poll if the tab is hidden/minimized to save bandwidth and dev CPU
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+
+      try {
+        const catParam = filterState.category !== 'All' ? `&category=${encodeURIComponent(filterState.category)}` : '';
+        const sortParam = filterState.timeRange === 'today' ? '&sort=trending' : '';
+        const res = await fetch(`/api/board?limit=120${catParam}${sortParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+            setProfiles(data.profiles);
+            if (!silent) {
+              soundEngine.playShove();
+            }
+          }
+        }
+      } catch {
+        // Retain local memory state if offline or fetch fails
+      }
+    };
+
+    fetchBoard(true);
+    interval = setInterval(() => fetchBoard(true), 15000);
+
+    // Subscribe to Supabase Realtime for instant 0ms bump updates
+    try {
+      const supabase = createClient();
+      realtimeChannel = supabase
+        .channel('board_live_bumps')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'board_events' },
+          () => {
+            if (isMounted) {
+              fetchBoard(false);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'rank_events' },
+          () => {
+            if (isMounted) {
+              fetchBoard(false);
+            }
+          }
+        )
+        .subscribe();
+    } catch {
+      // Local fallback if Supabase unconfigured
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBoard(true);
+      }
+    };
+
+    const handleFocus = () => {
+      fetchBoard(true);
+    };
+
+    if (typeof window !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleFocus);
+    }
+
+    return () => {
+      isMounted = false;
+      if (interval) clearInterval(interval);
+      if (realtimeChannel) {
+        try {
+          const supabase = createClient();
+          supabase.removeChannel(realtimeChannel);
+        } catch {}
+      }
+      if (typeof window !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleFocus);
+      }
+    };
+  }, [filterState.category, filterState.timeRange]);
 
   const handleToggleMute = () => {
     const muted = soundEngine.toggleMute();
@@ -140,37 +399,71 @@ export default function Home() {
       y,
     };
     setReactions((prev) => [...prev, newReaction]);
+
+    // Send anonymous reaction to backend
+    const emojiMap: Record<string, string> = {
+      '🔥': 'fire',
+      '👀': 'eyes',
+      '❤️': 'heart',
+      '😂': 'laugh',
+      '👑': 'fire',
+      '⚔️': 'fire',
+    };
+    const reactionType = emojiMap[emoji] || 'fire';
+    const targetId = hoveredRank ? slots.find((s) => s.rank === hoveredRank)?.id : slots[0]?.id;
+    if (targetId) {
+      fetch('/api/reactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: targetId, reaction: reactionType }),
+      }).catch(() => { });
+    }
   };
 
-  const handleRemoveReaction = (id: string) => {
+  const handleRemoveReaction = useCallback((id: string) => {
     setReactions((prev) => prev.filter((r) => r.id !== id));
-  };
+  }, []);
 
-  const handleSendMessage = (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
-    const newMsg: ChatMessage = {
+  const handleSlotClick = useCallback((slot: SlotItem) => {
+    setSelectedSlot(slot);
+  }, []);
+
+  const handleHoverRank = useCallback((rank: number | null) => {
+    setHoveredRank(rank);
+  }, []);
+
+  const handleSelectMiniMapSlot = useCallback((slot: SlotItem) => {
+    setSelectedSlot(slot);
+    setHighlightedRank(slot.rank);
+    setTimeout(() => setHighlightedRank(null), 3000);
+  }, []);
+
+  const handleOrientationChange = useCallback((orientation: GridOrientation) => {
+    setGridOrientation(orientation);
+  }, []);
+
+  const handleSendMessage = (msg: Omit<Message, 'id' | 'timestamp'>) => {
+    const newMsg: Message = {
       ...msg,
-      id: `chat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       timestamp: Date.now(),
     };
-    setChatMessages((prev) => [...prev, newMsg]);
+    setMessages((prev) => [...prev, newMsg]);
   };
 
   // Global top-100 slots derived from canonical ordering.
   const slots: SlotItem[] = useMemo(() => {
-    const pool =
-      filterState.category === 'All'
-        ? profiles
-        : profiles.filter((p) => p.category === filterState.category);
-    return sortBoard(pool).slice(0, 100).map((p, i) => toSlotItem(p, i + 1));
-  }, [profiles, filterState.category]);
+    return sortBoard(profiles).slice(0, 100).map((p, i) => toSlotItem(p, i + 1));
+  }, [profiles]);
 
-  // Spotlight/dim set for tier + search + value-range + time filters.
+  // Spotlight/dim set for tier + search + category + value-range + time filters.
   const matchingRanks = useMemo<Set<number> | null>(() => {
     const isQueryActive = Boolean(filterState.searchQuery.trim());
     const isTierActive = filterState.tier !== 'all';
+    const isCategoryActive = filterState.category !== 'All';
     const isValueActive = filterState.minPrice !== null || filterState.maxPrice !== null;
     const isTodayActive = filterState.timeRange === 'today';
-    if (!isQueryActive && !isTierActive && !isValueActive && !isTodayActive) return null;
+    if (!isQueryActive && !isTierActive && !isCategoryActive && !isValueActive && !isTodayActive) return null;
     const query = filterState.searchQuery.toLowerCase().trim();
     const dayAgo = Date.now() - 24 * 3600000;
     const byId = new Map(profiles.map((p) => [p.id, p]));
@@ -184,10 +477,15 @@ export default function Home() {
       }
       if (isTierActive) {
         if (filterState.tier === 'king' && slot.rank !== 1) return;
-        if (filterState.tier === 'elite' && (slot.rank < 2 || slot.rank > 13)) return;
-        if (filterState.tier === 'lord' && (slot.rank < 14 || slot.rank > 54)) return;
-        if (filterState.tier === 'contender' && (slot.rank < 55 || slot.rank > 99)) return;
-        if (filterState.tier === 'bubble' && slot.rank !== 100) return;
+        if (filterState.tier === 'champion' && (slot.rank < 2 || slot.rank > 5)) return;
+        if (filterState.tier === 'elite' && (slot.rank < 6 || slot.rank > 15)) return;
+        if (filterState.tier === 'vanguard' && (slot.rank < 16 || slot.rank > 40)) return;
+        if (filterState.tier === 'lord' && (slot.rank < 16 || slot.rank > 40)) return;
+        if (filterState.tier === 'contender' && (slot.rank < 41 || slot.rank > 100)) return;
+      }
+      if (isCategoryActive) {
+        const prof = byId.get(slot.id);
+        if (!prof || prof.category !== filterState.category) return;
       }
       if (filterState.minPrice !== null && slot.amountPaid < filterState.minPrice) return;
       if (filterState.maxPrice !== null && slot.amountPaid > filterState.maxPrice) return;
@@ -198,24 +496,41 @@ export default function Home() {
       set.add(slot.rank);
     });
     return set;
-  }, [slots, filterState]);
+  }, [slots, profiles, filterState]);
 
   const hoveredSlot = useMemo(() => {
     if (!hoveredRank) return null;
     return slots.find((s) => s.rank === hoveredRank) || null;
   }, [slots, hoveredRank]);
 
-  const hoveredCoord = useMemo(() => {
-    if (!hoveredRank) return null;
-    return getSlotCoordinate(hoveredRank, gridOrientation);
-  }, [hoveredRank, gridOrientation]);
-
   useEffect(() => {
-    safeSet(STORAGE_KEY_PROFILES, JSON.stringify(profiles));
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        if ('requestIdleCallback' in window) {
+          window.requestIdleCallback(() => {
+            safeSet(STORAGE_KEY_PROFILES, JSON.stringify(profiles));
+          });
+        } else {
+          safeSet(STORAGE_KEY_PROFILES, JSON.stringify(profiles));
+        }
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
   }, [profiles]);
 
   useEffect(() => {
-    safeSet(STORAGE_KEY_OFFBOARD, JSON.stringify(offboard));
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        if ('requestIdleCallback' in window) {
+          window.requestIdleCallback(() => {
+            safeSet(STORAGE_KEY_OFFBOARD, JSON.stringify(offboard));
+          });
+        } else {
+          safeSet(STORAGE_KEY_OFFBOARD, JSON.stringify(offboard));
+        }
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
   }, [offboard]);
 
   // Entry floor: active value of #100 (informational; minimum top-up is $10).
@@ -266,10 +581,10 @@ export default function Home() {
       soundEngine.playShove();
       handleTriggerReaction('🔥');
     }
-    setChatMessages((prev) => [
+    setMessages((prev) => [
       ...prev,
       {
-        id: `chat-event-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: `msg-event-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         sender: args.profile.handle,
         avatarColor: args.newRank === 1 ? 'bg-amber-400' : 'bg-indigo-500',
         text:
@@ -298,23 +613,59 @@ export default function Home() {
     let working: Profile[];
     let previousRank: number | null;
     let base: Profile;
-    const existing =
-      order.currentValue > 0
-        ? prev.find((p) => p.active_value === order.currentValue && p.name === order.title)
-        : undefined;
+    const existing = order.projectId
+      ? prev.find((p) => p.id === order.projectId)
+      : order.currentValue > 0
+      ? prev.find((p) => p.active_value === order.currentValue && p.name === order.title)
+      : undefined;
+
     if (existing) {
       previousRank = rankOf(prev, existing.id);
-      base = { ...existing, active_value: existing.active_value + topUp, times_bumped: existing.times_bumped + 1, last_bump_at: Date.now() };
+      base = {
+        ...existing,
+        name: order.title,
+        linkUrl: order.linkUrl,
+        imageUrl: order.imageUrl,
+        category: (CATEGORIES as readonly string[]).includes(order.category)
+          ? (order.category as Profile['category'])
+          : existing.category,
+        active_value: existing.active_value + topUp,
+        times_bumped: existing.times_bumped + 1,
+        last_bump_at: Date.now(),
+      };
       working = prev.map((p) => (p.id === existing.id ? base : p));
     } else {
       previousRank = null;
+      const ownerHandle = order.handle.replace('@', '');
+      const ownerName =
+        user?.user_metadata?.custom_claims?.global_name ||
+        user?.user_metadata?.full_name ||
+        user?.user_metadata?.user_name ||
+        user?.email?.split('@')[0] ||
+        order.handle;
+
       base = {
-        id: `slot-${Date.now()}`, seq: seqRef.current++, name: order.title, handle: order.handle,
+        id: `slot-${Date.now()}`,
+        seq: seqRef.current++,
+        name: order.title,
+        handle: order.handle,
         category: (CATEGORIES as readonly string[]).includes(order.category) ? (order.category as Profile['category']) : 'AI',
-        active_value: order.currentValue + topUp, imageUrl: order.imageUrl, linkUrl: order.linkUrl,
-        peak_rank: 101, times_bumped: 1, times_climbed: 0, views: 0, shares: 0, joined_days_ago: 0,
+        active_value: order.currentValue + topUp,
+        imageUrl: order.imageUrl,
+        linkUrl: order.linkUrl,
+        owner_id: user?.id,
+        owner_name: ownerName,
+        owner_handle: ownerHandle,
+        owner_avatar: user?.user_metadata?.avatar_url,
+        peak_rank: 101,
+        times_bumped: 1,
+        times_climbed: 0,
+        views: 0,
+        shares: 0,
+        joined_days_ago: 0,
         last_bump_at: Date.now(),
-        journey: [], reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
+        journey: [],
+        reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
       };
       working = [...prev, base];
     }
@@ -466,12 +817,18 @@ export default function Home() {
         soundEngine.playClick();
         setIsRulesOpen((prev) => !prev);
       } else if (e.key === 'Escape') {
-        setIsTakeOverOpen(false);
-        setIsGraveyardOpen(false);
-        setIsLeaderboardOpen(false);
-        setIsWarRoomOpen(false);
-        setIsRulesOpen(false);
-        setSelectedSlot(null);
+        if (isTakeOverOpen) {
+          setIsTakeOverOpen(false);
+          setTargetSlotToBump(null);
+        } else if (viewingProfileId) {
+          handleCloseProfile();
+        } else {
+          setIsGraveyardOpen(false);
+          setIsLeaderboardOpen(false);
+          setIsWarRoomOpen(false);
+          setIsRulesOpen(false);
+          setSelectedSlot(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -479,10 +836,37 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const existingHandles = useMemo(
-    () => profiles.slice(0, 60).map((p) => ({ id: p.id, title: p.name, activeValue: p.active_value })),
-    [profiles]
-  );
+  const userAuthHandle = useMemo(() => {
+    if (!user) return '';
+    return (
+      user.user_metadata?.user_name ||
+      user.user_metadata?.preferred_username ||
+      user.email?.split('@')[0] ||
+      ''
+    ).toLowerCase().replace('@', '');
+  }, [user]);
+
+  // Strictly filter to the current authenticated user's own projects (or empty if unauthenticated)
+  const existingHandles = useMemo(() => {
+    if (!user) return [];
+    return profiles
+      .filter((p) => {
+        if (p.owner_id && user.id && p.owner_id === user.id) return true;
+        if (userAuthHandle && p.handle && p.handle.toLowerCase().replace('@', '') === userAuthHandle) return true;
+        if (userAuthHandle && p.owner_handle && p.owner_handle.toLowerCase().replace('@', '') === userAuthHandle) return true;
+        return false;
+      })
+      .map((p) => ({
+        id: p.id,
+        title: p.name,
+        activeValue: p.active_value,
+        handle: p.handle,
+        imageUrl: p.imageUrl,
+        linkUrl: p.linkUrl,
+        category: p.category,
+        owner_id: p.owner_id || user.id,
+      }));
+  }, [profiles, user, userAuthHandle]);
 
   return (
     <div className="h-screen w-screen bg-[#121316] text-neutral-100 flex flex-col selection:bg-white/20 selection:text-white relative overflow-hidden">
@@ -493,6 +877,19 @@ export default function Home() {
         onDismiss={() => setLatestBumpEvent(null)}
       />
 
+      {paymentBanner && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-white/[0.08] backdrop-blur-xl border border-white/[0.15] shadow-2xl flex items-center gap-2.5 text-xs text-white animate-in fade-in slide-in-from-top-3 duration-300">
+          <span className={`w-2 h-2 rounded-full ${paymentBanner.type === 'success' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400 animate-pulse'}`} />
+          <span className="font-medium">{paymentBanner.text}</span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            className="text-neutral-400 hover:text-white ml-2 text-sm leading-none cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Persistent Full-Screen Command Header */}
       <header className="shrink-0 z-40 bg-[#141519]/90 backdrop-blur-xl border-b border-white/[0.08] px-3 sm:px-4 h-13 sm:h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 shrink-0">
@@ -501,8 +898,8 @@ export default function Home() {
           </div>
           <div>
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-sm sm:text-base font-bold tracking-tight text-white">
-                Bumped<span className="text-neutral-400 font-light">.lol</span>
+              <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                BumpOne<span className="text-amber-400 font-semibold">.lol</span>
               </span>
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Top 100
@@ -511,15 +908,22 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Center: Search & Filter Toolbar */}
+        <div className="flex-1 flex items-center justify-center px-2 min-w-0">
+          <GridFilterBar
+            filterState={filterState}
+            onFilterChange={setFilterState}
+          />
+        </div>
+
         {/* Right: Actions, Simulator & Take Over */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={handleToggleMute}
-            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-              isMuted
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                : 'bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-            }`}
+            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${isMuted
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+              : 'bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-white/[0.08]'
+              }`}
             title={isMuted ? 'Unmute Procedural Audio' : 'Mute Procedural Audio'}
             aria-label={isMuted ? 'Unmute sound' : 'Mute sound'}
           >
@@ -609,6 +1013,63 @@ export default function Home() {
             <span className="hidden xs:inline">Graveyard</span> ({offboard.length})
           </Button>
 
+          {user ? (
+            <UserMenu
+              user={user}
+              onSignOut={signOut}
+              onViewProfile={() => {
+                soundEngine.playClick();
+                setViewingProfileId('self');
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({ viewingProfile: true, profileId: 'self' }, '', '/profile');
+                }
+              }}
+              onViewMySlots={() => {
+                soundEngine.playClick();
+                if (existingHandles.length > 0) {
+                  const myRanks = new Set(
+                    slots
+                      .filter((s) => existingHandles.some((h) => h.id === s.id))
+                      .map((s) => s.rank)
+                  );
+                  if (myRanks.size > 0) {
+                    const firstRank = Array.from(myRanks)[0];
+                    setHighlightedRank(firstRank);
+                    setTimeout(() => setHighlightedRank(null), 3000);
+                  }
+                }
+                setFilterState((prev) => ({
+                  ...prev,
+                  searchQuery: userAuthHandle ? `@${userAuthHandle}` : '',
+                }));
+              }}
+              onClaimSlot={() => {
+                soundEngine.playClick();
+                setTargetSlotToBump(null);
+                setIsTakeOverOpen(true);
+              }}
+              onOpenAlerts={() => {
+                soundEngine.playClick();
+                setIsAlertSettingsOpen(true);
+              }}
+              userSlotsCount={existingHandles.length}
+            />
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<UserIcon className="w-3.5 h-3.5 text-amber-400" />}
+              onClick={() => {
+                soundEngine.playClick();
+                setIsAuthOpen(true);
+              }}
+              className="text-xs py-1 px-2.5 border-white/[0.12] hover:bg-white/[0.08]"
+              title="Sign in with Google, X, or Email"
+            >
+              Sign In
+            </Button>
+          )}
+
           <Button
             variant="primary"
             size="sm"
@@ -619,50 +1080,42 @@ export default function Home() {
             }}
             className="text-xs font-bold py-1.5 px-3"
           >
-            TAKE OVER (${Math.max(MIN_TOP_UP, entryFloor + 10)})
+            BUMP #1 (${Math.max(MIN_TOP_UP, entryFloor + 10)})
           </Button>
         </div>
       </header>
 
       {/* Main Full-Screen Layout */}
-      <main className="flex-1 w-full h-full min-h-0 px-2 sm:px-3 pt-1 pb-1.5 flex flex-col relative z-10 overflow-hidden gap-1">
-        <GridFilterBar
-          filterState={filterState}
-          onFilterChange={setFilterState}
-        />
-
+      <main className="flex-1 w-full h-full min-h-0 px-2 sm:px-3 pt-1.5 pb-1.5 flex flex-col relative z-10 overflow-hidden gap-1">
         <div className="flex-1 w-full h-full min-h-0 relative">
           <GridBoard
             slots={slots}
-            onSlotClick={(slot) => setSelectedSlot(slot)}
+            onSlotClick={handleSlotClick}
             highlightedRank={highlightedRank}
             matchingRanks={matchingRanks}
             hoveredRank={hoveredRank}
-            onHoverRank={setHoveredRank}
-            onOrientationChange={setGridOrientation}
+            onHoverRank={handleHoverRank}
+            onOrientationChange={handleOrientationChange}
           />
 
           <RadarMiniMap
             slots={slots}
             orientation={gridOrientation}
             highlightedRank={highlightedRank}
+            matchingRanks={matchingRanks}
             hoveredRank={hoveredRank}
-            onSelectSlot={(slot) => {
-              setSelectedSlot(slot);
-              setHighlightedRank(slot.rank);
-              setTimeout(() => setHighlightedRank(null), 3000);
-            }}
-            onHoverRank={setHoveredRank}
+            onSelectSlot={handleSelectMiniMapSlot}
+            onHoverRank={handleHoverRank}
           />
         </div>
 
         {/* Bottom Floating Coordinate & Status HUD — pr-[220px] reserves space for RadarMiniMap (fixed bottom-4 right-4) */}
         <div className="shrink-0 px-3 py-1 pr-[260px] rounded-xl bg-[#141519]/90 backdrop-blur-md border border-white/[0.08] flex items-center justify-between text-[10px] sm:text-[11px] text-neutral-300 shadow-lg">
-          {hoveredSlot && hoveredCoord ? (
+          {hoveredSlot ? (
             <div className="flex items-center gap-2 truncate font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0 animate-ping" />
               <span className="text-zinc-200 font-bold">
-                [GRID R:{hoveredCoord.row} C:{hoveredCoord.col} &bull; {hoveredCoord.colSpan}x{hoveredCoord.rowSpan}]
+                [#{hoveredSlot.rank} &bull; {gridOrientation}]
               </span>
               <span className="text-white font-sans font-semibold">
                 Rank #{hoveredSlot.rank} {hoveredSlot.title}
@@ -690,7 +1143,7 @@ export default function Home() {
             </div>
             <div className="hidden xl:block h-2.5 w-px bg-white/[0.1]" />
             <span className="hidden lg:inline text-neutral-400 font-mono text-[10px]">
-              Total Active Value: <strong className="text-white font-bold">${stats.totalBidsVolume.toLocaleString()}</strong>
+              Total Active Value: <strong className="text-white font-bold">${formatNumber(stats.totalBidsVolume)}</strong>
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
               Floor <strong className="text-white font-bold">${entryFloor}</strong>
@@ -715,74 +1168,194 @@ export default function Home() {
         </div>
       </main>
 
-      <TakeOverModal
-        isOpen={isTakeOverOpen}
-        onClose={() => {
-          setIsTakeOverOpen(false);
-          setTargetSlotToBump(null);
+      {/* 0ms Persistent Global Glass Backdrop (never flickers, never drops blur, never stacks) */}
+      <div
+        className={`fixed inset-0 z-40 bg-[#0d0e12]/85 backdrop-blur-md transition-opacity duration-200 ${isBackdropActive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+        onClick={() => {
+          if (isTakeOverOpen) {
+            setIsTakeOverOpen(false);
+            setTargetSlotToBump(null);
+          } else if (viewingProfileId) {
+            handleCloseProfile();
+          } else {
+            setSelectedSlot(null);
+            setIsLeaderboardOpen(false);
+            setIsGraveyardOpen(false);
+            setIsRulesOpen(false);
+          }
         }}
-        currentSlots={slots}
-        entryFloor={entryFloor}
-        categories={[...CATEGORIES]}
-        existingHandles={existingHandles}
-        preselectedTargetSlot={targetSlotToBump}
-        onSubmitTopUp={handleProcessTopUp}
+        aria-hidden="true"
       />
 
-      <GraveyardDrawer
-        isOpen={isGraveyardOpen}
-        onClose={() => setIsGraveyardOpen(false)}
-        bumpedHistory={offboard.slice(0, 50).map((p) => toSlotItem(p, 101))}
-        onReclaimTurf={(item) => {
-          const match = slots.find((s) => s.id === item.id);
-          setTargetSlotToBump(match ?? null);
-          setIsTakeOverOpen(true);
-        }}
-      />
+      {isTakeOverOpen && (
+        <TakeOverModal
+          isOpen={isTakeOverOpen}
+          hasBackdrop={false}
+          onClose={() => {
+            setIsTakeOverOpen(false);
+            setTargetSlotToBump(null);
+          }}
+          onBack={targetSlotToBump ? () => {
+            const slotToRestore = targetSlotToBump;
+            setIsTakeOverOpen(false);
+            setTargetSlotToBump(null);
+            setSelectedSlot(slotToRestore);
+          } : undefined}
+          currentSlots={slots}
+          entryFloor={entryFloor}
+          categories={[...CATEGORIES]}
+          existingHandles={existingHandles}
+          preselectedTargetSlot={targetSlotToBump}
+          onSubmitTopUp={(orderData) => {
+            handleProcessTopUp(orderData);
+            setIsTakeOverOpen(false);
+            setTargetSlotToBump(null);
+            setSelectedSlot(null);
+          }}
+        />
+      )}
 
-      <LeaderboardModal
-        isOpen={isLeaderboardOpen}
-        onClose={() => setIsLeaderboardOpen(false)}
-        slots={slots}
-        onSelectSlot={(slot) => setSelectedSlot(slot)}
-      />
+      {isGraveyardOpen && (
+        <GraveyardDrawer
+          isOpen={isGraveyardOpen}
+          hasBackdrop={false}
+          onClose={() => setIsGraveyardOpen(false)}
+          bumpedHistory={offboard.slice(0, 50).map((p) => toSlotItem(p, 101))}
+          onReclaimTurf={(item) => {
+            const match = slots.find((s) => s.id === item.id);
+            setTargetSlotToBump(match ?? null);
+            setIsTakeOverOpen(true);
+          }}
+        />
+      )}
 
-      <SlotDetailModal
-        slot={selectedSlot}
-        onClose={() => setSelectedSlot(null)}
-        onBumpSlot={(slot) => {
-          setTargetSlotToBump(slot);
-          setIsTakeOverOpen(true);
-        }}
-      />
+      {isLeaderboardOpen && (
+        <LeaderboardModal
+          isOpen={isLeaderboardOpen}
+          hasBackdrop={false}
+          onClose={() => setIsLeaderboardOpen(false)}
+          slots={slots}
+          onSelectSlot={(slot) => setSelectedSlot(slot)}
+        />
+      )}
 
-      <RulesModal
-        isOpen={isRulesOpen}
-        onClose={() => setIsRulesOpen(false)}
-        onOpenTakeover={() => setIsTakeOverOpen(true)}
-      />
+      {selectedSlot && (
+        <SlotDetailModal
+          slot={selectedSlot}
+          hasBackdrop={false}
+          onClose={() => setSelectedSlot(null)}
+          onViewProfile={(creatorIdentifier) => {
+            setSelectedSlot(null);
+            setViewingProfileId(creatorIdentifier);
+            if (typeof window !== 'undefined') {
+              window.history.pushState({ viewingProfile: true, profileId: creatorIdentifier }, '', `/profile/${creatorIdentifier}`);
+            }
+          }}
+          onViewProject={(projectId) => {
+            setSelectedSlot(null);
+            setViewingProfileId(projectId);
+            if (typeof window !== 'undefined') {
+              window.history.pushState({ viewingProfile: true, profileId: projectId }, '', `/project/${projectId}`);
+            }
+          }}
+          onBumpSlot={(slot) => {
+            setSelectedSlot(null);
+            setTargetSlotToBump(slot);
+            setIsTakeOverOpen(true);
+          }}
+        />
+      )}
 
-      <WarRoomDrawer
-        isOpen={isWarRoomOpen}
-        onClose={() => setIsWarRoomOpen(false)}
-        bumpHistory={bumpHistory}
-        slots={slots}
-        chatMessages={chatMessages}
-        onSendMessage={handleSendMessage}
-        onTriggerReaction={handleTriggerReaction}
-        onSelectSlot={(slot) => {
-          setSelectedSlot(slot);
-          setHighlightedRank(slot.rank);
-          setTimeout(() => setHighlightedRank(null), 3500);
-        }}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-      />
+      {viewingProfileId && (
+        <div className="fixed inset-0 z-50 overflow-y-auto py-8 px-2 sm:px-4 pointer-events-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <ProfileView
+            profileId={viewingProfileId}
+            onBack={handleCloseProfile}
+            onSelectProfile={(nextId) => {
+              setViewingProfileId(nextId);
+              if (typeof window !== 'undefined') {
+                window.history.replaceState({ viewingProfile: true, profileId: nextId }, '', `/profile/${nextId}`);
+              }
+            }}
+            onUpdateProfile={(updated) => {
+              setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+            }}
+            onClaimSlot={() => {
+              setViewingProfileId(null);
+              setTargetSlotToBump(null);
+              setIsTakeOverOpen(true);
+            }}
+            onBumpProject={(projId) => {
+              const found = profiles.find((p) => p.id === projId);
+              if (found) {
+                const rank = sortBoard(profiles).findIndex((p) => p.id === found.id) + 1;
+                setTargetSlotToBump(toSlotItem(found, rank));
+              }
+              setViewingProfileId(null);
+              setIsTakeOverOpen(true);
+            }}
+            onOpenAlerts={() => {
+              setIsAlertSettingsOpen(true);
+            }}
+          />
+        </div>
+      )}
 
-      <ReactionCanvas
-        reactions={reactions}
-        onRemoveReaction={handleRemoveReaction}
-      />
+
+
+      {isRulesOpen && (
+        <RulesModal
+          isOpen={isRulesOpen}
+          hasBackdrop={false}
+          onClose={() => setIsRulesOpen(false)}
+          onOpenTakeover={() => setIsTakeOverOpen(true)}
+        />
+      )}
+
+      {isWarRoomOpen && (
+        <WarRoomDrawer
+          isOpen={isWarRoomOpen}
+          onClose={() => setIsWarRoomOpen(false)}
+          bumpHistory={bumpHistory}
+          slots={slots}
+          messages={messages}
+          senderHandle={userAuthHandle || undefined}
+          onSendMessage={handleSendMessage}
+          onTriggerReaction={handleTriggerReaction}
+          onSelectSlot={(slot) => {
+            setSelectedSlot(slot);
+            setHighlightedRank(slot.rank);
+            setTimeout(() => setHighlightedRank(null), 3500);
+          }}
+          isMuted={isMuted}
+          onToggleMute={handleToggleMute}
+        />
+      )}
+
+      {reactions.length > 0 && (
+        <ReactionCanvas
+          reactions={reactions}
+          onRemoveReaction={handleRemoveReaction}
+        />
+      )}
+
+      {isAuthOpen && (
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+        />
+      )}
+
+      {isAlertSettingsOpen && (
+        <AlertSettingsModal
+          isOpen={isAlertSettingsOpen}
+          onClose={() => setIsAlertSettingsOpen(false)}
+          userEmail={user?.email || ''}
+        />
+      )}
+
+      <GoogleOneTap disabled={Boolean(user)} />
     </div>
   );
 }

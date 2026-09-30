@@ -8,6 +8,7 @@ export interface GraveyardDrawerProps {
   onClose: () => void;
   bumpedHistory: SlotItem[];
   onReclaimTurf: (item: SlotItem) => void;
+  hasBackdrop?: boolean;
 }
 
 export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
@@ -15,13 +16,17 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
   onClose,
   bumpedHistory,
   onReclaimTurf,
+  hasBackdrop = true,
 }) => {
+  if (!isOpen) return null;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="The Graveyard (Pushed off the wall)"
-      subtitle="Off-board profiles are kept, never deleted. Top up to reclaim a spot on the wall."
+      hasBackdrop={hasBackdrop}
+      title="The Graveyard (Off the Grid)"
+      subtitle="Profiles bumped off the top 100 are kept here. Top up anytime to get back on the grid."
       maxWidth="lg"
     >
       <div className="space-y-4">

@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react';
 import { Crown, Sparkles, Shield, AlertTriangle } from 'lucide-react';
 
-export type RankTier = 'king' | 'elite' | 'lord' | 'contender' | 'bubble';
+export type RankTier = 'king' | 'champion' | 'elite' | 'vanguard' | 'lord' | 'contender';
 export type BadgeVariant = 'rank' | 'status' | 'pill' | 'metric';
 
 export interface BadgeProps {
@@ -16,9 +16,9 @@ export interface BadgeProps {
 
 export const getRankTier = (rank: number): RankTier => {
   if (rank === 1) return 'king';
-  if (rank >= 2 && rank <= 13) return 'elite';
-  if (rank >= 14 && rank <= 54) return 'lord';
-  if (rank === 100) return 'bubble';
+  if (rank >= 2 && rank <= 5) return 'champion';
+  if (rank >= 6 && rank <= 15) return 'elite';
+  if (rank >= 16 && rank <= 40) return 'vanguard';
   return 'contender';
 };
 
@@ -38,7 +38,7 @@ export const Badge: React.FC<BadgeProps> = ({
     if (tier === 'king') {
       return (
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-amber-500/15 text-amber-200 border border-amber-400/40 shadow-sm shadow-amber-500/15 backdrop-blur-md select-none ${className}`}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-amber-500/15 text-amber-200 border border-amber-400/50 shadow-sm shadow-amber-500/20 backdrop-blur-md select-none ${className}`}
         >
           <Crown className="w-3 h-3 text-amber-400 fill-amber-400/80" />
           <span>#1 KING</span>
@@ -46,13 +46,34 @@ export const Badge: React.FC<BadgeProps> = ({
       );
     }
 
+    if (tier === 'champion') {
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-tight bg-purple-500/20 text-purple-200 border border-purple-400/60 shadow-sm shadow-purple-500/25 backdrop-blur-md select-none ${className}`}
+        >
+          <span>💎 #{rank} CHAMPION</span>
+        </span>
+      );
+    }
+
     if (tier === 'elite') {
       return (
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-tight bg-white/[0.08] text-slate-200 border border-white/[0.2] backdrop-blur-md select-none ${className}`}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-tight bg-sky-500/15 text-sky-200 border border-sky-400/40 backdrop-blur-md select-none ${className}`}
         >
-          <Sparkles className="w-2.5 h-2.5 text-slate-300" />
+          <Sparkles className="w-2.5 h-2.5 text-sky-300" />
           <span>#{rank} ELITE</span>
+        </span>
+      );
+    }
+
+    if (tier === 'vanguard') {
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium tracking-tight bg-emerald-500/15 text-emerald-200 border border-emerald-400/30 backdrop-blur-md select-none ${className}`}
+        >
+          <Shield className="w-2.5 h-2.5 text-emerald-300" />
+          <span>#{rank}</span>
         </span>
       );
     }
@@ -68,16 +89,6 @@ export const Badge: React.FC<BadgeProps> = ({
       );
     }
 
-    if (tier === 'bubble') {
-      return (
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-tight bg-rose-950/40 text-rose-300 border border-rose-500/40 animate-pulse backdrop-blur-md select-none ${className}`}
-        >
-          <AlertTriangle className="w-3 h-3 text-rose-400" />
-          <span>#100 BRINK</span>
-        </span>
-      );
-    }
 
     return (
       <span

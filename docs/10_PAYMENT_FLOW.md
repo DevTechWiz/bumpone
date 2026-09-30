@@ -1,17 +1,14 @@
-# Bumped.lol — Payment Flow
+# BumpOne.lol — Payment Flow
 
 ## Payment Provider
 
-Stripe Checkout.
+**Dodo Payments** (Merchant of Record / Hosted Checkout).
 
-### Provider Approval (Required Before Launch)
-
-Before launch:
-
-* Confirm that the selected payment provider permits the exact Bumped.lol model.
-* Document the approved business description.
-* Store provider-specific restrictions in operational documentation.
-* Do not assume that another platform's payment arrangement means Bumped automatically qualifies.
+### Provider Setup
+* Integration: Dodo Payments REST API / `@dodopayments/dodopayments` SDK.
+* Checkout Mode: **Dodo Hosted Checkout**.
+* Currency: USD (minor units: cents).
+* Webhook Delivery: Standard Webhook signatures (`webhook-id`, `webhook-timestamp`, `webhook-signature`).
 
 ---
 
@@ -21,79 +18,122 @@ User chooses position.
 
 ↓
 
-Frontend sends purchase request.
+Frontend sends purchase request (`POST /api/purchase/create`).
 
 ↓
 
-Server validates the target and computes the required top-up (server-side quote).
+Server validates the target, verifies profile ownership via Supabase Auth, and computes the required top-up (server-side quote).
 
 ↓
 
-Server returns the quote with `expires_at` (creation + 10 minutes).
-
-The quote is informational and does not reserve a rank.
-
-↓
-
-Server creates Stripe Checkout Session.
+Server creates quote with `expires_at` (creation + 10 minutes) in `purchase_quotes`.
+* The quote is informational and does not reserve a rank.
 
 ↓
 
-User completes payment.
+Server calls Dodo Payments API to create a payment session with:
+* Amount in minor units (`amount_minor = top_up * 100`).
+* Currency: `USD`.
+* Metadata: `{ quote_id, profile_id, user_id, target_rank, expected_rank }`.
+* `return_url`: `https://bumpone.lol/purchase/result?payment_id={payment_id}`.
 
 ↓
 
-Stripe sends webhook.
+Server records purchase record in `purchases` (`status = 'created'`, `dodo_payment_id`).
 
 ↓
 
-Server verifies webhook signature.
+Frontend redirects user to Dodo Hosted Checkout page.
 
 ↓
 
-Server checks idempotency.
+User completes payment on Dodo.
 
 ↓
 
-Server recomputes the final position against the current ranking state using the amount actually paid. If the board changed during checkout, the buyer receives the highest position their resulting active value qualifies for.
+Dodo Payments sends `payment.succeeded` webhook to `https://bumpone.lol/api/webhooks/dodo`.
 
 ↓
 
-Server executes ranking transaction.
+Server verifies webhook signature using Dodo Webhook Secret (`webhook-id`, `webhook-timestamp`, `webhook-signature`).
 
 ↓
 
-Purchase marked paid.
+Server checks idempotency against `payment_events` table using Dodo `webhook_id` / `payment_id`.
+* If already processed, immediately return HTTP 200.
 
 ↓
 
-Realtime event published.
+Server executes atomic PostgreSQL transaction / RPC:
+1. Recomputes final position against live ranking state using amount actually paid (`amount_minor / 100`).
+2. Increments `current_active_value = current_active_value + top_up`.
+3. Materializes updated ranks for the buyer and shifts intermediate profiles down.
+4. If a profile falls past rank #100, shifts it to the off-board archive (Graveyard).
+5. Inserts immutable row into `rank_events` with monotonic `global_event_sequence`.
+6. Updates purchase status to `paid`.
+7. Inserts realtime notification into `realtime_outbox`.
+
+↓
+
+Realtime worker / trigger broadcasts `board.updated` and `bump.feed` to connected clients.
 
 ---
 
 # Critical Rule
 
-Do NOT mutate ranking when the frontend returns from Stripe.
+**Do NOT mutate ranking when the frontend returns from Dodo.**
 
-The Stripe webhook is authoritative.
+The Dodo Payments webhook is authoritative.
 
 ## Payment Authorization
 
-The payment provider/webhook is authoritative.
+The webhook is the sole source of truth:
+* Do not update `rank`
+* Do not update `current_active_value`
+* Do not transfer profile ownership
 
-Do not change:
+based only on the frontend `return_url` redirect.
 
-* rank
-* active value
-* profile ownership
+---
 
-based only on the frontend success/return URL.
+# Zero Payment Rejection Principle
+
+**Every successful payment processed by Dodo Payments is accepted and placed on the board.**
+
+* **No Payment Is Ever Rejected or Refunded for Timing Reasons**: A buyer's payment is never cancelled or rejected simply because another user completed checkout a few seconds earlier.
+* **100% Value Credited**: 100% of the dollars paid are permanently added to the buyer's profile `current_active_value`.
+* **Dynamic Placement**: The buyer is placed at the highest position their resulting active value qualifies for on the live board at the exact millisecond their webhook is processed.
+
+---
+
+# Simultaneous Purchases (Alice & Bob Scenario)
+
+When two users purchase for the same slot (e.g. #1 at $100) at the same time:
+
+1. **Both Pay $110**: Both Alice and Bob are quoted $110 (`$100 - $0 + $10` minimum increment) and complete payment on Dodo.
+2. **Database Advisory Lock Queues Them**: When both webhooks arrive, PostgreSQL's `pg_advisory_xact_lock` executes them sequentially (e.g., Alice's webhook runs 5ms before Bob's).
+3. **1st Successful Payment (Alice)**:
+   * Acquires lock first.
+   * Gets monotonic `global_event_sequence = 1042`.
+   * Active value becomes **$110**.
+   * Takes **Slot #1** (King).
+   * Transaction commits.
+4. **2nd Successful Payment (Bob)**:
+   * Acquires lock next.
+   * Gets monotonic `global_event_sequence = 1043`.
+   * Active value becomes **$110**.
+   * Recomputes against live board: Alice has $110 with earlier sequence 1042.
+   * **Earliest sequence wins ties**: Alice retains **Slot #1**, and Bob takes **Slot #2**.
+   * Profiles below Bob shift down by 1.
+   * Transaction commits.
+5. **Outcome**:
+   * **Zero rejections, zero refunds**: You retain $220 in total revenue ($110 from Alice + $110 from Bob).
+   * Both users are live on the board.
+   * Bob is positioned directly behind Alice at #2, incentivizing an immediate $10 top-up to reclaim #1.
 
 ---
 
 # Payment States
-
-Support at minimum:
 
 ```text
 created
@@ -102,93 +142,56 @@ paid
 failed
 cancelled
 refunded
-chargeback
 disputed
+chargeback
 ```
 
-Use the provider's real status model where appropriate.
+Mapped to Dodo Payments webhook event types:
+* `payment.succeeded` -> `paid`
+* `payment.failed` -> `failed`
+* `refund.succeeded` -> `refunded`
+* `dispute.opened` -> `disputed`
 
 ---
 
 # Idempotency
 
-A Stripe event must only be processed once.
+A Dodo event must only be processed once.
 
 Store:
+```sql
+payment_events (
+  id uuid primary key default gen_random_uuid(),
+  event_id text unique not null, -- Dodo webhook-id
+  payment_id text not null,      -- Dodo payment_id
+  event_type text not null,      -- e.g. payment.succeeded
+  payload jsonb not null,
+  processed_at timestamptz default now()
+);
+```
 
-stripe_event_id
-
-with a unique constraint.
+Any webhook whose `event_id` exists is acknowledged with `200 OK` and bypassed.
 
 ---
 
-# Refunds
+# Refunds & Rollback
 
-Refund behavior must be explicitly defined.
+## Policy
+A refund does NOT retroactively rewrite historical ranking events. The ranking log is a permanent, append-only record.
 
-Document a deterministic policy and ensure the ranking engine can execute it safely.
-
-Cases that must be considered before launch:
-
-* refund while #1
-* refund while #50
-* partial refund
-* full refund
-* chargeback
-* provider dispute
-* payment reversal after several later bumps
-
-The final policy must preserve ranking consistency.
-
-## Documented Refund Policy (Current)
-
-### Hard Rule
-
-A refund does NOT retroactively reverse the public ranking.
-
-The ranking is a permanent, append-only record of events.
-
-## Rollback Mechanism
-
-When a refund is processed:
-
-1. Mark the purchase as `refunded` in the database.
-2. Set the profile's `current_active_value` to the value BEFORE the refunded purchase.
-3. Recalculate the profile's rank based on their new active value.
+## Rollback Mechanism (Triggered by `refund.succeeded` webhook)
+When Dodo confirms a refund:
+1. Mark purchase status as `refunded` in `purchases`.
+2. Revert the profile's `current_active_value` to the pre-purchase amount (`previous_active_value_minor / 100`).
+3. Recalculate the profile's rank based on their reverted active value.
 4. Shift other profiles up to fill the gap.
-5. Record a `refund_event` in the rank_events table.
-6. Do NOT delete or modify historical rank_events.
-
-## Example
-
-Before refund:
-#1 Alex $710
-#2 A $700
-#3 B $600
-
-Alex's $210 purchase is refunded.
-
-After refund:
-#1 A $700
-#2 B $600
-#3 Alex $500 (active value restored to pre-purchase amount)
-
-Alex's rank_events still show the bump to #1 (historical record).
+5. Record a `refund_event` in `rank_events`.
+6. Emit a `board.updated` event to the realtime outbox.
+7. Preserve all historical `rank_events` untouched.
 
 ---
 
-# Chargebacks
-
-Chargebacks should create an administrative event.
-
-Follow the same rollback mechanism as refunds.
-
-Do not attempt to reconstruct the entire ranking history automatically.
-
----
-
-# Currency
-
-MVP: USD.
-
-Architecture should support additional currencies later.
+# Chargebacks & Disputes (Triggered by `dispute.opened` webhook)
+1. Mark purchase as `disputed`.
+2. Generate an administrative alert in `/admin` dashboard.
+3. If dispute is lost, execute the same rollback mechanism as refunds.

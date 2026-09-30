@@ -1,289 +1,265 @@
-# Bumped.lol — API Specification
+# BumpOne.lol — API Specification
 
-## GET /api/board
-
-Returns top 100 profiles (global).
-
-Query params:
-
-category (optional) — filter by category
-
-Response:
-
-profiles[]
-total_profiles
-last_event
+All endpoints communicate using JSON over HTTPS with ISO-8601 UTC timestamps.
 
 ---
 
-## GET /api/board/:category
+## Public Endpoints
 
-Returns top 100 profiles in the specified category.
+### GET `/api/board`
+Returns the authoritative top 100 profiles (global or category-filtered), with multi-signal sorting.
 
-Response:
-
-profiles[]
-total_profiles
-category
-last_event
-
----
-
-## GET /api/categories
-
-Returns list of available categories.
-
-Response:
-
-categories[]
-  name
-  slug
-  profile_count
-
----
-
-## GET /api/profile/:id
-
-Returns:
-
-profile
-current_rank
-global_rank
-category_rank
-current_active_value
-rank_history
-metrics
-  peak_rank
-  times_bumped
-  times_climbed
-  profile_views
-  joined_at
-reactions
-  fire
-  eyes
-  heart
-  laugh
-
----
-
-## GET /api/profile/:id/journey
-
-Returns full rank journey for a profile.
-
-Response:
-
-journey[]
-  old_rank
-  new_rank
-  category
-  profiles_displaced
-  timestamp
-metrics
-  peak_rank
-  times_bumped
-  times_climbed
-
----
-
-## GET /api/bump-feed
-
-Returns recent bump events for the live feed.
-
-Query params:
-
-category (optional) — filter by category
-limit (optional) — number of events (default 20)
-
-Response:
-
-events[]
-  id
-  profile_id
-  display_name
-  old_rank
-  new_rank
-  category
-  profiles_displaced
-  timestamp
-
----
-
-## POST /api/purchase/create
-
-Input:
-
-target (rank or profile reference the buyer wants to exceed)
-profile data
-category
-
-The client never submits a payment amount. The server quotes the required top-up.
-
-### Quote Validity
-
-The quote is informational and does not reserve a rank. It is valid for **10 minutes** (`expires_at` returned with the quote).
-
-At successful payment confirmation, the server recomputes the user's resulting position against the current ranking state using the amount actually paid. If the board changed during checkout, the user receives the highest position their resulting active value qualifies for.
-
-Before checkout, the server must calculate:
-
-* user's current active value
-* target/current value
-* required top-up
-* resulting active value
-* resulting rank
-
-The frontend must display the result before checkout.
-
-Example:
-
-```text
-Current value: $500
-Current target: #1 at $700
-You pay: $210
-New value: $710
-Expected rank: #1
+* **Query params:**
+  * `category` *(optional)* — string (e.g. `AI`, `Apps`, `Websites`, etc.)
+  * `sort` *(optional)* — `power` (default: by active value DESC), `popular` (by emoji reaction count DESC), `trending` (by bump momentum in last 24h)
+* **Response Headers:**
+  * `Cache-Control: public, s-maxage=5, stale-while-revalidate=10` (Edge CDN caching for massive viral scale).
+* **Response `200 OK`:**
+```json
+{
+  "profiles": [
+    {
+      "id": "uuid",
+      "display_name": "Solana Syndicate DAO",
+      "handle": "@sabor_dao",
+      "image_url": "https://...",
+      "destination_url": "https://...",
+      "category": "Tech",
+      "rank": 1,
+      "active_value": 710,
+      "total_paid": 1200,
+      "created_at": "2026-09-26T12:00:00Z"
+    }
+  ],
+  "total_profiles": 100,
+  "last_sequence": 1042
+}
 ```
 
-(The $210 / $710 figures use the canonical $10 minimum increment. Expected rank follows the 10-minute quote rule: recomputed at payment confirmation.)
+---
 
-The server remains authoritative.
-
-The client cannot submit its own:
-
-* rank
-* active value
-* required payment
-* final position
-
-Returns:
-
-quote_id
-quoted_top_up
-expires_at (quote creation + 10 minutes)
-checkout URL/session
-post_bump_result (expected, recomputed at payment confirmation)
-  previous_rank
-  new_rank
-  profiles_displaced
-  new_active_value
-
-No ranking change occurs here.
+### GET `/api/categories`
+Returns available categories and live profile count.
+* **Response `200 OK`:**
+```json
+{
+  "categories": [
+    { "name": "AI", "slug": "ai", "count": 24 },
+    { "name": "Apps", "slug": "apps", "count": 18 }
+  ]
+}
+```
 
 ---
 
-## POST /api/webhooks/stripe
-
-Receives Stripe webhook.
-
-Only the verified payment webhook/provider confirmation may finalize the ranking change.
-
-Responsibilities:
-
-1. Verify Stripe signature.
-2. Verify payment.
-3. Ensure idempotency.
-4. Process purchase.
-5. Calculate new active value = buyer's current_active_value + payment_amount.
-6. Recompute rank against the current ranking state: order by current_active_value DESC with earliest rank-event sequence as tiebreak; the buyer receives the highest position their new active value qualifies for.
-7. Mutate ranking (update materialized current_rank values).
-8. Record rank event (with next global_event_sequence).
-9. Update profile metrics.
-10. Broadcast board update.
-11. Broadcast bump feed event.
-
----
-
-## POST /api/reactions
-
-Input:
-
-profile_id
-reaction_type (fire, eyes, heart, laugh)
-
-Adds or toggles a reaction.
-
-Rate limited.
-
-Response:
-
-reaction_counts
-  fire
-  eyes
-  heart
-  laugh
+### GET `/api/profile/:id`
+Returns public passport data, live rank, active value, lifetime spend, metrics, and reaction counts.
+* **Response `200 OK`:**
+```json
+{
+  "profile": {
+    "id": "uuid",
+    "display_name": "Solana Syndicate DAO",
+    "handle": "@sabor_dao",
+    "image_url": "https://...",
+    "destination_url": "https://...",
+    "category": "Tech",
+    "current_rank": 1,
+    "current_active_value": 710,
+    "total_paid": 1200,
+    "joined_at": "2026-09-01T00:00:00Z"
+  },
+  "metrics": {
+    "peak_rank": 1,
+    "times_bumped": 8,
+    "times_climbed": 5,
+    "profile_views": 14200
+  },
+  "reactions": {
+    "fire": 230,
+    "eyes": 89,
+    "heart": 45,
+    "laugh": 12
+  }
+}
+```
 
 ---
 
-## DELETE /api/reactions/:id
-
-Removes a reaction.
-
-Response:
-
-reaction_counts
-
----
-
-## POST /api/shares
-
-Input:
-
-profile_id
-bump_event_id (optional)
-
-Generates a shareable bump moment card.
-
-Response:
-
-share_url
-card_data
-  new_rank
-  profiles_displaced
-  display_name
-  image_url
+### GET `/api/profile/:id/journey`
+Returns the full chronological rank journey reconstructed from `rank_events`.
+* **Response `200 OK`:**
+```json
+{
+  "journey": [
+    {
+      "sequence": 1001,
+      "previous_rank": null,
+      "new_rank": 50,
+      "new_active_value": 60,
+      "displaced": 12,
+      "timestamp": "2026-09-01T12:00:00Z"
+    },
+    {
+      "sequence": 1042,
+      "previous_rank": 50,
+      "new_rank": 1,
+      "new_active_value": 710,
+      "displaced": 49,
+      "timestamp": "2026-09-26T18:00:00Z"
+    }
+  ]
+}
+```
 
 ---
 
-## GET /api/share/:share_url
-
-Returns shareable bump moment card data.
-
-Response:
-
-card_data
-  new_rank
-  profiles_displaced
-  display_name
-  image_url
-  created_at
-
----
-
-## GET /api/activity
-
-Returns recent public bump events.
-
-Query params:
-
-category (optional) — filter by category
-
----
-
-## POST /api/report
-
-Allows users to report a profile.
+### GET `/api/bump-feed`
+Returns recent live bump events for the feed.
+* **Query params:** `limit` (default 20, max 50).
+* **Response `200 OK`:**
+```json
+{
+  "events": [
+    {
+      "id": "uuid",
+      "sequence": 1042,
+      "profile_id": "uuid",
+      "display_name": "Alex",
+      "previous_rank": 14,
+      "new_rank": 1,
+      "active_value": 710,
+      "displaced": 13,
+      "timestamp": "2026-09-26T21:40:00Z"
+    }
+  ]
+}
+```
 
 ---
 
-# Security
+## Purchase & Payment Endpoints
 
-Never allow clients to directly modify:
+### POST `/api/purchase/create`
+Generates a 10-minute informational quote and initiates a Dodo Hosted Checkout session.
 
-rank
-purchase status
-current_active_value
-category
-profile_metrics
-reaction_counts
+* **Authentication:** Required (Supabase Auth session).
+* **Request Body (Zod validated):**
+```json
+{
+  "profile_id": "uuid (optional if existing profile)",
+  "target_rank": 1,
+  "display_name": "My App",
+  "handle": "@myapp",
+  "destination_url": "https://myapp.com",
+  "image_path": "profile-images/uuid.webp",
+  "category_id": "uuid"
+}
+```
 
-These are server-controlled.
+* **Server Logic:**
+  1. Checks if global purchases are paused (`system_state.purchases_paused`). If true -> `503 Service Unavailable`.
+  2. Resolves buyer's current active value ($0 for new, existing amount for owned profile).
+  3. Finds target active value on live board.
+  4. Quotes top-up: `quoted_top_up = max(10, target_value - current_value + 10)`.
+  5. Inserts quote record into `purchase_quotes` with `expires_at = now() + 10 minutes`.
+  6. Calls Dodo Payments API (`POST https://api.dodopayments.com/payments`):
+     * `total_amount = quoted_top_up * 100` (cents)
+     * `currency = USD`
+     * `metadata = { quote_id, profile_id, user_id, target_rank }`
+     * `payment_link = true`
+  7. Inserts purchase record into `purchases` (`status = 'created'`, `dodo_payment_id`).
+* **Response `200 OK`:**
+```json
+{
+  "quote_id": "uuid",
+  "quoted_top_up": 210,
+  "expires_at": "2026-09-26T22:04:00Z",
+  "dodo_payment_id": "pay_123456",
+  "checkout_url": "https://checkout.dodopayments.com/buy/pay_123456",
+  "expected_rank": 1
+}
+```
+
+---
+
+### POST `/api/webhooks/dodo`
+Authoritative webhook endpoint handling Dodo Payments notifications.
+
+* **Headers Verified:**
+  * `webhook-id`
+  * `webhook-timestamp`
+  * `webhook-signature`
+* **Signature Verification:** Verified using Dodo Webhook Secret via Svix Standard Webhooks / HMAC-SHA256 against raw request body.
+
+* **Handled Event Types:**
+  * `payment.succeeded`:
+    1. Checks `payment_events` for `webhook-id` idempotency.
+    2. Calls `process_dodo_purchase` RPC function.
+    3. Triggers realtime notification to clients.
+    4. Returns `200 OK`.
+  * `refund.succeeded`:
+    1. Reverts active value to pre-purchase amount.
+    2. Recalculates rank and shifts other profiles up.
+    3. Records `refund_rollback` event.
+    4. Returns `200 OK`.
+  * `dispute.opened`:
+    1. Marks purchase as `disputed`.
+    2. Logs alert for `/admin`.
+    3. Returns `200 OK`.
+
+---
+
+## Reactions Endpoints
+
+### POST `/api/reactions`
+Adds an anonymous reaction.
+* **Cookie:** `bumped_anon_id` (HttpOnly signed cookie, auto-generated if missing).
+* **Rate limit:** 30 req/min per identity.
+* **Request Body:**
+```json
+{
+  "profile_id": "uuid",
+  "reaction_type": "fire"
+}
+```
+* **Response `200 OK`:**
+```json
+{
+  "reaction_counts": { "fire": 231, "eyes": 89, "heart": 45, "laugh": 12 }
+}
+```
+
+---
+
+### DELETE `/api/reactions`
+Removes an anonymous reaction.
+* **Request Body:** `{ "profile_id": "uuid", "reaction_type": "fire" }`
+* **Response `200 OK`:** Updated counts.
+
+---
+
+## Upload Endpoints
+
+### POST `/api/uploads/image`
+Uploads profile image to Supabase Storage.
+* **Authentication:** Required.
+* **Validation:** Max 5MB, MIME type `image/jpeg`, `image/png`, `image/webp`.
+* **Processing:** Strips EXIF metadata, resizes to max 2560x2560, converts to WebP.
+* **Response `200 OK`:**
+```json
+{
+  "image_path": "profile-images/user-123-uuid.webp",
+  "image_url": "https://[supabase-project].storage.supabase.co/..."
+}
+```
+
+---
+
+## Admin Endpoints
+
+All admin endpoints require an active `admin_users` session.
+
+* `GET /api/admin/overview`: System stats, top 100, revenue, reports count.
+* `POST /api/admin/profiles/:id/moderate`: `{ "action": "suspend" | "restore" | "reject", "reason": "string" }`.
+* `POST /api/admin/emergency/pause`: `{ "paused": true | false }`.

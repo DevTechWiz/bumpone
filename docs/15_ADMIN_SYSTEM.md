@@ -1,4 +1,4 @@
-# Bumped.lol — Admin System
+# BumpOne.lol — Admin System
 
 ## Dashboard
 
@@ -34,7 +34,7 @@ Admin can:
 
 Admin can inspect:
 
-- Stripe session
+- Dodo payment session
 - payment status
 - amount
 - target requested

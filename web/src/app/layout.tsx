@@ -20,9 +20,9 @@ const jetbrains = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Bumped.lol - The Shifting Grid",
+  title: "BumpOne.lol - Bump #1 & Rule the Grid",
   description:
-    "A living visual arena where profiles compete for position: pay to raise your Active Value, bump the wall, defend your rank.",
+    "The internet's live attention arena. Bump #1 to seize the King citadel, defend your turf, and rule the shifting grid.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

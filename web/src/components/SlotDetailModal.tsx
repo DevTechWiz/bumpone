@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, ArrowUpRight, Share2, Copy, Check, ShieldCheck, Skull } from 'lucide-react';
+import { Zap, ArrowUpRight, Share2, Copy, Check, ShieldCheck, Skull, Flag, AlertCircle, User } from 'lucide-react';
 import { Modal, Button, Badge } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import { soundEngine } from '../lib/sound';
@@ -8,20 +8,68 @@ export interface SlotDetailModalProps {
   slot: SlotItem | null;
   onClose: () => void;
   onBumpSlot: (slot: SlotItem) => void;
+  onViewProfile?: (creatorIdentifier: string) => void;
+  onViewProject?: (projectId: string) => void;
+  hasBackdrop?: boolean;
 }
 
 export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   slot,
   onClose,
   onBumpSlot,
+  onViewProfile,
+  onViewProject,
+  hasBackdrop = true,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState<'scam' | 'spam' | 'offensive' | 'broken_link' | 'other'>('spam');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportSuccess, setReportSuccess] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  const [localReactions, setLocalReactions] = useState<Record<string, number>>(() => ({
+    fire: slot?.reactions?.fire || 0,
+    eyes: slot?.reactions?.eyes || 0,
+    heart: slot?.reactions?.heart || 0,
+    laugh: slot?.reactions?.laugh || 0,
+  }));
+
+  React.useEffect(() => {
+    if (slot) {
+      setLocalReactions({
+        fire: slot.reactions?.fire || 0,
+        eyes: slot.reactions?.eyes || 0,
+        heart: slot.reactions?.heart || 0,
+        laugh: slot.reactions?.laugh || 0,
+      });
+    }
+  }, [slot]);
+
+  const handleReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh') => {
+    soundEngine.playClick();
+    setLocalReactions((prev) => ({
+      ...prev,
+      [type]: (prev[type] || 0) + 1,
+    }));
+    try {
+      if (slot?.id) {
+        await fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId: slot.id, reaction: type }),
+        });
+      }
+    } catch {
+      // Local optimistic reaction
+    }
+  };
 
   if (!slot) return null;
 
   const handleCopyShare = () => {
     soundEngine.playClick();
-    const shareText = `Check out #${slot.rank} "${slot.title}" on Bumped.lol ($${slot.amountPaid} active value)!`;
+    const shareText = `Check out #${slot.rank} "${slot.title}" on BumpOne.lol ($${slot.amountPaid} active value)!`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(`${window.location.origin}/?rank=${slot.rank}`);
       setCopied(true);
@@ -31,30 +79,28 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
 
   const isKing = slot.rank === 1;
   const isElite = slot.rank >= 2 && slot.rank <= 13;
-  const isLord = slot.rank >= 14 && slot.rank <= 54;
-  const isBubble = slot.rank === 100;
+  const isLord = slot.rank >= 14 && slot.rank <= 40;
+
+  const slotSubtitle = (() => {
+    if (slot.rank === 1) return 'Current Supreme King of the Board';
+    if (slot.rank <= 13) return 'Inner Ring Elite Spot (High Attention)';
+    if (slot.rank <= 40) return 'Mid-Board Tier Spot (Ranks 14–40)';
+    if (slot.rank <= 100) return 'Active Grid Spot (Ranks 41–100)';
+    return 'Offboard Turf (Bump to Reclaim)';
+  })();
 
   return (
     <Modal
       isOpen={!!slot}
       onClose={onClose}
+      hasBackdrop={hasBackdrop}
       title={`Slot #${slot.rank} Details`}
-      subtitle={
-        isKing
-          ? 'Current Supreme King of the Board (4x4 Center Citadel)'
-          : isElite
-          ? 'Inner Orbit Elite (2x2 Prominent Tile)'
-          : isLord
-          ? 'Mid-Orbit Domino Lord (2x1 / 1x2 Territory)'
-          : isBubble
-          ? 'Perimeter Drop Brink (Danger Zone: Next bump sends this to Graveyard!)'
-          : 'Outer Perimeter Contender (1x1 Tile)'
-      }
+      subtitle={slotSubtitle}
       maxWidth="md"
     >
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {/* Large Image Preview in Dark Glass (auto-adjusts for portrait vs landscape) */}
-        <div className="relative max-h-[360px] min-h-[220px] flex items-center justify-center rounded-2xl overflow-hidden bg-[#0d0e12] border border-white/[0.1] group">
+        <div className="relative max-h-[250px] min-h-[160px] flex items-center justify-center rounded-2xl overflow-hidden bg-[#0d0e12] border border-white/[0.1] group">
           {/* Blurred backdrop glow for portrait / letterboxed assets */}
           <img
             src={slot.imageUrl}
@@ -66,7 +112,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
           <img
             src={slot.imageUrl}
             alt={slot.title}
-            className="relative max-h-[340px] w-auto max-w-full object-contain rounded-lg shadow-2xl z-10 py-2"
+            className="relative max-h-[235px] w-auto max-w-full object-contain rounded-lg shadow-2xl z-10 py-1"
             referrerPolicy="no-referrer"
           />
           <div className="absolute top-3 left-3 z-20">
@@ -84,47 +130,148 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
               ${slot.amountPaid.toLocaleString()}
             </span>
           </div>
+        </div>
 
-          {/* Danger zone badge if Rank #100 */}
-          {isBubble && (
-            <div className="absolute bottom-3 left-3 right-3 px-3 py-1.5 rounded-xl bg-rose-950/80 backdrop-blur-md border border-rose-500/50 flex items-center justify-between text-rose-200 text-xs font-medium">
-              <span className="flex items-center gap-1.5">
-                <Skull className="w-4 h-4 text-rose-400 animate-pulse" />
-                DANGER ZONE: On the perimeter brink!
-              </span>
-              <span className="font-mono text-[11px] text-rose-300">#100</span>
+        {/* Project Title & Creator Profile Attribution */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="text-base sm:text-lg font-bold text-white truncate">{slot.title}</h4>
+              {slot.category && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-white/[0.06] text-neutral-300 border border-white/[0.08]">
+                  {slot.category}
+                </span>
+              )}
             </div>
-          )}
+            <div className="flex items-center gap-1.5 mt-1 text-xs">
+              <span className="text-slate-400">Created by:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const creatorId = slot.owner_handle || slot.owner_id || slot.bidderName.replace('@', '');
+                  if (onViewProfile) {
+                    onViewProfile(creatorId);
+                  } else {
+                    window.location.href = `/profile/${creatorId}`;
+                  }
+                }}
+                className="inline-flex items-center gap-1 font-medium text-amber-300 hover:text-amber-200 hover:underline cursor-pointer"
+              >
+                {slot.owner_avatar ? (
+                  <img src={slot.owner_avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
+                ) : (
+                  <User className="w-3.5 h-3.5 text-slate-400" />
+                )}
+                <span>{slot.owner_name || slot.bidderName}</span>
+                <span className="text-[10px] text-slate-400">
+                  (@{(slot.owner_handle || slot.bidderName).replace('@', '')})
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const creatorId = slot.owner_handle || slot.owner_id || slot.bidderName.replace('@', '');
+                if (onViewProfile) {
+                  onViewProfile(creatorId);
+                } else {
+                  window.location.href = `/profile/${creatorId}`;
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] transition-all cursor-pointer group"
+              title="View Creator's Profile and all projects they own"
+            >
+              <User className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-300 transition-colors" />
+              <span>Creator Profile</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (onViewProject) {
+                  onViewProject(slot.id);
+                } else {
+                  window.location.href = `/project/${slot.id}`;
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] transition-all cursor-pointer group"
+              title="View Project showcase"
+            >
+              <span>Project Showcase</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
+            </button>
+          </div>
         </div>
 
-        {/* Title & Bidder */}
-        <div>
-          <h4 className="text-lg font-semibold text-white">{slot.title}</h4>
-          <p className="text-xs text-slate-400">Claimed by {slot.bidderName}</p>
+        {/* Interactive Community Reactions */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+          <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider">
+            Reactions
+          </span>
+          <div className="flex items-center gap-1.5">
+            {[
+              { type: 'fire', emoji: '🔥', label: 'Fire' },
+              { type: 'eyes', emoji: '👀', label: 'Eyes' },
+              { type: 'heart', emoji: '❤️', label: 'Heart' },
+              { type: 'laugh', emoji: '😂', label: 'Laugh' },
+            ].map(({ type, emoji, label }) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => handleReaction(type as any)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-white/[0.04] hover:bg-white/[0.1] border border-white/[0.08] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                title={`React with ${label}`}
+              >
+                <span>{emoji}</span>
+                <span className="text-[10px] font-mono text-neutral-300 font-medium">
+                  {localReactions[type] || 0}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Info Grid */}
+        {/* High-Value Takeover Stats (Simple, Direct English) */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08]">
-            <span className="text-[10px] text-slate-400 uppercase font-medium block">
-              Grid Footprint
+          <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/25">
+            <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+              Cost to Bump
             </span>
-            <span className="font-semibold text-slate-200 mt-1 block">
-              {isKing
-                ? '4x4 Center (16 Unit Cells)'
-                : isElite
-                ? '2x2 Inner Orbit (4 Unit Cells)'
-                : '1x1 Square Tile (Position Scaled)'}
+            <div className="font-mono font-bold text-white text-base mt-1">
+              +$10{' '}
+              <span className="text-[11px] font-normal text-slate-400">
+                (${slot.amountPaid + 10} total)
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
+              {isKing ? 'Bumps to #1 spot on grid' : `Bumps Rank #${slot.rank} & pushes down`}
             </span>
           </div>
+
           <div className="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08]">
-            <span className="text-[10px] text-slate-400 uppercase font-medium block">
-              {slot.naturalWidth && slot.naturalHeight ? 'Asset Resolution' : 'Protection Cost'}
+            <span className="text-[10px] text-indigo-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3 text-indigo-400" />
+              Current Rank Status
             </span>
-            <span className="font-mono font-semibold text-white mt-1 block">
-              {slot.naturalWidth && slot.naturalHeight
-                ? `${slot.naturalWidth} × ${slot.naturalHeight}px (${slot.aspectRatio}:1)`
-                : `Top up from $${slot.amountPaid + 10} to pass`}
+            <div className="font-semibold text-white text-sm mt-1">
+              {isKing
+                ? '👑 King of the Grid'
+                : isElite
+                  ? '⚡ Top 10 Spot'
+                  : isLord
+                    ? '🛡️ Top 40 Spot'
+                    : '⚔️ Active on Grid'}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
+              {isKing
+                ? 'Center of Grid · Most Views'
+                : isElite
+                  ? 'Top 10 · High Views'
+                  : 'Active Grid Spot'}
             </span>
           </div>
         </div>
@@ -149,27 +296,117 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
           </a>
         )}
 
-        {/* Actions */}
-        <div className="pt-2 flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
-          </Button>
-          <a
-            href={`/profile/${slot.id}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white border border-white/[0.1] hover:border-white/[0.25] transition-all"
+        {/* Reporting Section */}
+        {showReport && (
+          <div className="p-3.5 rounded-xl bg-[#131417] border border-rose-500/30 space-y-3 shadow-inner">
+            <div className="flex items-center justify-between text-xs font-semibold text-rose-300">
+              <span className="flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> Report Slot #{slot.rank}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowReport(false)}
+                className="text-neutral-400 hover:text-white text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+            {reportSuccess ? (
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs">
+                Thank you. Report received for moderator review.
+              </div>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const trimmed = reportDetails.trim();
+                  if (!trimmed || trimmed.length < 10) {
+                    alert('Please provide a specific comment explaining why this slot violates guidelines (at least 10 characters).');
+                    return;
+                  }
+                  setIsSubmittingReport(true);
+                  try {
+                    const res = await fetch('/api/reports', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        profileId: slot.id,
+                        reason: reportReason,
+                        details: trimmed,
+                      }),
+                    });
+                    if (res.ok) {
+                      setReportSuccess(true);
+                      setTimeout(() => {
+                        setShowReport(false);
+                        setReportSuccess(false);
+                        setReportDetails('');
+                      }, 2500);
+                    }
+                  } catch {
+                    alert('Failed to submit report');
+                  } finally {
+                    setIsSubmittingReport(false);
+                  }
+                }}
+                className="space-y-2.5 text-xs"
+              >
+                <select
+                  value={reportReason}
+                  onChange={(e: any) => setReportReason(e.target.value)}
+                  className="w-full bg-[#1c1d22] border border-white/[0.12] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-400/60 cursor-pointer"
+                >
+                  <option value="spam" className="bg-[#1c1d22] text-slate-200">Spam / Unsolicited Promotion</option>
+                  <option value="scam" className="bg-[#1c1d22] text-slate-200">Scam / Phishing Link</option>
+                  <option value="offensive" className="bg-[#1c1d22] text-slate-200">Offensive / Inappropriate Content</option>
+                  <option value="broken_link" className="bg-[#1c1d22] text-slate-200">Broken / Malicious Link</option>
+                  <option value="other" className="bg-[#1c1d22] text-slate-200">Other Violation</option>
+                </select>
+                <div>
+                  <textarea
+                    required
+                    minLength={10}
+                    rows={2}
+                    placeholder="Specific reason for report (required, min 10 chars)..."
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value)}
+                    className="w-full bg-[#1c1d22] border border-white/[0.12] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400/60 resize-none"
+                  />
+                  <span className="text-[10px] text-slate-400 block -mt-0.5">
+                    Please provide clear details to help our trust & safety team verify and investigate this report.
+                  </span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReport}
+                  className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-colors cursor-pointer shadow-md shadow-rose-900/30"
+                >
+                  {isSubmittingReport ? 'Submitting…' : 'Submit Abuse Report'}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* Actions (Clean, Uncluttered Footer) */}
+        <div className="pt-2 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setShowReport(!showReport)}
+            className="text-[11px] text-neutral-500 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
+            title="Report this listing"
           >
-            Full passport <ArrowUpRight className="w-3.5 h-3.5" />
-          </a>
+            <Flag className="w-3 h-3" /> Report
+          </button>
           <Button
             variant="primary"
             size="md"
-            leftIcon={<Zap className="w-4 h-4" />}
+            leftIcon={<Zap className="w-4 h-4 fill-zinc-950" />}
             onClick={() => {
-              onClose();
               onBumpSlot(slot);
             }}
           >
-            Top-Up & Bump (from ${slot.amountPaid + 10})
+            Bump This Slot for ${slot.amountPaid + 10}
           </Button>
         </div>
       </div>

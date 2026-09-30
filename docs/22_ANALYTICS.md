@@ -1,4 +1,4 @@
-# Bumped.lol — Analytics
+# BumpOne.lol — Analytics
 
 ## Core Metrics
 
