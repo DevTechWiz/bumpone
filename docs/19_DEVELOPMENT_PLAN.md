@@ -166,9 +166,9 @@ Monitor:
 
 Tracked deviations between the shipped UI prototype and the canonical docs. All must close before real-money launch.
 
-- [ ] **GAP-1 — Admin system missing.** `15_ADMIN_SYSTEM` mandates a dashboard (top-100, revenue, purchases, reports, chargebacks, moderation queue, audit log, pause-purchases). Removed during the reference-UI port by owner decision. Restore as `/admin` before launch.
-- [ ] **GAP-2 — No authentication.** Buying/top-up uses free-text handles. `05` requires auth for create/claim/buy/top-up/edit/manage. Closes with Supabase Auth (Phase 4).
-- [ ] **GAP-3 — Post-bump result screen partial.** `05`/`06` require previous → new rank plus the displaced-profiles list. Currently covered fragmentarily (BumpNotification + highlight + feed). Restore a dedicated result step in the purchase flow.
-- [ ] **GAP-4 — Server authority is mocked.** Ranking mutates client-side in the prototype. Production requires the webhook-authoritative transaction, RLS, and idempotency per `09`/`10`/`24` (Phase 6).
-- [ ] **GAP-5 — LeaderboardModal subtitle.** FIXED: now reads "Ranked by active value…" instead of the reference's "amount paid" wording.
-- [ ] **GAP-6 — `07_BOARD_LAYOUT` tiers.** FIXED: rank groups now describe the adopted concentric tiers (king / elite #2–13 / vanguard / contenders / #100 drop brink).
+- [x] **GAP-1 — Admin system missing.** RESOLVED: Full `/admin` dashboard restored with overview metrics, moderation controls, and emergency purchase pause toggle.
+- [x] **GAP-2 — No authentication.** RESOLVED: Supabase Auth integration, multi-profile ownership, Google One-Tap, and user session handling implemented.
+- [x] **GAP-3 — Post-bump result screen partial.** RESOLVED: Dedicated `BumpResultModal` displaying trajectory (#X -> #Y), number of profiles displaced, live cascade details, and one-click `/share/:id` action.
+- [x] **GAP-4 — Server authority is mocked.** RESOLVED: Webhook-authoritative transaction via `process_dodo_purchase`, webhook idempotency via `payment_webhook_events`, advisory locking, and RLS policies.
+- [x] **GAP-5 — LeaderboardModal subtitle.** RESOLVED: Updated to "Ranked by active value…".
+- [x] **GAP-6 — `07_BOARD_LAYOUT` tiers.** RESOLVED: Adopted concentric 5-batch arena geometry engine (#1 King, #2-#5 Champions, #6-#15 Elite Council, #16-#40 Vanguard, #41-#100 Drop Brink).
