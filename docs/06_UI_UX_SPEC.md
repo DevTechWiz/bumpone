@@ -317,7 +317,7 @@ Before payment, users should be able to understand:
 * that another user can subsequently move above them
 * that ranking is dynamic
 * that payment is for ranking/visibility service
-* the applicable refund policy
+* that all payments are final (no refunds)
 * that the shown expected rank is a 10-minute quote and the final position is recomputed at payment confirmation if the board moved
 
 Do not hide important pricing/ranking behavior in small print.

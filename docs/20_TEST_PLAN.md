@@ -109,7 +109,7 @@ Test:
 - cancelled checkout
 - delayed webhook
 - duplicate webhook
-- refund
+- disputed
 - chargeback
 - payment reversal
 - webhook retry

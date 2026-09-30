@@ -77,6 +77,11 @@ create table projects (
   ranking_sequence bigint not null default 0, -- monotonic sequence of latest rank event (tiebreaker)
   is_active boolean not null default true,
   moderation_status project_moderation_status not null default 'approved',
+  image_pos_x int not null default 50,
+  image_pos_y int not null default 50,
+  image_zoom numeric(3,2) not null default 1.0,
+  frame text not null default 'default',
+  views_count bigint not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -93,24 +98,27 @@ create unique index idx_projects_active_rank on projects (current_rank) where is
 
 ---
 
-### 5. `payment_quotes`
+### 5. `purchase_quotes`
 Authoritative server-generated purchase quotes with strict TTL.
 ```sql
-create table payment_quotes (
+create type purchase_quote_status as enum ('checkout_open', 'paid', 'expired', 'cancelled');
+
+create table purchase_quotes (
   id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete set null,
-  user_id uuid references users(id) on delete set null,
-  top_up_amount_minor bigint not null,
-  expected_previous_value_minor bigint not null,
-  projected_active_value_minor bigint not null,
-  currency text not null default 'USD',
+  project_id uuid not null references projects(id) on delete restrict,
+  user_id uuid not null references users(id) on delete restrict,
+  target_rank int not null check (target_rank between 1 and 100),
+  quoted_amount_minor bigint not null check (quoted_amount_minor >= 1000 and quoted_amount_minor % 100 = 0),
+  expected_rank int not null check (expected_rank between 1 and 101),
   expires_at timestamptz not null,
-  status text not null default 'pending', -- 'pending', 'paid', 'expired'
+  status purchase_quote_status not null default 'checkout_open',
   created_at timestamptz not null default now(),
-  constraint chk_quotes_amount_positive check (top_up_amount_minor > 0)
+  paid_at timestamptz
 );
 
-create index idx_payment_quotes_expires on payment_quotes (expires_at);
+create index idx_purchase_quotes_project_status on purchase_quotes(project_id, status);
+create index idx_purchase_quotes_user_status on purchase_quotes(user_id, status, created_at desc);
+create index idx_purchase_quotes_expires on purchase_quotes(expires_at);
 ```
 
 ---
@@ -119,14 +127,14 @@ create index idx_payment_quotes_expires on payment_quotes (expires_at);
 Gateway financial transactions and lifecycle ledger.
 ```sql
 create type payment_status as enum (
-  'created', 'pending', 'paid', 'failed', 'cancelled', 'refunded', 'disputed', 'chargeback'
+  'created', 'pending', 'paid', 'failed', 'cancelled', 'disputed', 'chargeback'
 );
 
 create table payments (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete restrict not null,
   user_id uuid references users(id) on delete set null,
-  quote_id uuid references payment_quotes(id) on delete set null,
+  quote_id uuid references purchase_quotes(id) on delete set null,
   provider text not null default 'dodo',
   provider_payment_id text unique,
   provider_checkout_id text,
@@ -177,7 +185,7 @@ create index idx_payment_webhook_events_payment_id on payment_webhook_events (pa
 Monotonic rank displacement journal and historical trajectory record.
 ```sql
 create type board_event_type as enum (
-  'inserted', 'bumped', 'left_top_100', 'returned_to_top_100', 'refund_rollback', 'admin_override'
+  'inserted', 'bumped', 'left_top_100', 'returned_to_top_100', 'admin_override'
 );
 
 create table board_events (
@@ -254,13 +262,15 @@ create index idx_messages_created_at on messages (created_at desc);
 
 ### 11. `reports` & `admin_audit_log`
 ```sql
+create type report_status as enum ('open', 'under_review', 'resolved_actioned', 'resolved_no_action', 'dismissed');
+
 create table reports (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade not null,
   reporter_id text,
   reason text not null,
   details text,
-  status text not null default 'open',
+  status report_status not null default 'open',
   admin_notes text,
   resolved_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -280,3 +290,40 @@ create table admin_audit_log (
   created_at timestamptz not null default now()
 );
 ```
+
+---
+
+### 12. `system_state`
+Global operational switches and emergency purchase pause.
+```sql
+create table system_state (
+  id text primary key default 'global',
+  purchases_paused boolean not null default false,
+  updated_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+```
+
+---
+
+1. **`process_dodo_purchase(p_event_id, p_payment_id, p_amount_minor, p_payload, p_project_id, p_quote_id)`**:
+   - `pg_advisory_xact_lock(733100, 1)` dedicated numeric lock namespace
+   - Validates webhook idempotency (`payment_webhook_events`)
+   - Enforces authoritative quote validation: existence, `checkout_open` status, expiration check, quote amount match (`p_amount_minor = v_quote_amount`), and project binding
+   - Enforces pre-created project validation and safeguards against reactivating suspended/rejected projects
+   - Updates project `current_active_value_minor` and `ranking_sequence`
+   - Atomically recalculates ranks 1..100 (`ORDER BY current_active_value_minor DESC, ranking_sequence ASC`)
+   - Inserts into `payments`, `board_events` (buyer bump + graveyard casualty `left_top_100` displacement), and `payment_webhook_events`
+   - Restricted to `service_role`
+2. **`add_project_reaction(p_project_id, p_anonymous_id, p_reaction_type)`**:
+   - Atomically records reaction and safely increments count only on genuine insert (eliminates duplicate-count bug)
+3. **`recalculate_board_ranks()`**:
+   - Serialized re-ranking maintenance RPC with advisory lock
+4. **`protect_project_authoritative_fields()` Trigger**:
+   - Guards `current_rank`, `current_active_value_minor`, `total_paid_minor`, `ranking_sequence`, `moderation_status`, `is_active` against direct client updates
+5. **`handle_new_user()` Trigger**:
+   - Automatically provisions `public.users` on `auth.users` insert with concurrency-safe retry loop
+6. **`populate_message_author()` Trigger**:
+   - Automatically derives author identity (`display_name`, `handle`) from `users` table and prevents client spoofing of `is_official` or arbitrary names/handles
+7. **`prune_old_webhook_events(p_days)`**:
+   - Maintenance function to purge raw webhook JSON payloads older than `p_days` (default 90 days) to prevent unbounded storage growth while preserving ledger integrity

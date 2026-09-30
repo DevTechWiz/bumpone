@@ -35,7 +35,7 @@ The ranking must always satisfy:
 
 active_value(#1) >= active_value(#2) >= active_value(#3) >= ...
 
-The top-up formula guarantees a new purchase strictly exceeds its target, so ties do not arise from the purchase path. As a safety net (e.g. after a refund restores a value equal to another profile's), equal values are ordered by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher).
+The top-up formula guarantees a new purchase strictly exceeds its target, so ties do not arise from the purchase path. As a safety net (e.g. after an admin override), equal values are ordered by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher).
 
 `current_active_value DESC` plus this sequence tiebreak is the canonical ranking source. `current_rank` may be stored as a materialized cache for performance, but it is never the source of truth.
 
@@ -105,7 +105,7 @@ To move above a user, the new active value must be strictly greater than that us
 
 The top-up formula guarantees strict exceed on the purchase path.
 
-Residual equal values (e.g. produced by a refund rollback) are ordered by earliest rank-event sequence (see Rule 2) so the ranking stays valid.
+Residual equal values (e.g. produced by an admin override) are ordered by earliest rank-event sequence (see Rule 2) so the ranking stays valid.
 
 ---
 

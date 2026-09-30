@@ -102,7 +102,7 @@ based only on the frontend `return_url` redirect.
 
 **Every successful payment processed by Dodo Payments is accepted and placed on the board.**
 
-* **No Payment Is Ever Rejected or Refunded for Timing Reasons**: A buyer's payment is never cancelled or rejected simply because another user completed checkout a few seconds earlier.
+* **No Payment Is Ever Rejected for Timing Reasons**: A buyer's payment is never cancelled or rejected simply because another user completed checkout a few seconds earlier.
 * **100% Value Credited**: 100% of the dollars paid are permanently added to the buyer's profile `current_active_value`.
 * **Dynamic Placement**: The buyer is placed at the highest position their resulting active value qualifies for on the live board at the exact millisecond their webhook is processed.
 
@@ -129,7 +129,7 @@ When two users purchase for the same slot (e.g. #1 at $100) at the same time:
    * Profiles below Bob shift down by 1.
    * Transaction commits.
 5. **Outcome**:
-   * **Zero rejections, zero refunds**: You retain $220 in total revenue ($110 from Alice + $110 from Bob).
+   * **Zero rejections**: You retain $220 in total revenue ($110 from Alice + $110 from Bob).
    * Both users are live on the board.
    * Bob is positioned directly behind Alice at #2, incentivizing an immediate $10 top-up to reclaim #1.
 
@@ -143,7 +143,6 @@ pending
 paid
 failed
 cancelled
-refunded
 disputed
 chargeback
 ```
@@ -151,7 +150,6 @@ chargeback
 Mapped to Dodo Payments webhook event types:
 * `payment.succeeded` -> `paid`
 * `payment.failed` -> `failed`
-* `refund.succeeded` -> `refunded`
 * `dispute.opened` -> `disputed`
 
 ---
@@ -176,24 +174,20 @@ Any webhook whose `event_id` exists is acknowledged with `200 OK` and bypassed.
 
 ---
 
-# Refunds & Rollback
+# Refund Policy
 
-## Policy
-A refund does NOT retroactively rewrite historical ranking events. The ranking log is a permanent, append-only record.
+BumpOne operates a competitive auction model. **Application-level refunds are intentionally not supported** because:
 
-## Rollback Mechanism (Triggered by `refund.succeeded` webhook)
-When Dodo confirms a refund:
-1. Mark purchase status as `refunded` in `purchases`.
-2. Revert the profile's `current_active_value` to the pre-purchase amount (`previous_active_value_minor / 100`).
-3. Recalculate the profile's rank based on their reverted active value.
-4. Shift other profiles up to fill the gap.
-5. Record a `refund_event` in `rank_events`.
-6. Emit a `board.updated` event to the realtime outbox.
-7. Preserve all historical `rank_events` untouched.
+1. Payments purchase rank positions that immediately affect other users.
+2. Reversing a payment after displacement cascades is logically unsound.
+3. Gateway-level chargebacks (Dodo/Stripe disputes) are handled externally by the payment provider, not by this application.
+
+If a `refund.succeeded` webhook is received, BumpOne acknowledges it with `200 OK` but takes **no application action**.
 
 ---
 
 # Chargebacks & Disputes (Triggered by `dispute.opened` webhook)
 1. Mark purchase as `disputed`.
 2. Generate an administrative alert in `/admin` dashboard.
-3. If dispute is lost, execute the same rollback mechanism as refunds.
+3. Admin can manually suspend the project via the moderation endpoint, which triggers `recalculate_board_ranks()`.
+

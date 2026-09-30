@@ -113,7 +113,7 @@ Do not launch real-money transactions until the payment-provider and applicable 
 
 * Terms of Service
 * Privacy Policy
-* Refund policy
+* No-refund policy disclosure
 * Content policy
 * Reporting process
 * Copyright/trademark process
@@ -126,7 +126,7 @@ Do not launch real-money transactions until the payment-provider and applicable 
 * Payment provider approval
 * Production account
 * Webhook verification
-* Refund workflow
+* Chargeback handling (admin suspension)
 * Chargeback workflow
 * Provider restrictions reviewed
 

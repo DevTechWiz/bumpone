@@ -54,15 +54,14 @@ export async function POST(request: NextRequest) {
     const suppliedMinor = input.topUpAmount * 100;
     if (suppliedMinor < requiredMinor) return NextResponse.json({ error: `Minimum required top-up is $${requiredMinor / 100}` }, { status: 409 });
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
-    const { data: quote, error: quoteError } = await supabaseAdmin.from('payment_quotes').insert({
+    const { data: quote, error: quoteError } = await supabaseAdmin.from('purchase_quotes').insert({
       project_id: projectId,
       user_id: user.id,
-      top_up_amount_minor: suppliedMinor,
-      expected_previous_value_minor: currentValueMinor,
-      projected_active_value_minor: currentValueMinor + suppliedMinor,
-      currency: 'USD',
+      target_rank: input.targetRank,
+      quoted_amount_minor: suppliedMinor,
+      expected_rank: input.targetRank,
       expires_at: expiresAt,
-      status: 'pending',
+      status: 'checkout_open',
     }).select('id').single();
 
     if (quoteError || !quote) {

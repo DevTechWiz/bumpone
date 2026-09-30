@@ -101,7 +101,6 @@ bump_feed_event_clicked
 * purchases
 * successful payments
 * failed payments
-* refunds
 * chargebacks
 * average payment
 * top-up amount

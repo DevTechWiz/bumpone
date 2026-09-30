@@ -105,41 +105,86 @@ create policy "System state is publicly readable"
 
 -- ==============================================================================
 -- 3. Strict Write Policies
+-- Authoritative writes (financial transactions, purchase quotes, ranking mutations,
+-- moderation actions, reaction counters, and system state) route exclusively through
+-- validated Next.js server APIs/RPCs using service_role.
+--
+-- Direct authenticated user writes are restricted to:
+--   - Creator user profile metadata (display_name, handle, avatar_url, bio, etc.)
+--   - Creator project display metadata (title, handle, image_path, destination_url, pos/zoom, frame)
+--     Guarded by trg_protect_project_fields (cannot touch active_value, rank, moderation_status)
+--   - War Room messages (text, slot_tag, avatar_color)
+--     Guarded by populate_message_author() trigger (forces is_official = false, authenticates author)
+--
 -- Direct anon inserts on reactions, reports, messages, quotes, and payments
--- are intentionally NOT permitted via public RLS. All writes MUST route through
--- validated Next.js API endpoints using service_role to enforce HMAC cookies,
--- rate limits, content moderation, and fraud protection.
+-- are strictly blocked by RLS.
 -- ==============================================================================
 
 -- Authenticated creators can insert their own messages with ownership link
+-- Column-level grants prevent spoofing is_official, author_name, author_handle
 create policy "Authenticated users can post war room messages"
   on messages for insert
   to authenticated
-  with check (auth.uid() = user_id);
+  with check (auth.uid() = user_id and is_official = false);
+
+revoke insert on messages from authenticated;
+grant insert (user_id, text, slot_tag, avatar_color) on messages to authenticated;
+
+-- Auto-populate author identity from the users table and force is_official = false
+-- This prevents authenticated users from impersonating admins or other users
+create or replace function populate_message_author()
+returns trigger as $$
+begin
+  select display_name, handle into new.author_name, new.author_handle
+  from users where id = new.user_id;
+
+  -- Only service_role can set is_official = true
+  if coalesce(auth.role(), '') <> 'service_role' then
+    new.is_official := false;
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_populate_message_author on messages;
+create trigger trg_populate_message_author
+  before insert on messages
+  for each row execute function populate_message_author();
+
+-- Restrict updateable columns for authenticated creators (defense-in-depth alongside trigger)
+revoke update on projects from authenticated;
+grant update (title, handle, image_path, destination_url, category_id, image_pos_x, image_pos_y, image_zoom, frame) on projects to authenticated;
+
+revoke update on users from authenticated;
+grant update (display_name, handle, avatar_url, bio, website, twitter, github) on users to authenticated;
 
 -- ==============================================================================
 -- 4. Enable Supabase Realtime Broadcast on Core War Room Tables
 -- ==============================================================================
 do $$ begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+exception when others then null;
+end $$;
+
+do $$ begin
   alter publication supabase_realtime add table projects;
-exception
-  when duplicate_object then null;
+exception when duplicate_object then null;
 end $$;
 
 do $$ begin
   alter publication supabase_realtime add table board_events;
-exception
-  when duplicate_object then null;
+exception when duplicate_object then null;
 end $$;
 
 do $$ begin
   alter publication supabase_realtime add table reaction_counts;
-exception
-  when duplicate_object then null;
+exception when duplicate_object then null;
 end $$;
 
 do $$ begin
   alter publication supabase_realtime add table messages;
-exception
-  when duplicate_object then null;
+exception when duplicate_object then null;
 end $$;

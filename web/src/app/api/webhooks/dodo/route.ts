@@ -39,23 +39,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, result: data });
     }
 
-    if (type === 'refund.succeeded') {
-      const paymentId = payload.payment_id || payload.id;
-      if (!paymentId) return NextResponse.json({ error: 'Missing payment id for refund' }, { status: 400 });
-
-      const { data, error } = await supabaseAdmin.rpc('process_dodo_refund', {
-        p_event_id: eventId,
-        p_payment_id: paymentId,
-        p_payload: payload,
-      });
-
-      if (error) {
-        console.error('Refund processing failed', error);
-        return NextResponse.json({ error: 'Refund processing failed' }, { status: 500 });
-      }
-
-      invalidateBoardCache();
-      return NextResponse.json({ success: true, result: data });
+    if (type === 'refund.succeeded' || type === 'payment.dispute') {
+      // BumpOne does not process application-level refunds.
+      // Gateway chargebacks are handled externally by Dodo/Stripe.
+      // Log for audit trail only.
+      console.warn(`Received ${type} webhook — no application action taken`, { eventId });
+      return NextResponse.json({ success: true, ignored: true, reason: 'refunds_not_supported' });
     }
 
     return NextResponse.json({ success: true, ignored: true });

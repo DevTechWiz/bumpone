@@ -32,6 +32,62 @@ create table if not exists users (
 
 create index if not exists idx_users_handle on users (handle);
 
+-- Auto-provision public user profile on Supabase auth signup
+create or replace function handle_new_user()
+returns trigger as $$
+declare
+  v_handle text;
+  v_base_handle text;
+  v_counter int := 1;
+begin
+  v_base_handle := lower(regexp_replace(
+    coalesce(
+      nullif(new.raw_user_meta_data->>'user_name', ''),
+      nullif(split_part(new.email, '@', 1), ''),
+      'creator'
+    ),
+    '[^a-zA-Z0-9_]', '', 'g'
+  ));
+  if length(v_base_handle) < 2 then
+    v_base_handle := 'creator';
+  end if;
+  
+  v_handle := v_base_handle;
+  loop
+    begin
+      insert into public.users (id, handle, display_name, avatar_url)
+      values (
+        new.id,
+        v_handle,
+        coalesce(
+          nullif(new.raw_user_meta_data->>'full_name', ''),
+          nullif(new.raw_user_meta_data->>'name', ''),
+          nullif(new.raw_user_meta_data->>'user_name', ''),
+          'Creator'
+        ),
+        new.raw_user_meta_data->>'avatar_url'
+      );
+      exit;
+    exception
+      when unique_violation then
+        -- If this user ID is already provisioned, exit gracefully
+        if exists (select 1 from public.users where id = new.id) then
+          exit;
+        end if;
+        -- Handle collision: increment counter and retry
+        v_counter := v_counter + 1;
+        v_handle := v_base_handle || v_counter::text;
+    end;
+  end loop;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
 -- ==============================================================================
 -- 3. Admin Users (Role-based administrator authorization)
 -- ==============================================================================
@@ -64,6 +120,11 @@ create table if not exists projects (
   ranking_sequence bigint not null default 0, -- Monotonic sequence timestamp (earlier wins tiebreaker)
   is_active boolean not null default true,
   moderation_status project_moderation_status not null default 'approved',
+  image_pos_x int not null default 50,
+  image_pos_y int not null default 50,
+  image_zoom numeric(3,2) not null default 1.0,
+  frame text not null default 'default',
+  views_count bigint not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -103,6 +164,7 @@ create table if not exists purchase_quotes (
 );
 
 create index if not exists idx_purchase_quotes_project_status on purchase_quotes(project_id, status);
+create index if not exists idx_purchase_quotes_user_status on purchase_quotes(user_id, status, created_at desc);
 create index if not exists idx_purchase_quotes_expires on purchase_quotes(expires_at);
 
 -- ==============================================================================
@@ -110,7 +172,7 @@ create index if not exists idx_purchase_quotes_expires on purchase_quotes(expire
 -- ==============================================================================
 do $$ begin
   create type payment_status as enum (
-    'created', 'pending', 'paid', 'failed', 'cancelled', 'refunded', 'disputed', 'chargeback'
+    'created', 'pending', 'paid', 'failed', 'cancelled', 'disputed', 'chargeback'
   );
 exception
   when duplicate_object then null;
@@ -154,7 +216,7 @@ create table if not exists payment_webhook_events (
   provider text not null default 'dodo',
   provider_event_id text not null, -- Dodo webhook-id header
   payment_id text,                 -- Dodo payment_id
-  event_type text not null,        -- payment.succeeded, refund.succeeded, etc.
+  event_type text not null,        -- payment.succeeded, payment.dispute, etc.
   payload jsonb not null,
   processed_at timestamptz not null default now(),
   unique (provider, provider_event_id)
@@ -167,7 +229,7 @@ create index if not exists idx_payment_webhook_events_payment_id on payment_webh
 -- ==============================================================================
 do $$ begin
   create type board_event_type as enum (
-    'inserted', 'bumped', 'left_top_100', 'returned_to_top_100', 'refund_rollback', 'admin_override'
+    'inserted', 'bumped', 'left_top_100', 'returned_to_top_100', 'admin_override'
   );
 exception
   when duplicate_object then null;
@@ -308,7 +370,7 @@ create or replace function protect_project_authoritative_fields()
 returns trigger as $$
 begin
   -- Only postgres / service_role can modify ranking, monetary, and moderation fields
-  if (current_user not in ('postgres', 'service_role')) and (
+  if (current_user not in ('postgres', 'service_role') and coalesce(auth.role(), '') <> 'service_role') and (
     new.current_rank is distinct from old.current_rank or
     new.current_active_value_minor is distinct from old.current_active_value_minor or
     new.total_paid_minor is distinct from old.total_paid_minor or

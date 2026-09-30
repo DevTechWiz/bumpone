@@ -5,7 +5,7 @@
 Two users purchase the same position (e.g. Slot #1) simultaneously.
 
 ### The Rule:
-1. **Never Reject a Payment**: Every successful payment received via Dodo Payments is credited. No payment is cancelled or refunded due to race conditions.
+1. **Never Reject a Payment**: Every successful payment received via Dodo Payments is credited. No payment is cancelled due to race conditions.
 2. **Database Advisory Locking**: PostgreSQL serializes concurrent webhook transactions using `pg_advisory_xact_lock(hashtext('board_ranking_mutation'))`.
 3. **Monotonic Sequence Tiebreaker**: The first transaction to acquire the lock receives the earlier monotonic sequence (`global_event_sequence`), e.g. #1042. The second transaction receives #1043.
 4. **Rank Allocation**:
@@ -26,7 +26,6 @@ Document:
 * users must be informed according to applicable law/contract
 * treatment of active rankings must be defined
 * treatment of pending payments must be defined
-* treatment of refunds must be defined
 * backups and required records must be retained for applicable periods
 
 Do NOT describe active ranking value as guaranteed permanently.
@@ -171,19 +170,13 @@ Profile can be hidden from public display without deleting purchase history.
 
 ---
 
-## Refund
+## Refund Policy
 
-Do not automatically reverse ranking history.
+BumpOne does **not** support application-level refunds.
 
-Rollback mechanism:
-1. Mark purchase as `refunded`.
-2. Restore profile's `current_active_value` to pre-purchase amount.
-3. Recalculate rank based on restored active value.
-4. Shift other profiles up to fill the gap.
-5. Record `refund_event` in rank_events.
-6. Historical rank_events remain unchanged.
+Payments purchase rank positions that immediately affect other users. Reversing a payment after displacement cascades is logically unsound. Gateway-level chargebacks are handled externally by the payment provider.
 
-Handle through moderation/admin workflow.
+If a chargeback occurs, an admin can manually suspend the project via the moderation endpoint, which triggers `recalculate_board_ranks()`.
 
 ---
 

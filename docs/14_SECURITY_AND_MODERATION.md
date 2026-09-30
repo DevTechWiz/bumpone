@@ -78,7 +78,7 @@ Admin must be able to:
 - suspend profile
 - remove image
 - disable destination link
-- refund/handle payment issue
+- suspend project (chargeback handling)
 - inspect purchase
 - inspect reports
 

@@ -50,7 +50,7 @@ The product owner has resolved the purchase and ranking model as follows. These 
 - Ties are broken by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher).
 - `current_active_value` both calculates the top-up AND determines ordering.
 - `current_rank` may exist as a materialized cache for performance, but it is never the source of truth. It must always be recomputed from value DESC + sequence order, never independently assigned.
-- **Zero Payment Rejection**: No confirmed payment is ever cancelled or refunded due to race conditions. If two users buy for the same slot simultaneously (e.g. Alice and Bob both pay $110 for #1), the 1st processed payment receives Rank #1 and the 2nd receives Rank #2. Both payments are credited in full.
+- **Zero Payment Rejection**: No confirmed payment is ever cancelled due to race conditions. If two users buy for the same slot simultaneously (e.g. Alice and Bob both pay $110 for #1), the 1st processed payment receives Rank #1 and the 2nd receives Rank #2. Both payments are credited in full.
 
 ### Target selection and final position
 
@@ -69,7 +69,7 @@ The product owner has resolved the purchase and ranking model as follows. These 
 
 - Insufficient payment (top-up below the $10 minimum): reject with no ranking change.
 - Duplicate/delayed webhooks: Dodo event idempotency (unique `event_id` in `payment_events`).
-- Disputed payments: refund/chargeback rollback mechanism in `10_PAYMENT_FLOW.md`.
+- Disputed payments: admin can manually suspend the project, triggering `recalculate_board_ranks()`. See `10_PAYMENT_FLOW.md`.
 
 ### Minimum amount
 
@@ -78,7 +78,7 @@ The product owner has resolved the purchase and ranking model as follows. These 
 
 ### Payment policy
 
-The documented refund policy is the rollback mechanism in `10_PAYMENT_FLOW.md`: a refunded purchase is marked `refunded`, the profile's active value is restored to its pre-purchase amount, rank is recalculated, and a `refund_event` is recorded without rewriting history. Chargebacks follow the same mechanism and create an administrative event.
+All payments are final. BumpOne does not support application-level refunds because payments purchase rank positions that immediately affect other users. Gateway-level chargebacks are handled externally by the payment provider. If a chargeback occurs, an admin can manually suspend the project via the moderation endpoint.
 
 ---
 
@@ -102,7 +102,7 @@ The documented refund policy is the rollback mechanism in `10_PAYMENT_FLOW.md`: 
 
 `draft → quoted → checkout_open → payment_processing → paid → ranking_processed`
 
-Terminal states: `expired`, `cancelled`, `payment_failed`, `processing_failed`, `disputed`, `refunded`, `administratively_cancelled`.
+Terminal states: `expired`, `cancelled`, `payment_failed`, `processing_failed`, `disputed`, `administratively_cancelled`.
 
 Quotes expire 10 minutes after creation (`expires_at`). An expired quote moves toward `expired` for display purposes but never blocks a completed payment from being recomputed at confirmation.
 

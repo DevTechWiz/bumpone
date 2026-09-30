@@ -42,8 +42,8 @@ begin
     return jsonb_build_object('status', 'already_processed');
   end if;
 
-  -- 2. Lock Board for serial execution (Advisory transaction lock prevents race conditions)
-  perform pg_advisory_xact_lock(hashtext('board_ranking_mutation'));
+  -- 2. Lock Board for serial execution (Fixed numeric namespace 733100, key 1 prevents race conditions)
+  perform pg_advisory_xact_lock(733100, 1);
 
   v_meta := coalesce(p_payload->'metadata', '{}'::jsonb);
   
@@ -55,69 +55,88 @@ begin
 
   -- Validate quote if provided
   if v_quote_id is not null then
-    select project_id, top_up_amount_minor into v_project_id, v_quote_amount
-    from payment_quotes
-    where id = v_quote_id::uuid and status = 'pending' and expires_at > now();
-  end if;
+    select project_id, quoted_amount_minor into v_project_id, v_quote_amount
+    from purchase_quotes
+    where id = v_quote_id::uuid and status = 'checkout_open' and expires_at > now();
 
-  -- 3. Atomic New Project Creation (if brand new project top-up)
-  if v_project_id is null or not exists (select 1 from projects where id = v_project_id) then
-    select id into v_category_id from categories 
-    where lower(name) = lower(coalesce(v_meta->>'category', 'Tech')) limit 1;
-
-    if v_category_id is null then
-      select id into v_category_id from categories order by display_order asc limit 1;
+    -- Enforce that quote exists, is checkout_open, and has not expired
+    if v_quote_amount is null then
+      raise exception 'Invalid, expired, or already-processed quote: %', v_quote_id
+        using errcode = 'P0004';
     end if;
 
-    insert into projects (
-      user_id,
-      title,
-      handle,
-      destination_url,
-      image_path,
-      category_id,
-      current_active_value_minor,
-      total_paid_minor,
-      ranking_sequence,
-      is_active,
-      moderation_status
-    ) values (
-      case when v_meta->>'user_id' is not null then (v_meta->>'user_id')::uuid else null end,
-      coalesce(v_meta->>'title', 'Anonymous Challenger'),
-      coalesce(v_meta->>'handle', '@challenger'),
-      coalesce(v_meta->>'link_url', 'https://bumpone.lol'),
-      coalesce(v_meta->>'image_url', 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=700&auto=format&fit=crop&q=80'),
-      v_category_id,
-      0,
-      0,
-      0,
-      true,
-      'approved'
-    ) returning id, title, handle into v_project_id, v_title, v_handle;
-  else
-    select current_active_value_minor, current_rank, category_id, title, handle
-    into v_old_value_minor, v_old_rank, v_category_id, v_title, v_handle
-    from projects 
-    where id = v_project_id;
+    -- Enforce payment amount strictly matches the authoritative server-generated quote
+    if p_amount_minor <> v_quote_amount then
+      raise exception 'Payment amount (%) does not match quoted amount (%)',
+        p_amount_minor, v_quote_amount
+        using errcode = 'P0001';
+    end if;
+
+    -- Enforce quote project matches parameter if both provided
+    if p_project_id is not null and p_project_id <> v_project_id then
+      raise exception 'Project ID mismatch between quote (%) and parameter (%)',
+        v_project_id, p_project_id
+        using errcode = 'P0005';
+    end if;
   end if;
+
+  -- 3. Validate project exists (projects MUST be pre-created via /api/purchase/create)
+  if v_project_id is null then
+    raise exception 'project_id is required — projects must be pre-created before payment'
+      using errcode = 'P0002';
+  end if;
+
+  if not exists (select 1 from projects where id = v_project_id) then
+    raise exception 'Project % not found', v_project_id
+      using errcode = 'P0003';
+  end if;
+
+  -- Enforce that suspended or rejected projects cannot accept purchases or be reactivated
+  if exists (select 1 from projects where id = v_project_id and moderation_status in ('suspended', 'rejected')) then
+    raise exception 'Project % is suspended or rejected and cannot accept purchases', v_project_id
+      using errcode = 'P0006';
+  end if;
+
+  select current_active_value_minor, current_rank, category_id, title, handle
+  into v_old_value_minor, v_old_rank, v_category_id, v_title, v_handle
+  from projects 
+  where id = v_project_id;
 
   -- 4. Calculate new values in minor units (cents)
   v_old_value_minor := coalesce(v_old_value_minor, 0);
   v_new_value_minor := v_old_value_minor + p_amount_minor;
   v_seq := nextval('global_event_sequence_seq');
 
+  -- Capture pre-recalc board state (ranks 1..100) to track any displaced casualty falling off into Graveyard
+  create temp table if not exists _pre_recalc_ranks (
+    id uuid,
+    current_rank int,
+    title text,
+    handle text,
+    category_id uuid,
+    current_active_value_minor bigint
+  ) on commit drop;
+
+  truncate _pre_recalc_ranks;
+
+  insert into _pre_recalc_ranks (id, current_rank, title, handle, category_id, current_active_value_minor)
+  select id, current_rank, title, handle, category_id, current_active_value_minor
+  from projects
+  where is_active = true and current_rank between 1 and 100;
+
   -- 5. Update buyer project with new active bid value and ranking sequence
+  -- NOTE: moderation_status is NOT overridden here — moderation is independent from payment
   update projects
   set current_active_value_minor = v_new_value_minor,
       ranking_sequence = v_seq,
       total_paid_minor = total_paid_minor + p_amount_minor,
       is_active = true,
-      moderation_status = 'approved',
       updated_at = now()
   where id = v_project_id;
 
   -- 6. Atomically recalculate all board positions 1..100 based on:
   -- ORDER BY current_active_value_minor DESC, ranking_sequence ASC
+  -- ranking_sequence ASC ensures earliest timestamp to reach the current value wins ties
   update projects
   set current_rank = null
   where is_active = true and current_rank is not null;
@@ -166,7 +185,7 @@ begin
 
   -- Mark quote as paid if quote existed
   if v_quote_id is not null then
-    update payment_quotes set status = 'paid' where id = v_quote_id::uuid;
+    update purchase_quotes set status = 'paid', paid_at = now() where id = v_quote_id::uuid;
   end if;
 
   -- 9. Record board displacement in immutable audit journal
@@ -184,6 +203,30 @@ begin
       else 'bumped'::board_event_type
     end
   );
+
+  -- Record casualty event for any project displaced out of the top 100 into the Graveyard
+  insert into board_events (
+    event_sequence, payment_id, project_id, project_title_snapshot, project_handle_snapshot,
+    previous_rank, new_rank, previous_active_value_minor, new_active_value_minor,
+    category_id, profiles_displaced, event_type
+  )
+  select
+    nextval('global_event_sequence_seq'),
+    v_payment_id,
+    pr.id,
+    pr.title,
+    pr.handle,
+    pr.current_rank,
+    101, -- Graveyard rank indicator
+    pr.current_active_value_minor,
+    pr.current_active_value_minor,
+    pr.category_id,
+    1,
+    'left_top_100'::board_event_type
+  from _pre_recalc_ranks pr
+  join projects p on p.id = pr.id
+  where (p.current_rank is null or p.current_rank > 100)
+    and pr.id <> v_project_id;
 
   -- 10. Record webhook event for multi-tier idempotency
   insert into payment_webhook_events (
@@ -208,100 +251,18 @@ revoke execute on function process_dodo_purchase from public, anon, authenticate
 grant execute on function process_dodo_purchase to service_role;
 
 -- ==============================================================================
--- 2. Authoritative Atomic Refund Processing RPC
+-- 2. Refund Policy
 -- ==============================================================================
-create or replace function process_dodo_refund(
-  p_event_id text,
-  p_payment_id text,
-  p_payload jsonb
-) returns jsonb
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  v_payment record;
-  v_seq bigint;
-begin
-  -- 1. Idempotency check
-  if exists (
-    select 1 from payment_webhook_events
-    where provider = 'dodo' and provider_event_id = p_event_id
-  ) then
-    return jsonb_build_object('status', 'already_processed');
-  end if;
-
-  -- 2. Lock Board for serial execution
-  perform pg_advisory_xact_lock(hashtext('board_ranking_mutation'));
-
-  -- 3. Fetch original payment
-  select * into v_payment from payments
-  where provider_payment_id = p_payment_id
-  for update;
-
-  if not found or v_payment.status = 'refunded' then
-    return jsonb_build_object('status', 'ignored', 'message', 'Payment not found or already refunded');
-  end if;
-
-  v_seq := nextval('global_event_sequence_seq');
-
-  -- 4. Restore project's previous active value
-  update projects
-  set current_active_value_minor = v_payment.previous_active_value_minor,
-      total_paid_minor = greatest(0, total_paid_minor - v_payment.amount_minor),
-      ranking_sequence = v_seq,
-      updated_at = now()
-  where id = v_payment.project_id;
-
-  -- 5. Mark payment as refunded
-  update payments
-  set status = 'refunded'::payment_status,
-      updated_at = now()
-  where id = v_payment.id;
-
-  -- 6. Recalculate board ranks
-  update projects
-  set current_rank = null
-  where is_active = true and current_rank is not null;
-
-  with ranked as (
-    select id, row_number() over (
-      order by current_active_value_minor desc, ranking_sequence asc
-    ) as rank_pos
-    from projects
-    where is_active = true and moderation_status = 'approved'
-  )
-  update projects p
-  set current_rank = r.rank_pos
-  from ranked r
-  where p.id = r.id and r.rank_pos <= 100;
-
-  -- 7. Record rollback board event
-  insert into board_events (
-    event_sequence, payment_id, project_id,
-    previous_rank, new_rank,
-    previous_active_value_minor, new_active_value_minor,
-    event_type
-  ) values (
-    v_seq, v_payment.id, v_payment.project_id,
-    v_payment.new_rank, coalesce(v_payment.previous_rank, 101),
-    v_payment.new_active_value_minor, v_payment.previous_active_value_minor,
-    'refund_rollback'::board_event_type
-  );
-
-  -- 8. Record webhook idempotency
-  insert into payment_webhook_events (
-    provider, provider_event_id, payment_id, event_type, payload
-  ) values (
-    'dodo', p_event_id, p_payment_id, 'refund.succeeded', p_payload
-  );
-
-  return jsonb_build_object('status', 'success', 'refunded', true);
-end;
-$$;
-
-revoke execute on function process_dodo_refund from public, anon, authenticated;
-grant execute on function process_dodo_refund to service_role;
+-- BumpOne operates a competitive auction model. Application-level refunds are
+-- intentionally NOT supported because:
+--   1. Payments purchase rank positions that immediately affect other users.
+--   2. Reversing a payment after displacement cascades is logically unsound.
+--   3. Gateway-level chargebacks (Dodo/Stripe disputes) are handled externally
+--      by the payment provider, not by this application.
+--
+-- If a chargeback occurs, an admin can manually suspend the project via the
+-- moderation endpoint, which triggers recalculate_board_ranks().
+-- ==============================================================================
 
 -- ==============================================================================
 -- 3. Correct Atomic Reaction Recording RPC (Fixed double increment bug)
@@ -381,7 +342,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  perform pg_advisory_xact_lock(hashtext('board_ranking_mutation'));
+  perform pg_advisory_xact_lock(733100, 1);
 
   update projects
   set current_rank = null
@@ -403,3 +364,27 @@ $$;
 
 revoke execute on function recalculate_board_ranks from public, anon, authenticated;
 grant execute on function recalculate_board_ranks to service_role;
+
+-- ==============================================================================
+-- 5. Webhook Payload Retention Maintenance Function
+-- ==============================================================================
+-- Prunes raw webhook JSON payloads older than p_days (default 90) to prevent
+-- unbounded table growth while preserving transactional payment ledgers.
+create or replace function prune_old_webhook_events(p_days int default 90)
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_deleted int;
+begin
+  delete from payment_webhook_events
+  where processed_at < now() - (p_days || ' days')::interval;
+  get diagnostics v_deleted = row_count;
+  return v_deleted;
+end;
+$$;
+
+revoke execute on function prune_old_webhook_events from public, anon, authenticated;
+grant execute on function prune_old_webhook_events to service_role;

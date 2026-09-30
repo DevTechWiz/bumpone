@@ -104,7 +104,7 @@ The ranking always satisfies:
 
 active_value(#1) >= active_value(#2) >= active_value(#3) >= ...
 
-The top-up formula guarantees a new purchase strictly exceeds its target. Residual equal values (e.g. after a refund rollback) are ordered by earliest rank-event sequence (monotonic `global_event_sequence`).
+The top-up formula guarantees a new purchase strictly exceeds its target. Residual equal values (e.g. after an admin override) are ordered by earliest rank-event sequence (monotonic `global_event_sequence`).
 
 ---
 

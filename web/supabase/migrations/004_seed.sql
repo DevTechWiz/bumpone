@@ -1,8 +1,10 @@
 -- 004_seed.sql
 -- Seed categories, Genesis projects, initial board events, and initial messages
--- Clean Architecture: operates on projects, board_events, messages
+-- Clean Architecture: operates on categories, projects, board_events, messages
 
--- 1. Insert default categories
+-- ==============================================================================
+-- PART 1: Production-Essential Reference Data (Required in all environments)
+-- ==============================================================================
 insert into categories (name, slug, display_order) values
   ('AI', 'ai', 1),
   ('Apps', 'apps', 2),
@@ -15,7 +17,13 @@ on conflict (slug) do update set
   name = excluded.name,
   display_order = excluded.display_order;
 
--- 2. Seed Genesis Projects (100 spots: #1 = $100 [10000 cents] down to #100 = $1 [100 cents])
+-- ==============================================================================
+-- PART 2: Bootstrap Genesis Board (Initial 100 Slots)
+-- As documented in docs/03_PRICING_SYSTEM.md and docs/21_LAUNCH_PLAN.md,
+-- BumpOne launches with an initial 100-slot Genesis board (#1 = $100 down to #100 = $1).
+-- Note: total_paid_minor is strictly set to 0 (no fake payments recorded in ledger).
+-- Once filled, every subsequent takeover requires target + $10 top-up.
+-- ==============================================================================
 do $$
 declare
   cat_ai uuid;
@@ -95,11 +103,13 @@ begin
       insert into projects (
         title, handle, image_path, destination_url,
         category_id, current_rank, current_active_value_minor,
-        total_paid_minor, ranking_sequence, is_active
+        total_paid_minor, ranking_sequence, is_active,
+        image_pos_x, image_pos_y, image_zoom, frame, views_count
       ) values (
         v_title, v_handle, v_img, v_url,
         v_cat, i, v_val_minor,
-        v_val_minor, 1000 + i, true
+        v_val_minor, 1000 + i, true,
+        50, 50, 1.0, 'default', (101 - i) * 37
       ) returning id into v_project_id;
 
       -- Initial seed board displacement event

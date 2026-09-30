@@ -201,10 +201,8 @@ Authoritative webhook endpoint handling Dodo Payments notifications.
     3. Triggers realtime notification to clients.
     4. Returns `200 OK`.
   * `refund.succeeded`:
-    1. Reverts active value to pre-purchase amount.
-    2. Recalculates rank and shifts other profiles up.
-    3. Records `refund_rollback` event.
-    4. Returns `200 OK`.
+    1. Acknowledged with `200 OK` — no application action taken.
+    2. BumpOne does not support application-level refunds.
   * `dispute.opened`:
     1. Marks purchase as `disputed`.
     2. Logs alert for `/admin`.

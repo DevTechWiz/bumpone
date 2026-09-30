@@ -16,7 +16,7 @@ The canonical ranking source is `current_active_value DESC`. Equal values are or
 If two users buy for the same slot simultaneously and pay the same top-up (e.g. Alice and Bob both pay $110 to claim #1):
 1. **1st confirmed webhook (Alice)** receives sequence #1042 -> takes **Rank #1**.
 2. **2nd confirmed webhook (Bob)** receives sequence #1043 -> takes **Rank #2** (because both have $110, but #1042 < #1043).
-3. Neither payment is rejected or refunded; both users are live on the board.
+3. Neither payment is rejected; both users are live on the board.
 
 ---
 
