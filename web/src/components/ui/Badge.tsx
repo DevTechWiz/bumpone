@@ -1,7 +1,9 @@
 import React, { ReactNode } from 'react';
 import { Crown, Sparkles, Shield, AlertTriangle } from 'lucide-react';
+import { getRankTier, type RankTier } from '@/lib/slotTypes';
 
-export type RankTier = 'king' | 'champion' | 'elite' | 'vanguard' | 'lord' | 'contender';
+export type { RankTier };
+export { getRankTier };
 export type BadgeVariant = 'rank' | 'status' | 'pill' | 'metric';
 
 export interface BadgeProps {
@@ -13,14 +15,6 @@ export interface BadgeProps {
   className?: string;
   children?: ReactNode;
 }
-
-export const getRankTier = (rank: number): RankTier => {
-  if (rank === 1) return 'king';
-  if (rank >= 2 && rank <= 5) return 'champion';
-  if (rank >= 6 && rank <= 15) return 'elite';
-  if (rank >= 16 && rank <= 40) return 'vanguard';
-  return 'contender';
-};
 
 export const Badge: React.FC<BadgeProps> = ({
   variant = 'status',

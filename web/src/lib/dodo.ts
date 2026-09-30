@@ -86,5 +86,6 @@ export function verifyDodoWebhook(rawBody: string, headers: Record<string, strin
   }
 
   const wh = new Webhook(webhookKey);
-  return wh.verify(rawBody, headers);
+  wh.verify(rawBody, headers);
+  return JSON.parse(rawBody);
 }

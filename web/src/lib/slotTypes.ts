@@ -1,3 +1,13 @@
+export type RankTier = 'king' | 'champion' | 'elite' | 'vanguard' | 'lord' | 'contender';
+
+export const getRankTier = (rank: number): RankTier => {
+  if (rank === 1) return 'king';
+  if (rank >= 2 && rank <= 5) return 'champion';
+  if (rank >= 6 && rank <= 15) return 'elite';
+  if (rank >= 16 && rank <= 40) return 'vanguard';
+  return 'contender';
+};
+
 export interface SlotItem {
   id: string;
   rank: number;

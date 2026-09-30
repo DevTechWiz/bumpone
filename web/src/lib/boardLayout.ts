@@ -1,4 +1,4 @@
-import { getRankTier, type RankTier } from '../components/ui/Badge';
+import { getRankTier, type RankTier } from './slotTypes';
 
 export type GridOrientation = 'landscape' | 'portrait';
 
