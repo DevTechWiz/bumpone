@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { buildProfiles } from '@/lib/board';
 
 export async function GET(
   request: NextRequest,
@@ -16,8 +15,11 @@ export async function GET(
     );
 
     if (isSupabaseConfigured) {
-      // 1. Try querying 'projects' table (clean architecture)
-      let { data: project, error } = await supabaseAdmin
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      const cleanHandle = id.startsWith('@') ? id : `@${id}`;
+      const plainHandle = id.startsWith('@') ? id.slice(1) : id;
+
+      let query = supabaseAdmin
         .from('projects')
         .select(`
           id,
@@ -29,16 +31,28 @@ export async function GET(
           current_rank,
           current_active_value_minor,
           total_paid_minor,
+          reactions_fire,
+          reactions_eyes,
+          reactions_heart,
+          reactions_laugh,
+          total_reactions,
           categories(name),
-          reaction_counts(reaction_type, count),
           board_events(event_sequence, previous_rank, new_rank, created_at, profiles_displaced)
-        `)
-        .eq('id', id)
-        .single();
+        `);
+
+      if (isUuid) {
+        query = query.eq('id', id);
+      } else {
+        query = query.or(`handle.eq.${cleanHandle},handle.eq.${plainHandle}`).order('current_rank', { ascending: true });
+      }
+
+      const { data: projectList, error: queryErr } = await query.limit(1);
+      let project = projectList && projectList.length > 0 ? projectList[0] : null;
+      let error = queryErr;
 
       // Fallback if board_events or legacy schema differs
       if (error || !project) {
-        const { data: fallbackProj, error: fallbackErr } = await supabaseAdmin
+        let fallbackQuery = supabaseAdmin
           .from('projects')
           .select(`
             id,
@@ -49,27 +63,34 @@ export async function GET(
             current_rank,
             current_active_value_minor,
             total_paid_minor,
-            categories(name),
-            reaction_counts(reaction_type, count)
-          `)
-          .eq('id', id)
-          .single();
+            reactions_fire,
+            reactions_eyes,
+            reactions_heart,
+            reactions_laugh,
+            total_reactions,
+            categories(name)
+          `);
 
-        if (!fallbackErr && fallbackProj) {
-          project = fallbackProj as any;
+        if (isUuid) {
+          fallbackQuery = fallbackQuery.eq('id', id);
+        } else {
+          fallbackQuery = fallbackQuery.or(`handle.eq.${cleanHandle},handle.eq.${plainHandle}`).order('current_rank', { ascending: true });
+        }
+
+        const { data: fbList, error: fbErr } = await fallbackQuery.limit(1);
+        if (!fbErr && fbList && fbList.length > 0) {
+          project = fbList[0] as any;
           error = null;
         }
       }
 
       if (!error && project) {
-        const reactions = { fire: 0, eyes: 0, heart: 0, laugh: 0 };
-        if (Array.isArray((project as any).reaction_counts)) {
-          for (const r of (project as any).reaction_counts) {
-            if (r.reaction_type in reactions) {
-              reactions[r.reaction_type as keyof typeof reactions] = r.count;
-            }
-          }
-        }
+        const reactions = {
+          fire: Number((project as any).reactions_fire || 0),
+          eyes: Number((project as any).reactions_eyes || 0),
+          heart: Number((project as any).reactions_heart || 0),
+          laugh: Number((project as any).reactions_laugh || 0),
+        };
 
         const categoryName = Array.isArray((project as any).categories)
           ? (project as any).categories[0]?.name
@@ -81,7 +102,7 @@ export async function GET(
 
         return NextResponse.json({
           id: project.id,
-          name: (project as any).title || (project as any).display_name || 'Anonymous Challenger',
+          name: (project as any).title || (project as any).display_name || 'N/A',
           handle: project.handle,
           category: categoryName || 'Tech',
           active_value: activeValue,
@@ -95,32 +116,7 @@ export async function GET(
       }
     }
 
-    // Fallback: search in memory profiles
-    const profiles = buildProfiles();
-    const found = profiles.find((p) => p.id === id);
-
-    if (!found) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({
-      id: found.id,
-      name: found.name,
-      handle: found.handle,
-      category: found.category,
-      active_value: found.active_value,
-      total_paid: found.active_value + (found.times_bumped * 15),
-      imageUrl: found.imageUrl,
-      linkUrl: found.linkUrl,
-      rank: found.peak_rank,
-      peak_rank: found.peak_rank,
-      times_bumped: found.times_bumped,
-      times_climbed: found.times_climbed,
-      views: found.views,
-      shares: found.shares,
-      reactions: found.reactions,
-      journey: found.journey,
-    });
+    return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
   } catch (err: any) {
     console.error('Error fetching profile:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

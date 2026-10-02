@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { ensurePublicUser } from '@/lib/userSync';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -10,11 +11,15 @@ export async function GET(request: Request) {
   if (code) {
     try {
       const supabase = await createServerSupabaseClient();
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error && data?.session?.user) {
+        // Create entry in public.users if first time authenticating
+        await ensurePublicUser(data.session.user);
         return NextResponse.redirect(`${origin}${next}`);
       }
-      console.error('Auth code exchange error:', error);
+      if (error) {
+        console.error('Auth code exchange error:', error);
+      }
     } catch (err) {
       console.error('Auth callback failure:', err);
     }

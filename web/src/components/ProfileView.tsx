@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useMemo, useState, useEffect, useRef } from "react";
 import {
   ArrowLeft,
@@ -26,8 +27,18 @@ import {
   User as UserIcon,
   Edit3,
   ChevronDown,
+  Lock,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 import { Badge, Button, Modal, Input } from "./ui";
+import type { TopUpOrder } from "./TakeOverModal";
+import type { SlotItem } from "../lib/slotTypes";
+
+const TakeOverModal = dynamic(
+  () => import("./TakeOverModal").then((m) => m.TakeOverModal),
+  { ssr: false }
+);
 
 function XTwitterIcon({ className }: { className?: string }) {
   return (
@@ -51,19 +62,18 @@ function GitHubIcon({ className }: { className?: string }) {
 import {
   REACTION_EMOJI,
   CATEGORIES,
-  CREATORS,
-  getCreator,
-  buildProfiles,
   sortBoard,
   money,
   type ReactionKey,
   type Profile,
   type Category,
   type User,
+  getHandleCooldownRemainingDays,
 } from "../lib/board";
 import { soundEngine } from "../lib/sound";
 import { useAuth } from "../lib/useAuth";
-import { safeGetJSON } from "../lib/storage";
+import { createClient } from "../lib/supabase/client";
+import { sessionGetJSON, safeGetJSON } from "../lib/storage";
 
 export interface ProfileViewProps {
   profileId: string;
@@ -73,6 +83,7 @@ export interface ProfileViewProps {
   onClaimSlot?: () => void;
   onOpenAlerts?: () => void;
   onBumpProject?: (projectId: string) => void;
+  onRequireAuth?: () => void;
 }
 
 export function ProfileView({
@@ -83,173 +94,409 @@ export function ProfileView({
   onClaimSlot,
   onOpenAlerts,
   onBumpProject,
+  onRequireAuth,
 }: ProfileViewProps) {
   const { user } = useAuth();
 
-  // Load board projects/slots from localStorage or generate seed
+  // Real board profiles from database
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     if (typeof window !== "undefined") {
-      const saved = safeGetJSON<Profile[]>("bumped_profiles_v2");
-      if (saved && Array.isArray(saved) && saved.length > 0) {
-        return saved;
+      const cached = sessionGetJSON<Profile[]>("bumped_board_cache");
+      if (cached && Array.isArray(cached) && cached.length > 0) return cached;
+      const saved = safeGetJSON<Profile[]>("bumped_board_profiles");
+      if (saved && Array.isArray(saved) && saved.length > 0) return saved;
+    }
+    return [];
+  });
+
+  // Fetch real board profiles from database
+  useEffect(() => {
+    fetch("/api/board?limit=120")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          setProfiles(data.profiles);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch board profiles:", err);
+      });
+  }, []);
+
+  const cleanId = (profileId || "self").toLowerCase().replace("@", "").trim();
+
+  // User profile state (for self)
+  const [selfProfile, setSelfProfile] = useState<User>({
+    id: user?.id || "self",
+    name: "N/A",
+    handle: "N/A",
+    avatar_url: "",
+    bio: "",
+    website: "",
+    twitter: "",
+    github: "",
+  });
+
+  // Fetch authenticated user profile from Supabase
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+    let isCancelled = false;
+
+    async function loadUserProfile() {
+      try {
+        const supabase = createClient();
+        const res = await supabase
+          .from("users")
+          .select("id, handle, display_name, avatar_url, bio, website, twitter, github, created_at, handle_last_changed_at")
+          .eq("id", userId)
+          .maybeSingle();
+
+        let userData: any = res.data;
+        if (res.error && res.error.message?.includes("handle_last_changed_at")) {
+          const fallback = await supabase
+            .from("users")
+            .select("id, handle, display_name, avatar_url, bio, website, twitter, github, created_at")
+            .eq("id", userId)
+            .maybeSingle();
+          userData = fallback.data;
+        }
+
+        if (!isCancelled && userData) {
+          setSelfProfile({
+            id: userData.id,
+            name: userData.display_name || "N/A",
+            handle: userData.handle || "N/A",
+            avatar_url: userData.avatar_url || "",
+            bio: userData.bio || "",
+            website: userData.website || "",
+            twitter: userData.twitter || "",
+            github: userData.github || "",
+            created_at: userData.created_at,
+            handle_last_changed_at: userData.handle_last_changed_at || undefined,
+          });
+          return;
+        }
+
+        // If row in public.users doesn't exist yet, sync with server
+        if (!isCancelled && !userData) {
+          const res = await fetch("/api/auth/sync", { method: "POST" });
+          if (res.ok) {
+            const synced = await res.json();
+            if (synced?.user && !isCancelled) {
+              setSelfProfile({
+                id: synced.user.id,
+                name: synced.user.display_name || "N/A",
+                handle: synced.user.handle || "N/A",
+                avatar_url: synced.user.avatar_url || "",
+                bio: synced.user.bio || "",
+                website: synced.user.website || "",
+                twitter: synced.user.twitter || "",
+                github: synced.user.github || "",
+                created_at: synced.user.created_at,
+                handle_last_changed_at: synced.user.handle_last_changed_at || undefined,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load user profile:", e);
       }
     }
-    return buildProfiles();
-  });
 
-  // Local customized user profile state (for self)
-  const defaultUserHandle = user?.user_metadata?.user_name || user?.email?.split("@")[0] || "creator";
-  const defaultDisplayName =
-    user?.user_metadata?.custom_claims?.global_name ||
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.user_name ||
-    user?.email?.split("@")[0] ||
-    "Creator";
-
-  const [selfProfile, setSelfProfile] = useState<User>(() => {
-    if (typeof window !== "undefined") {
-      const saved = safeGetJSON<User>("bumped_user");
-      if (saved && saved.name) return saved;
-    }
-    return {
-      id: user?.id || "self",
-      name: defaultDisplayName,
-      handle: defaultUserHandle,
-      avatar_url:
-        user?.user_metadata?.avatar_url ||
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80",
-      bio: "Creator and builder on BumpOne. Shipping high-signal products to the wall.",
-      website: "https://bumpone.lol",
-      twitter: defaultUserHandle,
-      github: defaultUserHandle,
-      joined_days_ago: 12,
+    loadUserProfile();
+    return () => {
+      isCancelled = true;
     };
-  });
-
-  // Determine whether viewing Self, Other Creator, or Project
-  const cleanId = (profileId || "self").toLowerCase().replace("@", "").trim();
+  }, [user]);
 
   const isSelf =
     cleanId === "self" ||
     cleanId === "me" ||
-    Boolean(user && (cleanId === user.id.toLowerCase() || cleanId === defaultUserHandle.toLowerCase()));
+    Boolean(user && (cleanId === user.id.toLowerCase() || (selfProfile.handle && cleanId === selfProfile.handle.toLowerCase())));
+
+  // Fetch remote creator profile if viewing someone else
+  const [remoteCreator, setRemoteCreator] = useState<User | null>(null);
+
+  useEffect(() => {
+    if (isSelf || !cleanId || cleanId === "self" || cleanId === "me") return;
+    let isCancelled = false;
+
+    async function loadRemoteCreator() {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, handle, display_name, avatar_url, bio, website, twitter, github, created_at")
+          .or(`handle.eq.${cleanId},id.eq.${cleanId}`)
+          .single();
+
+        if (!isCancelled && !error && data) {
+          setRemoteCreator({
+            id: data.id,
+            name: data.display_name || "N/A",
+            handle: data.handle || cleanId,
+            avatar_url: data.avatar_url || "",
+            bio: data.bio || "",
+            website: data.website || "",
+            twitter: data.twitter || "",
+            github: data.github || "",
+            created_at: data.created_at,
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to load remote creator:", e);
+      }
+    }
+
+    loadRemoteCreator();
+    return () => {
+      isCancelled = true;
+    };
+  }, [isSelf, cleanId]);
 
   // Check if cleanId matches an existing creator profile
   const matchedCreator: User | undefined = useMemo(() => {
     if (isSelf) return undefined;
-    const direct = getCreator(cleanId);
-    if (direct) return direct;
+    if (remoteCreator) return remoteCreator;
 
-    const fromCreators = CREATORS.find(
-      (c) =>
-        c.id.toLowerCase() === cleanId ||
-        c.handle.toLowerCase() === cleanId ||
-        c.name.toLowerCase() === cleanId
-    );
-    if (fromCreators) return fromCreators;
-
-    // Check if any project has this owner
+    // Check if any loaded project matches this owner or handle
     const foundProject = profiles.find(
       (p) =>
         p.owner_id?.toLowerCase() === cleanId ||
         p.owner_handle?.toLowerCase().replace("@", "") === cleanId ||
-        p.owner_name?.toLowerCase() === cleanId
+        p.owner_name?.toLowerCase() === cleanId ||
+        p.handle?.toLowerCase().replace("@", "") === cleanId
     );
-    if (foundProject && foundProject.owner_name) {
+    if (foundProject) {
       return {
-        id: foundProject.owner_id || cleanId,
-        name: foundProject.owner_name,
+        id: foundProject.owner_id || foundProject.id || cleanId,
+        name: foundProject.owner_name || foundProject.name || cleanId,
         handle: (foundProject.owner_handle || foundProject.handle || cleanId).replace("@", ""),
-        avatar_url:
-          foundProject.owner_avatar ||
-          "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80",
-        bio: foundProject.owner_bio || "Creator and product builder on BumpOne.",
-        joined_days_ago: foundProject.joined_days_ago || 30,
+        avatar_url: foundProject.owner_avatar || foundProject.imageUrl || "",
+        bio: foundProject.owner_bio || "",
+        joined_days_ago: foundProject.joined_days_ago,
       };
     }
 
     return undefined;
-  }, [isSelf, cleanId, profiles]);
+  }, [isSelf, remoteCreator, cleanId, profiles]);
 
   // Is viewing a user (self or other creator) vs single project showcase
   const isViewingUser = isSelf || Boolean(matchedCreator);
 
   // Active creator profile when in user view
-  const activeUser: User = isSelf
-    ? selfProfile
-    : matchedCreator || {
-        id: cleanId,
-        name: cleanId,
-        handle: cleanId,
-        avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80",
-        bio: "Builder on BumpOne.",
-        joined_days_ago: 1,
-      };
+  const fallbackUser = useMemo(
+    (): User => ({
+      id: cleanId,
+      name: cleanId || "N/A",
+      handle: cleanId || "N/A",
+      avatar_url: "",
+      bio: "",
+    }),
+    [cleanId]
+  );
+
+  const activeUser: User = useMemo(() => {
+    if (isSelf) return selfProfile;
+    if (matchedCreator) return matchedCreator;
+    return fallbackUser;
+  }, [isSelf, selfProfile, matchedCreator, fallbackUser]);
+
+  // Human-readable joined text or "N/A"
+  const joinedDisplay = useMemo(() => {
+    if (activeUser.created_at) {
+      const diffMs = Date.now() - new Date(activeUser.created_at).getTime();
+      const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      return diffDays === 0 ? "today" : `${diffDays}d ago`;
+    }
+    if (activeUser.joined_days_ago != null && activeUser.joined_days_ago > 0) {
+      return `${activeUser.joined_days_ago}d ago`;
+    }
+    return "N/A";
+  }, [activeUser.created_at, activeUser.joined_days_ago]);
 
   // Projects owned by this active creator profile
   const creatorProjects = useMemo(() => {
     if (isSelf) {
-      if (!user) return [];
-      const userHandle = (selfProfile.handle || defaultUserHandle || '').toLowerCase().replace('@', '');
+      if (!user && (!selfProfile.handle || selfProfile.handle === "N/A")) return [];
+      const userHandle = (selfProfile.handle || "").toLowerCase().replace("@", "");
       return profiles.filter(
         (x) =>
           Boolean(user && x.owner_id === user.id) ||
-          Boolean(userHandle && x.owner_handle?.toLowerCase().replace('@', '') === userHandle) ||
-          Boolean(userHandle && x.handle.toLowerCase().replace('@', '') === userHandle)
+          Boolean(userHandle && userHandle !== "n/a" && x.owner_handle?.toLowerCase().replace("@", "") === userHandle) ||
+          Boolean(userHandle && userHandle !== "n/a" && x.handle.toLowerCase().replace("@", "") === userHandle)
       );
     }
 
     if (matchedCreator) {
+      const creatorHandle = (matchedCreator.handle || "").toLowerCase().replace("@", "");
       return profiles.filter(
         (x) =>
-          x.owner_id?.toLowerCase() === matchedCreator.id.toLowerCase() ||
-          x.owner_handle?.toLowerCase().replace("@", "") === matchedCreator.handle.toLowerCase() ||
-          x.handle.toLowerCase().replace("@", "") === matchedCreator.handle.toLowerCase() ||
-          x.owner_name?.toLowerCase() === matchedCreator.name.toLowerCase()
+          (matchedCreator.id && x.owner_id?.toLowerCase() === matchedCreator.id.toLowerCase()) ||
+          (creatorHandle && creatorHandle !== "n/a" && x.owner_handle?.toLowerCase().replace("@", "") === creatorHandle) ||
+          (creatorHandle && creatorHandle !== "n/a" && x.handle.toLowerCase().replace("@", "") === creatorHandle) ||
+          (matchedCreator.name && matchedCreator.name !== "N/A" && x.owner_name?.toLowerCase() === matchedCreator.name.toLowerCase())
       );
     }
 
     return [];
-  }, [isSelf, user, selfProfile, defaultUserHandle, matchedCreator, profiles]);
+  }, [isSelf, user, selfProfile, matchedCreator, profiles]);
 
   // If viewing a single project showcase
   const singleProject = useMemo((): Profile => {
     if (isViewingUser) {
-      return (
-        creatorProjects[0] || {
-          id: "slot-preview",
-          name: "Project Title",
-          handle: `@${activeUser.handle}`,
-          category: "Tech",
-          active_value: 0,
-          seq: 0,
-          imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=700&auto=format&fit=crop&q=80",
-          linkUrl: "https://bumpone.lol",
-          owner_id: activeUser.id,
-          owner_name: activeUser.name,
-          owner_handle: activeUser.handle,
-          owner_avatar: activeUser.avatar_url,
-          views: 0,
-          shares: 0,
-          times_bumped: 0,
-          times_climbed: 0,
-          joined_days_ago: 0,
-          last_bump_at: Date.now(),
-          peak_rank: 0,
-          journey: [],
-          reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
-        }
-      );
+      if (creatorProjects.length > 0) {
+        return creatorProjects[0];
+      }
+      return {
+        id: "slot-preview",
+        name: activeUser.name || "N/A",
+        handle: activeUser.handle && activeUser.handle !== "N/A" ? `@${activeUser.handle}` : "N/A",
+        category: "Tech",
+        active_value: 0,
+        seq: 0,
+        imageUrl: "",
+        linkUrl: "",
+        owner_id: activeUser.id,
+        owner_name: activeUser.name,
+        owner_handle: activeUser.handle,
+        owner_avatar: activeUser.avatar_url,
+        views: 0,
+        shares: 0,
+        times_bumped: 0,
+        times_climbed: 0,
+        joined_days_ago: 0,
+        last_bump_at: 0,
+        peak_rank: 0,
+        journey: [],
+        reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
+      };
     }
-    return profiles.find((x) => x.id === profileId) ?? profiles[0];
-  }, [isViewingUser, creatorProjects, activeUser, profileId, profiles]);
+    return (
+      profiles.find(
+        (x) =>
+          x.id === profileId ||
+          x.id === cleanId ||
+          x.seq.toString() === cleanId ||
+          x.name.toLowerCase() === cleanId ||
+          x.handle?.toLowerCase().replace("@", "") === cleanId
+      ) ?? {
+        id: profileId,
+        seq: 0,
+        name: "N/A",
+        handle: "N/A",
+        category: "Tech",
+        active_value: 0,
+        imageUrl: "",
+        linkUrl: "",
+        peak_rank: 0,
+        times_bumped: 0,
+        times_climbed: 0,
+        views: 0,
+        shares: 0,
+        joined_days_ago: 0,
+        last_bump_at: 0,
+        journey: [],
+        reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
+      }
+    );
+  }, [isViewingUser, creatorProjects, activeUser, profileId, cleanId, profiles]);
 
-  const [p, setP] = useState<Profile>(singleProject);
-  useEffect(() => {
-    setP(singleProject);
-  }, [singleProject]);
+  const p: Profile = singleProject;
 
   const sorted = useMemo(() => sortBoard(profiles), [profiles]);
+
+  const slots: SlotItem[] = useMemo(() => {
+    return sorted.map((item, idx) => ({
+      id: item.id,
+      rank: idx + 1,
+      imageUrl: item.imageUrl,
+      linkUrl: item.linkUrl,
+      title: item.name,
+      bidderName: item.handle,
+      amountPaid: item.active_value,
+      createdAt: item.last_bump_at,
+      imagePosX: item.imagePosX,
+      imagePosY: item.imagePosY,
+      imageZoom: item.imageZoom,
+      owner_id: item.owner_id,
+      owner_name: item.owner_name,
+      owner_handle: item.owner_handle,
+      owner_avatar: item.owner_avatar,
+      category: item.category,
+      reactions: item.reactions,
+    }));
+  }, [sorted]);
+
+  const entryFloor = useMemo(() => {
+    if (sorted.length < 100) return 10;
+    const lastActive = sorted[99];
+    return lastActive ? lastActive.active_value + 10 : 10;
+  }, [sorted]);
+
+  const [isBiddingOpen, setIsBiddingOpen] = useState(false);
+  const [targetSlotToBump, setTargetSlotToBump] = useState<SlotItem | null>(null);
+
+  const handleClaim = () => {
+    soundEngine.playClick();
+    if (!user) {
+      if (onRequireAuth) {
+        onRequireAuth();
+        return;
+      }
+    }
+    if (onClaimSlot) {
+      onClaimSlot();
+    } else {
+      setTargetSlotToBump(null);
+      setIsBiddingOpen(true);
+    }
+  };
+
+  const handleBump = (proj: Profile) => {
+    soundEngine.playClick();
+    if (!user) {
+      if (onRequireAuth) {
+        onRequireAuth();
+        return;
+      }
+    }
+    if (onBumpProject) {
+      onBumpProject(proj.id);
+    } else {
+      const slot = slots.find((s) => s.id === proj.id) || {
+        id: proj.id,
+        rank: sorted.findIndex((s) => s.id === proj.id) + 1 || 100,
+        imageUrl: proj.imageUrl,
+        linkUrl: proj.linkUrl,
+        title: proj.name,
+        bidderName: proj.handle,
+        amountPaid: proj.active_value,
+        createdAt: proj.last_bump_at || Date.now(),
+        category: proj.category,
+        owner_id: proj.owner_id,
+        owner_name: proj.owner_name,
+        owner_handle: proj.owner_handle,
+        owner_avatar: proj.owner_avatar,
+      };
+      setTargetSlotToBump(slot);
+      setIsBiddingOpen(true);
+    }
+  };
+
+  const handleProcessTopUp = (_order: TopUpOrder) => {
+    soundEngine.playCoronation();
+    fetch("/api/board?limit=120")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          setProfiles(data.profiles);
+        }
+      })
+      .catch(() => {});
+  };
+
   const hasSlotOnGrid = Boolean(p.id !== "slot-preview" && p.active_value > 0);
   const globalRank = hasSlotOnGrid ? sorted.findIndex((x) => x.id === p.id) + 1 : 0;
   const catRank = hasSlotOnGrid
@@ -261,8 +508,8 @@ export function ProfileView({
     isSelf ||
     (user && (
       p.owner_id === user.id ||
-      (selfProfile.handle && p.owner_handle?.toLowerCase().replace("@", "") === selfProfile.handle.toLowerCase()) ||
-      (selfProfile.name && p.owner_name?.toLowerCase() === selfProfile.name.toLowerCase())
+      (selfProfile.handle && selfProfile.handle !== "N/A" && p.owner_handle?.toLowerCase().replace("@", "") === selfProfile.handle.toLowerCase()) ||
+      (selfProfile.name && selfProfile.name !== "N/A" && p.owner_name?.toLowerCase() === selfProfile.name.toLowerCase())
     ))
   );
 
@@ -278,39 +525,222 @@ export function ProfileView({
   const [profileSavedSuccess, setProfileSavedSuccess] = useState(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
+  const [handleCheckError, setHandleCheckError] = useState<string | null>(null);
+  const [handleCheckSuccess, setHandleCheckSuccess] = useState(false);
+  const [isCheckingHandle, setIsCheckingHandle] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
+
+  // 30-day handle cooldown calculation
+  const cooldownDaysRemaining = useMemo(() => {
+    return getHandleCooldownRemainingDays(selfProfile.handle_last_changed_at);
+  }, [selfProfile.handle_last_changed_at]);
+
   const handleOpenEditUser = () => {
     soundEngine.playClick();
-    setProfileEditName(selfProfile.name);
-    setProfileEditHandle(selfProfile.handle);
+    setProfileEditName(selfProfile.name !== "N/A" ? selfProfile.name : "");
+    setProfileEditHandle(selfProfile.handle !== "N/A" ? selfProfile.handle : "");
     setProfileEditBio(selfProfile.bio || "");
     setProfileEditAvatar(selfProfile.avatar_url || "");
     setProfileEditWebsite(selfProfile.website || "");
     setProfileEditTwitter(selfProfile.twitter || "");
     setProfileEditGithub(selfProfile.github || "");
     setProfileSavedSuccess(false);
+    setHandleCheckError(null);
+    setHandleCheckSuccess(false);
+    setAvatarUploadError(null);
     setIsEditingUser(true);
+  };
+
+  // Debounced handle validation & database uniqueness check
+  useEffect(() => {
+    if (!isEditingUser) return;
+    const cleanCurrent = (selfProfile.handle || "").replace(/^@/, "").trim().toLowerCase();
+    const cleanNew = profileEditHandle.replace(/^@/, "").trim().toLowerCase();
+
+    if (!cleanNew) {
+      setHandleCheckError("Handle cannot be empty");
+      setHandleCheckSuccess(false);
+      setIsCheckingHandle(false);
+      return;
+    }
+
+    if (cleanNew === cleanCurrent) {
+      setHandleCheckError(null);
+      setHandleCheckSuccess(false);
+      setIsCheckingHandle(false);
+      return;
+    }
+
+    if (cooldownDaysRemaining > 0) {
+      setHandleCheckError(`Handle locked. Next change available in ${cooldownDaysRemaining} day${cooldownDaysRemaining === 1 ? "" : "s"}.`);
+      setHandleCheckSuccess(false);
+      setIsCheckingHandle(false);
+      return;
+    }
+
+    if (cleanNew.length < 2) {
+      setHandleCheckError("Handle must be at least 2 characters.");
+      setHandleCheckSuccess(false);
+      setIsCheckingHandle(false);
+      return;
+    }
+    if (cleanNew.length > 30) {
+      setHandleCheckError("Handle cannot exceed 30 characters.");
+      setHandleCheckSuccess(false);
+      setIsCheckingHandle(false);
+      return;
+    }
+    if (!/^[a-z0-9_]+$/.test(cleanNew)) {
+      setHandleCheckError("Only letters, numbers, and underscores allowed.");
+      setHandleCheckSuccess(false);
+      setIsCheckingHandle(false);
+      return;
+    }
+
+    setIsCheckingHandle(true);
+    setHandleCheckError(null);
+    setHandleCheckSuccess(false);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/profile/check-handle?handle=${encodeURIComponent(cleanNew)}&userId=${encodeURIComponent(user?.id || "")}`
+        );
+        const data = await res.json();
+        if (!res.ok || !data.available) {
+          setHandleCheckError(data.error || "This @handle is already taken.");
+          setHandleCheckSuccess(false);
+        } else {
+          setHandleCheckError(null);
+          setHandleCheckSuccess(true);
+        }
+      } catch (err) {
+        console.warn("Handle check error:", err);
+      } finally {
+        setIsCheckingHandle(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [profileEditHandle, isEditingUser, selfProfile.handle, cooldownDaysRemaining, user?.id]);
+
+  // Handle direct avatar upload via /api/uploads/image
+  const handleAvatarFile = async (file: File) => {
+    setAvatarUploadError(null);
+    const validMimes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validMimes.includes(file.type)) {
+      setAvatarUploadError("Please upload a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarUploadError("Image size must be less than 5MB.");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads/image", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.url) {
+        setProfileEditAvatar(data.url);
+        soundEngine.playClick();
+      } else {
+        // Fallback to FileReader base64
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ev.target?.result) {
+            setProfileEditAvatar(ev.target.result as string);
+            soundEngine.playClick();
+          }
+        };
+        reader.readAsDataURL(file);
+        if (data?.error && !data.error.includes("Authentication")) {
+          setAvatarUploadError(data.error);
+        }
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          setProfileEditAvatar(ev.target.result as string);
+          soundEngine.playClick();
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
+    if (handleCheckError) {
+      return;
+    }
+    const cleanCurrent = (selfProfile.handle || "").replace(/^@/, "").trim().toLowerCase();
+    const cleanNew = profileEditHandle.replace(/^@/, "").trim().toLowerCase();
+    const isHandleChanged = Boolean(cleanNew && cleanNew !== cleanCurrent);
+
+    if (isHandleChanged && cooldownDaysRemaining > 0) {
+      setHandleCheckError(`You can only change your @handle once every 30 days.`);
+      return;
+    }
+
     soundEngine.playClick();
+    const nowIso = new Date().toISOString();
     const updated: User = {
       ...selfProfile,
-      name: profileEditName.trim() || selfProfile.name,
-      handle: profileEditHandle.trim().replace("@", "") || selfProfile.handle,
+      name: profileEditName.trim() || (selfProfile.name !== "N/A" ? selfProfile.name : "N/A"),
+      handle: cleanNew || (selfProfile.handle !== "N/A" ? selfProfile.handle : "N/A"),
       bio: profileEditBio.trim(),
-      avatar_url: profileEditAvatar.trim() || selfProfile.avatar_url,
+      avatar_url: profileEditAvatar.trim(),
       website: profileEditWebsite.trim(),
       twitter: profileEditTwitter.trim().replace("@", ""),
       github: profileEditGithub.trim(),
+      handle_last_changed_at: isHandleChanged ? nowIso : selfProfile.handle_last_changed_at,
     };
     setSelfProfile(updated);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("bumped_user", JSON.stringify(updated));
-      } catch (err) {
-        console.warn("Failed to persist user:", err);
-      }
+
+    if (user) {
+      const currentUserId = user.id;
+      (async () => {
+        try {
+          const supabase = createClient();
+          const updatePayload: Record<string, any> = {
+            display_name: updated.name !== "N/A" ? updated.name : null,
+            handle: updated.handle !== "N/A" ? updated.handle : null,
+            bio: updated.bio || null,
+            avatar_url: updated.avatar_url || null,
+            website: updated.website || null,
+            twitter: updated.twitter || null,
+            github: updated.github || null,
+            updated_at: nowIso,
+          };
+          if (isHandleChanged) {
+            updatePayload.handle_last_changed_at = nowIso;
+          }
+          let { error } = await supabase
+            .from("users")
+            .update(updatePayload)
+            .eq("id", currentUserId);
+
+          if (error && error.message?.includes("handle_last_changed_at")) {
+            delete updatePayload.handle_last_changed_at;
+            await supabase
+              .from("users")
+              .update(updatePayload)
+              .eq("id", currentUserId);
+          }
+        } catch (err) {
+          console.warn("Supabase update error:", err);
+        }
+      })();
     }
     setProfileSavedSuccess(true);
     setTimeout(() => {
@@ -444,16 +874,32 @@ export function ProfileView({
 
     const nextProfiles = profiles.map((item) => (item.id === updated.id ? updated : item));
     setProfiles(nextProfiles);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("bumped_profiles_v2", JSON.stringify(nextProfiles));
-      } catch (err) {
-        console.warn("Failed to persist profiles to localStorage:", err);
-      }
+
+    if (onUpdateProfile) {
+      onUpdateProfile(updated);
     }
 
-    if (p.id === updated.id) {
-      setP(updated);
+    // Persist project changes directly to Supabase database
+    if (user) {
+      (async () => {
+        try {
+          const supabase = createClient();
+          await supabase
+            .from("projects")
+            .update({
+              title: updated.name,
+              destination_url: updated.linkUrl,
+              image_path: updated.imageUrl,
+              image_pos_x: updated.imagePosX ?? 50,
+              image_pos_y: updated.imagePosY ?? 50,
+              image_zoom: updated.imageZoom ?? 1,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", updated.id);
+        } catch (err) {
+          console.warn("Failed to persist project update to database:", err);
+        }
+      })();
     }
 
     setSavedSuccess(true);
@@ -471,7 +917,7 @@ export function ProfileView({
     soundEngine.playClick();
     if (typeof window !== "undefined" && navigator.clipboard) {
       const link = isViewingUser
-        ? `${window.location.origin}/profile/${isSelf ? "self" : activeUser.handle}`
+        ? `${window.location.origin}/profile/${isSelf ? "self" : activeUser.handle !== "N/A" ? activeUser.handle : activeUser.id}`
         : `${window.location.origin}/project/${p.id}`;
       navigator.clipboard.writeText(link);
       setCopiedLink(true);
@@ -481,10 +927,11 @@ export function ProfileView({
 
   const handleFlexOnX = () => {
     soundEngine.playClick();
+    const handleText = activeUser.handle && activeUser.handle !== "N/A" ? `@${activeUser.handle}` : activeUser.name;
     const text = encodeURIComponent(
       isViewingUser
-        ? `Check out @${activeUser.handle}'s projects on @bumpone_lol!\n\nhttps://bumpone.lol/profile/${activeUser.handle}`
-        : `Check out #${globalRank} "${p.name}" on @bumpone_lol with ${money(p.active_value)} active value!\n\nhttps://bumpone.lol/project/${p.id}`
+        ? `Check out ${handleText}'s projects on @bumpone_lol!\n\nhttps://bumpone.lol/profile/${activeUser.handle !== "N/A" ? activeUser.handle : "self"}`
+        : `Check out #${hasSlotOnGrid && globalRank > 0 ? globalRank : "N/A"} "${p.name}" on @bumpone_lol with ${money(p.active_value)} active value!\n\nhttps://bumpone.lol/project/${p.id}`
     );
     window.open(`https://x.com/intent/tweet?text=${text}`, "_blank", "noopener,noreferrer");
   };
@@ -501,6 +948,78 @@ export function ProfileView({
         )
       : 0;
   const totalViews = creatorProjects.reduce((acc, x) => acc + (x.views || 0), 0);
+
+  if (isSelf && !user) {
+    return (
+      <div className="mx-auto max-w-[640px] w-full px-4 sm:px-6 py-12">
+        <div className="flex items-center justify-between mb-8">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer bg-white/[0.04] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg border border-white/[0.08]"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Grid
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors bg-white/[0.04] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg border border-white/[0.08]"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Grid
+            </Link>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-white/[0.1] bg-[#18191d]/90 p-8 sm:p-10 shadow-2xl backdrop-blur-xl text-center space-y-6">
+          <div className="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-xl shadow-amber-500/10">
+            <Lock className="w-10 h-10" />
+          </div>
+
+          <div className="space-y-2 max-w-md mx-auto">
+            <h1 className="text-2xl font-bold text-white tracking-tight">
+              Creator Account Required
+            </h1>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Sign in with your Google or X / Twitter account to view your dashboard, manage your projects on the 100-slot wall, and edit your verified creator profile.
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              leftIcon={<UserCheck className="w-4 h-4 fill-zinc-950" />}
+              onClick={() => {
+                if (onRequireAuth) onRequireAuth();
+                else if (typeof window !== "undefined") window.location.href = "/?auth=true";
+              }}
+              className="w-full sm:w-auto font-bold px-8 py-3 shadow-lg shadow-amber-500/20"
+            >
+              Sign In / Connect Account
+            </Button>
+            {onBack ? (
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={onBack}
+                className="w-full sm:w-auto text-xs text-slate-400 hover:text-white"
+              >
+                Return to Grid
+              </Button>
+            ) : (
+              <Link
+                href="/"
+                className="w-full sm:w-auto text-xs text-slate-400 hover:text-white py-3 px-4 rounded-lg bg-white/[0.04] border border-white/[0.08]"
+              >
+                Return to Grid
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[1080px] w-full px-4 sm:px-6 py-2">
@@ -524,25 +1043,6 @@ export function ProfileView({
         )}
 
         <div className="flex items-center gap-2">
-          {isSelf && (
-            <>
-              <button
-                type="button"
-                onClick={handleOpenEditUser}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] px-3 py-1.5 rounded-lg border border-white/[0.1] transition-colors cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-slate-400" /> Edit Profile
-              </button>
-              <button
-                type="button"
-                onClick={onClaimSlot}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg border border-amber-500/30 transition-all cursor-pointer shadow-sm"
-              >
-                <Plus className="w-3.5 h-3.5" /> Bid New Project
-              </button>
-            </>
-          )}
-
           {!isViewingUser && isOwnerOfP && (
             <Button
               variant="outline"
@@ -586,37 +1086,37 @@ export function ProfileView({
                 {activeUser.avatar_url ? (
                   <img
                     src={activeUser.avatar_url}
-                    alt={activeUser.name}
+                    alt={activeUser.name || "N/A"}
                     className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover ring-2 ring-amber-400/40 shadow-xl shrink-0"
                   />
                 ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-2xl font-bold text-amber-300 shadow-xl shrink-0">
-                    {activeUser.name.charAt(0).toUpperCase()}
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl font-bold text-amber-300 shadow-xl shrink-0">
+                    {activeUser.name && activeUser.name !== "N/A"
+                      ? activeUser.name.charAt(0).toUpperCase()
+                      : "N/A"}
                   </div>
                 )}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                      {activeUser.name}
+                      {activeUser.name || "N/A"}
                     </h1>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-medium flex items-center gap-1">
                       <UserCheck className="w-3 h-3" /> {isSelf ? "Your Creator Account" : "Creator Profile"}
                     </span>
                   </div>
                   <p className="text-xs text-amber-300 font-mono">
-                    @{activeUser.handle}
+                    {activeUser.handle && activeUser.handle !== "N/A" ? `@${activeUser.handle.replace("@", "")}` : "N/A"}
                   </p>
-                  {activeUser.bio && (
-                    <p className="text-xs text-slate-300 leading-relaxed max-w-xl pt-1">
-                      {activeUser.bio}
-                    </p>
-                  )}
+                  <p className="text-xs text-slate-300 leading-relaxed max-w-xl pt-1">
+                    {activeUser.bio || "N/A"}
+                  </p>
 
-                  {/* Social and Web Links */}
-                  <div className="flex items-center gap-3 pt-2 text-xs text-slate-400">
-                    {activeUser.website && (
+                  {/* Social, Web Links, and Joined date */}
+                  <div className="flex items-center gap-3 pt-2 text-xs text-slate-400 flex-wrap">
+                    {activeUser.website ? (
                       <a
-                        href={activeUser.website}
+                        href={activeUser.website.startsWith("http") ? activeUser.website : `https://${activeUser.website}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 hover:text-white transition-colors"
@@ -626,8 +1126,12 @@ export function ProfileView({
                           {activeUser.website.replace(/^https?:\/\//, "")}
                         </span>
                       </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
+                        <Globe className="w-3.5 h-3.5 text-slate-500" /> N/A
+                      </span>
                     )}
-                    {activeUser.twitter && (
+                    {activeUser.twitter ? (
                       <a
                         href={`https://x.com/${activeUser.twitter.replace("@", "")}`}
                         target="_blank"
@@ -637,8 +1141,12 @@ export function ProfileView({
                         <XTwitterIcon className="w-3.5 h-3.5 text-slate-300" />
                         <span className="font-mono text-[11px]">@{activeUser.twitter.replace("@", "")}</span>
                       </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
+                        <XTwitterIcon className="w-3.5 h-3.5 text-slate-500" /> N/A
+                      </span>
                     )}
-                    {activeUser.github && (
+                    {activeUser.github ? (
                       <a
                         href={`https://github.com/${activeUser.github}`}
                         target="_blank"
@@ -648,7 +1156,14 @@ export function ProfileView({
                         <GitHubIcon className="w-3.5 h-3.5 text-slate-300" />
                         <span className="font-mono text-[11px]">{activeUser.github}</span>
                       </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
+                        <GitHubIcon className="w-3.5 h-3.5 text-slate-500" /> N/A
+                      </span>
                     )}
+                    <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400">
+                      Joined: {joinedDisplay}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -664,15 +1179,6 @@ export function ProfileView({
                   >
                     Edit Profile
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    leftIcon={<Plus className="w-4 h-4" />}
-                    onClick={onClaimSlot}
-                    className="text-xs py-1.5 shadow-lg shadow-amber-500/20 font-bold"
-                  >
-                    Bid New Project
-                  </Button>
                 </div>
               )}
             </div>
@@ -680,20 +1186,24 @@ export function ProfileView({
             {/* Aggregated Portfolio Stats Across Projects */}
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-white/[0.08]">
               <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
-                <div className="font-mono text-2xl font-bold text-white">{creatorProjects.length}</div>
+                <div className="font-mono text-2xl font-bold text-white">
+                  {creatorProjects.length > 0 ? creatorProjects.length : "N/A"}
+                </div>
                 <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
                   <Layers className="w-3 h-3 text-sky-400" /> Total Projects
                 </div>
               </div>
               <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
-                <div className="font-mono text-2xl font-bold text-amber-300">{money(totalInvested)}</div>
+                <div className="font-mono text-2xl font-bold text-amber-300">
+                  {creatorProjects.length > 0 && totalInvested > 0 ? money(totalInvested) : "N/A"}
+                </div>
                 <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
                   <Zap className="w-3 h-3 text-amber-400" /> Value on Wall
                 </div>
               </div>
               <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
                 <div className="font-mono text-2xl font-bold text-emerald-300">
-                  {bestRank > 0 && bestRank <= 100 ? `#${bestRank}` : "—"}
+                  {bestRank > 0 && bestRank <= 100 ? `#${bestRank}` : "N/A"}
                 </div>
                 <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
                   <Crown className="w-3 h-3 text-amber-400" /> Best Live Rank
@@ -701,7 +1211,7 @@ export function ProfileView({
               </div>
               <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
                 <div className="font-mono text-2xl font-bold text-slate-200">
-                  {totalViews.toLocaleString()}
+                  {creatorProjects.length > 0 && totalViews > 0 ? totalViews.toLocaleString() : "N/A"}
                 </div>
                 <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
                   <Eye className="w-3 h-3 text-indigo-400" /> Total Views
@@ -725,12 +1235,12 @@ export function ProfileView({
                 </p>
               </div>
 
-              {isSelf && (
+              {isSelf && creatorProjects.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   leftIcon={<Plus className="w-3.5 h-3.5" />}
-                  onClick={onClaimSlot}
+                  onClick={handleClaim}
                   className="text-xs py-1.5"
                 >
                   Add Project
@@ -756,7 +1266,7 @@ export function ProfileView({
                     variant="primary"
                     size="md"
                     leftIcon={<Plus className="w-4 h-4" />}
-                    onClick={onClaimSlot}
+                    onClick={handleClaim}
                     className="font-bold shadow-lg shadow-amber-500/20"
                   >
                     Bid Your First Project
@@ -776,18 +1286,25 @@ export function ProfileView({
                     >
                       <div>
                         {/* Cover Tile Thumbnail with custom framing applied */}
-                        <div className="relative h-44 w-full rounded-xl overflow-hidden bg-[#0d0e12] border border-white/[0.1]">
-                          <img
-                            src={proj.imageUrl}
-                            alt={proj.name}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            style={{
-                              objectPosition: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
-                              transform: proj.imageZoom && proj.imageZoom > 1 ? `scale(${proj.imageZoom})` : undefined,
-                              transformOrigin: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
-                            }}
-                            referrerPolicy="no-referrer"
-                          />
+                        <div className="relative h-44 w-full rounded-xl overflow-hidden bg-[#0d0e12] border border-white/[0.1] flex items-center justify-center">
+                          {proj.imageUrl ? (
+                            <img
+                              src={proj.imageUrl}
+                              alt={proj.name || "N/A"}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              style={{
+                                objectPosition: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
+                                transform: proj.imageZoom && proj.imageZoom > 1 ? `scale(${proj.imageZoom})` : undefined,
+                                transformOrigin: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
+                              }}
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-1 text-slate-500">
+                              <ImageIcon className="w-8 h-8 stroke-1" />
+                              <span className="text-[10px] font-mono">No Image (N/A)</span>
+                            </div>
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
 
                           {/* Floating Badges */}
@@ -800,16 +1317,16 @@ export function ProfileView({
                               </span>
                             )}
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-black/70 text-slate-300 border border-white/10 backdrop-blur-md">
-                              {proj.category}
+                              {proj.category || "N/A"}
                             </span>
                           </div>
 
                           <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between">
                             <span className="text-xs font-mono font-bold text-amber-300">
-                              {money(proj.active_value)} paid
+                              {proj.active_value != null && proj.active_value > 0 ? `${money(proj.active_value)} paid` : "N/A"}
                             </span>
                             <span className="text-[10px] text-slate-300 font-mono">
-                              {(proj.views || 0).toLocaleString()} views
+                              {proj.views != null && proj.views > 0 ? `${proj.views.toLocaleString()} views` : "N/A"}
                             </span>
                           </div>
                         </div>
@@ -817,9 +1334,9 @@ export function ProfileView({
                         {/* Project Details */}
                         <div className="mt-3">
                           <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors truncate">
-                            {proj.name}
+                            {proj.name || "N/A"}
                           </h3>
-                          {proj.linkUrl && (
+                          {proj.linkUrl ? (
                             <a
                               href={proj.linkUrl}
                               target="_blank"
@@ -829,6 +1346,8 @@ export function ProfileView({
                               <span className="truncate">{proj.linkUrl.replace(/^https?:\/\//, "")}</span>
                               <ExternalLink className="w-3 h-3 shrink-0" />
                             </a>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-mono mt-0.5">N/A</span>
                           )}
                         </div>
                       </div>
@@ -862,13 +1381,7 @@ export function ProfileView({
                             variant="primary"
                             size="sm"
                             leftIcon={<Zap className="w-3 h-3 text-slate-950" />}
-                            onClick={() => {
-                              if (onBumpProject) {
-                                onBumpProject(proj.id);
-                              } else if (onClaimSlot) {
-                                onClaimSlot();
-                              }
-                            }}
+                            onClick={() => handleBump(proj)}
                             className="text-xs py-1 px-2.5 font-bold"
                           >
                             Bump
@@ -893,17 +1406,24 @@ export function ProfileView({
             <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#18191d]/90 shadow-2xl backdrop-blur-xl">
               {/* Visual Cover Banner with user's custom pan & zoom applied */}
               <div className="relative h-56 sm:h-72 bg-[#0d0e12] overflow-hidden flex items-center justify-center">
-                <img
-                  src={p.imageUrl}
-                  alt={p.name}
-                  className="h-full w-full select-none object-cover"
-                  style={{
-                    objectPosition: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
-                    transform: p.imageZoom && p.imageZoom > 1 ? `scale(${p.imageZoom})` : undefined,
-                    transformOrigin: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
-                  }}
-                  referrerPolicy="no-referrer"
-                />
+                {p.imageUrl ? (
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name || "N/A"}
+                    className="h-full w-full select-none object-cover"
+                    style={{
+                      objectPosition: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
+                      transform: p.imageZoom && p.imageZoom > 1 ? `scale(${p.imageZoom})` : undefined,
+                      transformOrigin: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
+                    }}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
+                    <ImageIcon className="w-10 h-10 stroke-1" />
+                    <span className="text-xs font-mono">No Image (N/A)</span>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#18191d] via-[#18191d]/20 to-transparent pointer-events-none" />
 
                 {/* Floating Rank & Value Badges on Cover */}
@@ -913,7 +1433,7 @@ export function ProfileView({
                       <>
                         <Badge variant="rank" rank={Math.min(globalRank, 100)} />
                         <span className="rounded-full bg-black/80 px-3 py-1 font-mono text-xs font-bold text-white border border-white/[0.2] backdrop-blur-md">
-                          {money(p.active_value)} paid
+                          {p.active_value != null && p.active_value > 0 ? `${money(p.active_value)} paid` : "N/A"}
                         </span>
                       </>
                     ) : (
@@ -923,7 +1443,7 @@ export function ProfileView({
                     )}
                   </div>
                   <span className="text-[11px] font-medium text-slate-200 bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-md border border-white/[0.15]">
-                    {p.category}
+                    {p.category || "N/A"}
                   </span>
                 </div>
               </div>
@@ -932,15 +1452,15 @@ export function ProfileView({
               <div className="p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{p.name}</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{p.name || "N/A"}</h1>
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-400 font-mono">
-                      <span>Project #{p.id}</span>
+                      <span>Project #{p.id || "N/A"}</span>
                       <span>·</span>
-                      <span>{p.category}</span>
+                      <span>{p.category || "N/A"}</span>
                       {hasSlotOnGrid && (
                         <>
                           <span>·</span>
-                          <span>On the wall for {p.joined_days_ago} days</span>
+                          <span>{p.joined_days_ago ? `On the wall for ${p.joined_days_ago} days` : "N/A"}</span>
                         </>
                       )}
                     </div>
@@ -960,7 +1480,7 @@ export function ProfileView({
                 <div className="mt-5 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Website Destination</div>
-                    <div className="text-xs text-slate-200 truncate font-mono mt-0.5">{p.linkUrl || "No website link added"}</div>
+                    <div className="text-xs text-slate-200 truncate font-mono mt-0.5">{p.linkUrl || "N/A"}</div>
                   </div>
                   {p.linkUrl && (
                     <a
@@ -979,25 +1499,25 @@ export function ProfileView({
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
                     <div className="font-mono text-xl font-bold text-white">
-                      {hasSlotOnGrid ? `#${globalRank}` : "—"}
+                      {hasSlotOnGrid && globalRank > 0 ? `#${globalRank}` : "N/A"}
                     </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">Overall Rank</div>
                   </div>
                   <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
                     <div className="font-mono text-xl font-bold text-sky-300">
-                      {hasSlotOnGrid ? `#${catRank}` : "—"}
+                      {hasSlotOnGrid && catRank > 0 ? `#${catRank}` : "N/A"}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">{p.category} Rank</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">{p.category || "Category"} Rank</div>
                   </div>
                   <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
                     <div className="font-mono text-xl font-bold text-amber-300">
-                      {hasSlotOnGrid ? `#${p.peak_rank}` : "—"}
+                      {hasSlotOnGrid && p.peak_rank > 0 ? `#${p.peak_rank}` : "N/A"}
                     </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">Best Rank</div>
                   </div>
                   <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
                     <div className="font-mono text-xl font-bold text-white">
-                      {(p.views ?? 0).toLocaleString()}
+                      {p.views != null && p.views > 0 ? p.views.toLocaleString() : "N/A"}
                     </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">Total Views</div>
                   </div>
@@ -1011,18 +1531,22 @@ export function ProfileView({
                 {p.owner_avatar ? (
                   <img
                     src={p.owner_avatar}
-                    alt={p.owner_name || p.handle}
+                    alt={p.owner_name || p.handle || "N/A"}
                     className="w-12 h-12 rounded-xl object-cover ring-1 ring-amber-400/40 shrink-0"
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-base shrink-0">
-                    {(p.owner_name || p.handle).charAt(0).toUpperCase()}
+                    {p.owner_name && p.owner_name !== "N/A"
+                      ? p.owner_name.charAt(0).toUpperCase()
+                      : p.handle && p.handle !== "N/A"
+                      ? p.handle.replace("@", "").charAt(0).toUpperCase()
+                      : "N/A"}
                   </div>
                 )}
                 <div className="min-w-0">
                   <div className="text-[11px] text-slate-400 uppercase tracking-wider font-medium">Created & Owned By</div>
                   <div className="text-sm font-bold text-white flex items-center gap-1.5 truncate">
-                    <span className="truncate">{p.owner_name || p.handle}</span>
+                    <span className="truncate">{p.owner_name || p.handle || "N/A"}</span>
                     {isOwnerOfP && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium shrink-0">
                         You own this
@@ -1030,7 +1554,11 @@ export function ProfileView({
                     )}
                   </div>
                   <div className="text-xs text-amber-300 font-mono">
-                    @{p.owner_handle || p.handle.replace("@", "")}
+                    {p.owner_handle
+                      ? `@${p.owner_handle.replace("@", "")}`
+                      : p.handle && p.handle !== "N/A"
+                      ? `@${p.handle.replace("@", "")}`
+                      : "N/A"}
                   </div>
                 </div>
               </div>
@@ -1040,8 +1568,8 @@ export function ProfileView({
                 size="sm"
                 leftIcon={<UserIcon className="w-3.5 h-3.5 text-slate-300" />}
                 onClick={() => {
-                  const targetId = p.owner_handle || p.owner_id || p.handle.replace("@", "");
-                  if (onSelectProfile) {
+                  const targetId = p.owner_handle || p.owner_id || (p.handle && p.handle !== "N/A" ? p.handle.replace("@", "") : "");
+                  if (targetId && onSelectProfile) {
                     onSelectProfile(targetId);
                   }
                 }}
@@ -1059,14 +1587,14 @@ export function ProfileView({
                   Rank History
                 </h2>
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {p.times_bumped} bumps total
+                  {p.times_bumped != null && p.times_bumped > 0 ? `${p.times_bumped} bumps total` : "N/A"}
                 </span>
               </div>
 
-              {!hasSlotOnGrid ? (
+              {!hasSlotOnGrid || !p.journey || p.journey.length === 0 ? (
                 <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center">
                   <p className="text-xs text-slate-400">
-                    This project has been pushed to the Graveyard. Outbid with a top-up to return to the active top 100!
+                    N/A
                   </p>
                 </div>
               ) : (
@@ -1103,27 +1631,23 @@ export function ProfileView({
                   <Zap className="w-4 h-4" /> {isOwnerOfP ? "Protect / Top-Up Project" : "Take Over / Bump Slot"}
                 </span>
                 <span className="font-mono text-sm font-bold text-white">
-                  ${p.active_value}
+                  {p.active_value != null && p.active_value > 0 ? `$${p.active_value}` : "N/A"}
                 </span>
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed">
                 {isOwnerOfP
                   ? "Top up your active value to climb higher on the 100-slot wall. Your existing paid value always carries forward."
-                  : `Outbid "${p.name}" to claim their spot on the grid and shove competitors downward.`}
+                  : p.name && p.name !== "N/A"
+                  ? `Outbid "${p.name}" to claim their spot on the grid and shove competitors downward.`
+                  : "Outbid this slot to claim a spot on the grid and shove competitors downward."}
               </p>
 
               <Button
                 variant="primary"
                 size="lg"
                 leftIcon={<Zap className="w-4 h-4 text-slate-950" />}
-                onClick={() => {
-                  if (onBumpProject) {
-                    onBumpProject(p.id);
-                  } else if (onClaimSlot) {
-                    onClaimSlot();
-                  }
-                }}
+                onClick={() => handleBump(p)}
                 className="w-full justify-center text-sm font-bold shadow-lg shadow-amber-500/20"
               >
                 {isOwnerOfP ? "Top Up Active Value" : "Outbid & Bump Slot"}
@@ -1160,13 +1684,71 @@ export function ProfileView({
                 placeholder="e.g. Alex Rivera"
                 required
               />
-              <Input
-                label="Public @Handle"
-                value={profileEditHandle}
-                onChange={(e) => setProfileEditHandle(e.target.value)}
-                placeholder="e.g. alexrivera"
-                required
-              />
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-300 uppercase tracking-wider select-none">
+                    Public @Handle
+                  </label>
+                  {cooldownDaysRemaining > 0 ? (
+                    <span className="text-[11px] font-medium text-amber-400 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      Locked ({cooldownDaysRemaining}d)
+                    </span>
+                  ) : isCheckingHandle ? (
+                    <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                      Checking...
+                    </span>
+                  ) : handleCheckSuccess ? (
+                    <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Available
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">
+                    @
+                  </span>
+                  <input
+                    type="text"
+                    disabled={cooldownDaysRemaining > 0}
+                    value={profileEditHandle}
+                    onChange={(e) => setProfileEditHandle(e.target.value.replace(/^@/, ''))}
+                    placeholder="username"
+                    required
+                    className={`w-full bg-[#141519] text-white rounded-xl text-sm border pl-8 pr-3.5 py-2.5 transition-colors focus:outline-none ${
+                      cooldownDaysRemaining > 0
+                        ? "border-white/[0.08] text-slate-400 cursor-not-allowed bg-black/40"
+                        : handleCheckError
+                        ? "border-rose-500/50 focus:ring-1 focus:ring-rose-500/40"
+                        : handleCheckSuccess
+                        ? "border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/40"
+                        : "border-white/[0.12] hover:border-white/[0.2] focus:ring-1 focus:ring-amber-400/40"
+                    }`}
+                  />
+                  {cooldownDaysRemaining > 0 && (
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <Lock className="w-4 h-4 text-amber-400/80" />
+                    </div>
+                  )}
+                </div>
+
+                {handleCheckError ? (
+                  <p className="text-[11px] text-rose-400 flex items-center gap-1 mt-0.5">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {handleCheckError}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400">
+                    {cooldownDaysRemaining > 0
+                      ? `Handles can only be changed once every 30 days. Next edit in ${cooldownDaysRemaining} day${cooldownDaysRemaining === 1 ? '' : 's'}.`
+                      : "Can be changed once every 30 days. Alphanumeric and underscores only."}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div>
@@ -1182,42 +1764,90 @@ export function ProfileView({
               />
             </div>
 
-            {/* Avatar URL & File Upload */}
+            {/* Direct Avatar Image Upload (No URL input) */}
             <div className="space-y-2">
-              <Input
-                label="Avatar Image URL"
-                value={profileEditAvatar}
-                onChange={(e) => setProfileEditAvatar(e.target.value)}
-                placeholder="https://..."
-              />
+              <label className="text-xs font-medium text-slate-300 uppercase tracking-wider block">
+                Profile Avatar
+              </label>
+
+              {avatarUploadError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-xs text-rose-300">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{avatarUploadError}</span>
+                </div>
+              )}
+
               <input
                 ref={avatarFileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      if (ev.target?.result) {
-                        setProfileEditAvatar(ev.target.result as string);
-                      }
-                    };
-                    reader.readAsDataURL(file);
+                    handleAvatarFile(file);
+                    e.target.value = "";
                   }
                 }}
               />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                leftIcon={<Upload className="w-3.5 h-3.5" />}
-                onClick={() => avatarFileInputRef.current?.click()}
-                className="text-xs py-1"
-              >
-                Upload Avatar File
-              </Button>
+
+              <div className="flex items-center gap-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+                {/* Avatar Preview */}
+                <div className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 border-2 border-white/15 bg-black/60 shadow-inner flex items-center justify-center">
+                  {profileEditAvatar ? (
+                    <img
+                      src={profileEditAvatar}
+                      alt="Avatar preview"
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <UserIcon className="w-8 h-8 text-slate-500" />
+                  )}
+                  {isUploadingAvatar && (
+                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload & Remove controls */}
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      onClick={() => avatarFileInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
+                      className="text-xs py-1.5"
+                    >
+                      {isUploadingAvatar ? "Uploading..." : profileEditAvatar ? "Change Photo" : "Upload Photo"}
+                    </Button>
+
+                    {profileEditAvatar && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                        onClick={() => {
+                          setProfileEditAvatar("");
+                          setAvatarUploadError(null);
+                        }}
+                        disabled={isUploadingAvatar}
+                        className="text-xs py-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    JPG, PNG, or WebP. Max 5MB. Resized and optimized automatically.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Links */}
@@ -1251,7 +1881,12 @@ export function ProfileView({
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" size="md">
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                disabled={Boolean(handleCheckError) || isCheckingHandle || isUploadingAvatar}
+              >
                 Save Profile
               </Button>
             </div>
@@ -1454,6 +2089,40 @@ export function ProfileView({
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAKE OVER / BID MODAL (In-Place on Profile Page)                          */}
+      {/* ========================================================================= */}
+      {isBiddingOpen && (
+        <TakeOverModal
+          isOpen={isBiddingOpen}
+          hasBackdrop={true}
+          onClose={() => {
+            setIsBiddingOpen(false);
+            setTargetSlotToBump(null);
+          }}
+          currentSlots={slots}
+          entryFloor={entryFloor}
+          categories={[...CATEGORIES]}
+          existingHandles={creatorProjects.map((proj) => ({
+            id: proj.id,
+            title: proj.name,
+            activeValue: proj.active_value,
+            handle: proj.handle,
+            imageUrl: proj.imageUrl,
+            linkUrl: proj.linkUrl,
+            category: proj.category,
+            owner_id: proj.owner_id,
+          }))}
+          preselectedTargetSlot={targetSlotToBump}
+          onRequireAuth={onRequireAuth}
+          onSubmitTopUp={(orderData) => {
+            handleProcessTopUp(orderData);
+            setIsBiddingOpen(false);
+            setTargetSlotToBump(null);
+          }}
+        />
       )}
     </div>
   );

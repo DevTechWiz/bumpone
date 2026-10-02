@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { buildProfiles, sortBoard, type Profile, type Category } from '@/lib/board';
+import { type Profile, type Category } from '@/lib/board';
 
 import { boardMemoryCache, CACHE_TTL_MS } from '@/lib/boardCache';
-
-// In-memory fallback cache when Supabase database is not yet provisioned
-let fallbackProfiles: Profile[] | null = null;
-
-function getFallbackProfiles(): Profile[] {
-  if (!fallbackProfiles) {
-    fallbackProfiles = buildProfiles();
-  }
-  return fallbackProfiles;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -58,12 +48,19 @@ export async function GET(request: NextRequest) {
           total_paid_minor,
           is_active,
           moderation_status,
+          image_pos_x,
+          image_pos_y,
+          image_zoom,
+          views_count,
+          created_at,
+          updated_at,
           reactions_fire,
           reactions_eyes,
           reactions_heart,
           reactions_laugh,
           total_reactions,
-          categories!inner(name)
+          categories!inner(name),
+          users(id, handle, display_name, avatar_url, bio)
         `
         : `
           id,
@@ -78,12 +75,19 @@ export async function GET(request: NextRequest) {
           total_paid_minor,
           is_active,
           moderation_status,
+          image_pos_x,
+          image_pos_y,
+          image_zoom,
+          views_count,
+          created_at,
+          updated_at,
           reactions_fire,
           reactions_eyes,
           reactions_heart,
           reactions_laugh,
           total_reactions,
-          categories(name)
+          categories(name),
+          users(id, handle, display_name, avatar_url, bio)
         `;
 
       let query = supabaseAdmin
@@ -151,24 +155,39 @@ export async function GET(request: NextRequest) {
             ? Math.floor(Number(row.current_active_value_minor) / 100)
             : Number(row.current_active_value || 0);
 
+          const views = Number(row.views_count || 0);
+          const joinedDaysAgo = row.created_at
+            ? Math.max(0, Math.floor((Date.now() - new Date(row.created_at).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+          const lastBumpAt = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
+
+          const owner = row.users || {};
+
           return {
             id: row.id,
             seq: Number(row.ranking_sequence || row.sequence || 0),
-            name: row.title || row.display_name || 'Anonymous Challenger',
+            name: row.title || row.display_name || 'N/A',
             handle: row.handle,
             category: (categoryName || 'Tech') as Category,
             active_value: activeValue,
             imageUrl: row.image_path,
             linkUrl: row.destination_url,
             owner_id: row.user_id || undefined,
+            owner_name: owner.display_name || undefined,
+            owner_handle: owner.handle || undefined,
+            owner_avatar: owner.avatar_url || undefined,
+            owner_bio: owner.bio || undefined,
             peak_rank: row.current_rank || 100,
-            times_bumped: 1,
-            times_climbed: 1,
-            views: 500,
-            shares: 20,
-            joined_days_ago: 1,
-            last_bump_at: Date.now() - 3600000,
-            journey: [row.current_rank || 100],
+            times_bumped: 0,
+            times_climbed: 0,
+            views,
+            shares: 0,
+            joined_days_ago: joinedDaysAgo,
+            last_bump_at: lastBumpAt,
+            imagePosX: row.image_pos_x,
+            imagePosY: row.image_pos_y,
+            imageZoom: row.image_zoom,
+            journey: row.current_rank ? [row.current_rank] : [],
             reactions,
           };
         });
@@ -201,52 +220,28 @@ export async function GET(request: NextRequest) {
           },
         });
       }
-    }
 
-    if (process.env.NODE_ENV === 'production') {
-      return NextResponse.json({ error: 'Board service unavailable' }, { status: 503 });
-    }
-    // Development-only in-memory simulation.
-    let pool = [...getFallbackProfiles()];
-
-    if (category && category !== 'All') {
-      pool = pool.filter((p) => p.category === category);
-    }
-
-    if (sort === 'popular') {
-      pool.sort((a, b) => {
-        const totalA = (a.reactions.fire || 0) + (a.reactions.eyes || 0) + (a.reactions.heart || 0) + (a.reactions.laugh || 0);
-        const totalB = (b.reactions.fire || 0) + (b.reactions.eyes || 0) + (b.reactions.heart || 0) + (b.reactions.laugh || 0);
-        return totalB - totalA || b.active_value - a.active_value;
+      return NextResponse.json({
+        profiles: [],
+        total: 0,
+        sort,
+        category: category || 'All',
+        purchasesPaused: false,
+      }, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15',
+        },
       });
-    } else if (sort === 'trending') {
-      pool.sort((a, b) => {
-        const recencyA = a.last_bump_at || 0;
-        const recencyB = b.last_bump_at || 0;
-        return recencyB - recencyA || b.active_value - a.active_value;
-      });
-    } else {
-      pool = sortBoard(pool);
     }
 
-    const fallbackPayload = {
-      profiles: pool.slice(0, limit),
-      total: pool.length,
+    return NextResponse.json({
+      profiles: [],
+      total: 0,
       sort,
       category: category || 'All',
       purchasesPaused: false,
-    };
-
-    const rawJson = JSON.stringify(fallbackPayload);
-    boardMemoryCache.set(cacheKey, { rawJson, data: fallbackPayload, timestamp: now });
-
-    return new NextResponse(rawJson, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30',
-        'X-Cache': 'FALLBACK',
-      },
     });
   } catch (err: any) {
     console.error('Error fetching board:', err);

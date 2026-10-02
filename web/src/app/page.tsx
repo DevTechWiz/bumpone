@@ -22,7 +22,6 @@ import type { SlotItem, BumpEvent, BoardStats, Message, FloatingReaction } from 
 import {
   CATEGORIES,
   MIN_TOP_UP,
-  buildProfiles,
   sortBoard,
   rankOf,
   quoteTopUp,
@@ -134,17 +133,9 @@ const INITIAL_MESSAGES: Message[] = [
   },
 ];
 
-const SIM_COMPETITORS = [
-  { title: 'Nova Quantum Labs', handle: '@novalabs', imageUrl: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=500&auto=format&fit=crop&q=80', linkUrl: 'https://github.com', category: 'AI' },
-  { title: 'Starlight Collective', handle: '@starlight', imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80', linkUrl: 'https://openai.com', category: 'AI' },
-  { title: 'Vortex Protocol', handle: '@vortex_fi', imageUrl: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=500&auto=format&fit=crop&q=80', linkUrl: 'https://stripe.com', category: 'Apps' },
-  { title: 'Apex Celestial Syndicate', handle: '@apex_king', imageUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=500&auto=format&fit=crop&q=80', linkUrl: 'https://vercel.com', category: 'Tech' },
-];
-
 export default function Home() {
   // 1. Core state: profiles (canonical domain) + off-board keep-list.
-  // Initial state matches SSR exactly to eliminate React hydration mismatch error #418.
-  const [profiles, setProfiles] = useState<Profile[]>(buildProfiles);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [offboard, setOffboard] = useState<Profile[]>([]);
   const seqRef = useRef(100000);
 
@@ -163,6 +154,16 @@ export default function Home() {
     if (Array.isArray(savedOffboard) && savedOffboard.length > 0) {
       setOffboard(savedOffboard);
     }
+
+    // Always fetch live profiles from Supabase API
+    fetch('/api/board?limit=120')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          setProfiles(data.profiles);
+        }
+      })
+      .catch((err) => console.warn('Could not fetch board profiles:', err));
 
     // Preload modal bundles in background so 1st click is instantaneous with zero chunk fetch delay
     if (typeof window !== 'undefined') {
@@ -227,7 +228,7 @@ export default function Home() {
   const [isAutoSimulate, setIsAutoSimulate] = useState(false);
   const [isWarRoomOpen, setIsWarRoomOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   // Mute preference loads post-mount: server has no localStorage, so the
   // first render must match the server (unmuted) to avoid hydration mismatch.
   const [isMuted, setIsMuted] = useState(false);
@@ -272,7 +273,11 @@ export default function Home() {
         const found = profiles.find((p) => p.id === target);
         if (found) {
           setTargetSlotToBump(toSlotItem(found, 1));
-          setIsTakeOverOpen(true);
+          if (!user) {
+            setIsAuthOpen(true);
+          } else {
+            setIsTakeOverOpen(true);
+          }
         }
       }
 
@@ -286,7 +291,14 @@ export default function Home() {
       }
 
       if (params.get('claim') === 'true') {
-        setIsTakeOverOpen(true);
+        if (!user) {
+          setIsAuthOpen(true);
+        } else {
+          setIsTakeOverOpen(true);
+        }
+      }
+      if (params.get('auth') === 'true') {
+        setIsAuthOpen(true);
       }
       if (params.get('alerts') === 'true') {
         setIsAlertSettingsOpen(true);
@@ -298,7 +310,7 @@ export default function Home() {
         setIsRulesOpen(true);
       }
     }
-  }, [profiles]);
+  }, [profiles, user]);
 
   // Live Board Synchronizer: Supabase Realtime event streaming + Edge SWR Polling fallback
   useEffect(() => {
@@ -637,11 +649,12 @@ export default function Home() {
       previousRank = null;
       const ownerHandle = order.handle.replace('@', '');
       const ownerName =
+        profile?.display_name ||
         user?.user_metadata?.custom_claims?.global_name ||
         user?.user_metadata?.full_name ||
         user?.user_metadata?.user_name ||
-        user?.email?.split('@')[0] ||
-        order.handle;
+        order.title ||
+        ownerHandle;
 
       base = {
         id: `slot-${Date.now()}`,
@@ -747,21 +760,19 @@ export default function Home() {
       });
       return;
     }
-    // Fresh entry at/above the floor.
-    const pick = SIM_COMPETITORS[Math.floor(Math.random() * SIM_COMPETITORS.length)];
-    const r2 = Math.random();
-    let amount: number;
-    if (r2 < 0.15 && ordered.length > 0) {
-      amount = ordered[0].active_value + Math.floor(Math.random() * 40) + 10;
-    } else if (r2 < 0.45 && ordered.length >= 10) {
-      amount = ordered[9].active_value + Math.floor(Math.random() * 20) + 10;
-    } else {
-      const floor = ordered.length >= 100 ? ordered[99].active_value : 0;
-      amount = Math.max(MIN_TOP_UP, floor + 10 + Math.floor(Math.random() * 15));
-    }
+    // Random bump from existing board holders
+    if (ordered.length === 0) return;
+    const pick = ordered[Math.floor(Math.random() * Math.min(20, ordered.length))];
+    const bumpAmount = Math.floor(Math.random() * 25) + 10;
     handleProcessTopUp({
-      title: pick.title, handle: pick.handle, linkUrl: pick.linkUrl, imageUrl: pick.imageUrl,
-      category: pick.category, topUp: amount, resultingValue: amount, currentValue: 0,
+      title: pick.name,
+      handle: pick.handle,
+      linkUrl: pick.linkUrl,
+      imageUrl: pick.imageUrl,
+      category: pick.category,
+      topUp: bumpAmount,
+      resultingValue: pick.active_value + bumpAmount,
+      currentValue: pick.active_value,
     });
   }, [profiles, offboard, handleProcessTopUp]);
 
@@ -773,12 +784,23 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isAutoSimulate, handleSimulateRandomBump]);
 
-  const handleResetBoard = () => {
-    if (typeof window !== 'undefined' && window.confirm('Reset board back to standard initial state?')) {
-      setProfiles(buildProfiles());
-      setOffboard([]);
+  const handleResetBoard = async () => {
+    if (typeof window !== 'undefined' && window.confirm('Reset board back to live database state?')) {
       safeRemove(STORAGE_KEY_PROFILES);
       safeRemove(STORAGE_KEY_OFFBOARD);
+      try {
+        sessionStorage.removeItem('bumped_board_cache');
+        const res = await fetch('/api/board?limit=120');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.profiles)) {
+            setProfiles(data.profiles);
+          }
+        }
+      } catch (e) {
+        setProfiles([]);
+      }
+      setOffboard([]);
     }
   };
 
@@ -799,13 +821,17 @@ export default function Home() {
         }
       }
       if (bidParam === 'true') {
-        setIsTakeOverOpen(true);
+        if (!user) {
+          setIsAuthOpen(true);
+        } else {
+          setIsTakeOverOpen(true);
+        }
       }
     } catch {
       // ignore
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slots.length]);
+  }, [slots.length, user]);
 
   // Global power-user keyboard shortcuts.
   useEffect(() => {
@@ -817,6 +843,10 @@ export default function Home() {
       if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         soundEngine.playClick();
+        if (!user) {
+          setIsAuthOpen(true);
+          return;
+        }
         setIsTakeOverOpen(true);
       } else if (e.key === 'g' || e.key === 'G') {
         e.preventDefault();
@@ -858,14 +888,16 @@ export default function Home() {
   }, []);
 
   const userAuthHandle = useMemo(() => {
+    if (profile?.handle) {
+      return profile.handle.toLowerCase().replace('@', '');
+    }
     if (!user) return '';
     return (
       user.user_metadata?.user_name ||
       user.user_metadata?.preferred_username ||
-      user.email?.split('@')[0] ||
       ''
     ).toLowerCase().replace('@', '');
-  }, [user]);
+  }, [user, profile]);
 
   // Strictly filter to the current authenticated user's own projects (or empty if unauthenticated)
   const existingHandles = useMemo(() => {
@@ -1037,6 +1069,7 @@ export default function Home() {
           {user ? (
             <UserMenu
               user={user}
+              userHandle={profile?.handle || userAuthHandle}
               onSignOut={signOut}
               onViewProfile={() => {
                 soundEngine.playClick();
@@ -1097,6 +1130,10 @@ export default function Home() {
             leftIcon={<Zap className="w-3.5 h-3.5" />}
             onClick={() => {
               soundEngine.playClick();
+              if (!user) {
+                setIsAuthOpen(true);
+                return;
+              }
               setIsTakeOverOpen(true);
             }}
             className="text-xs font-bold py-1.5 px-3"
@@ -1228,6 +1265,10 @@ export default function Home() {
           categories={[...CATEGORIES]}
           existingHandles={existingHandles}
           preselectedTargetSlot={targetSlotToBump}
+          onRequireAuth={() => {
+            setIsTakeOverOpen(false);
+            setIsAuthOpen(true);
+          }}
           onSubmitTopUp={(orderData) => {
             handleProcessTopUp(orderData);
             setIsTakeOverOpen(false);
@@ -1244,6 +1285,10 @@ export default function Home() {
           onClose={() => setIsGraveyardOpen(false)}
           bumpedHistory={offboard.slice(0, 50).map((p) => toSlotItem(p, 101))}
           onReclaimTurf={(item) => {
+            if (!user) {
+              setIsAuthOpen(true);
+              return;
+            }
             const match = slots.find((s) => s.id === item.id);
             setTargetSlotToBump(match ?? null);
             setIsTakeOverOpen(true);
@@ -1282,6 +1327,10 @@ export default function Home() {
           }}
           onBumpSlot={(slot) => {
             setSelectedSlot(null);
+            if (!user) {
+              setIsAuthOpen(true);
+              return;
+            }
             setTargetSlotToBump(slot);
             setIsTakeOverOpen(true);
           }}
@@ -1302,23 +1351,29 @@ export default function Home() {
             onUpdateProfile={(updated) => {
               setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
             }}
+            onOpenAlerts={() => {
+              setIsAlertSettingsOpen(true);
+            }}
             onClaimSlot={() => {
-              setViewingProfileId(null);
+              if (!user) {
+                setIsAuthOpen(true);
+                return;
+              }
               setTargetSlotToBump(null);
               setIsTakeOverOpen(true);
             }}
             onBumpProject={(projId) => {
+              if (!user) {
+                setIsAuthOpen(true);
+                return;
+              }
               const found = profiles.find((p) => p.id === projId);
               if (found) {
-                const rank = sortBoard(profiles).findIndex((p) => p.id === found.id) + 1;
-                setTargetSlotToBump(toSlotItem(found, rank));
+                setTargetSlotToBump(toSlotItem(found, 1));
               }
-              setViewingProfileId(null);
               setIsTakeOverOpen(true);
             }}
-            onOpenAlerts={() => {
-              setIsAlertSettingsOpen(true);
-            }}
+            onRequireAuth={() => setIsAuthOpen(true)}
           />
         </div>
       )}
@@ -1330,7 +1385,14 @@ export default function Home() {
           isOpen={isRulesOpen}
           hasBackdrop={false}
           onClose={() => setIsRulesOpen(false)}
-          onOpenTakeover={() => setIsTakeOverOpen(true)}
+          onOpenTakeover={() => {
+            if (!user) {
+              setIsRulesOpen(false);
+              setIsAuthOpen(true);
+              return;
+            }
+            setIsTakeOverOpen(true);
+          }}
         />
       )}
 
@@ -1351,6 +1413,7 @@ export default function Home() {
           }}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
+          onRequireAuth={() => setIsAuthOpen(true)}
         />
       )}
 

@@ -14,9 +14,9 @@ export default function ProfilePage() {
         profileId={id}
         onBack={() => router.push("/")}
         onSelectProfile={(nextId) => router.push(`/profile/${nextId}`)}
+        onRequireAuth={() => router.push("/?auth=true")}
         onClaimSlot={() => router.push("/?claim=true")}
         onBumpProject={(projId) => router.push(`/?target=${projId}`)}
-        onOpenAlerts={() => router.push("/?alerts=true")}
       />
     </div>
   );

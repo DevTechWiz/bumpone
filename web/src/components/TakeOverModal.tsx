@@ -16,12 +16,15 @@ import {
   ShieldCheck,
   AtSign,
   ChevronDown,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { Modal, Input, Button, Badge } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import { getRankTier } from './ui/Badge';
 import { MIN_TOP_UP } from '../lib/board';
 import { useAuth } from '../lib/useAuth';
+import { createClient } from '../lib/supabase/client';
 
 export interface TopUpOrder {
   projectId?: string;
@@ -58,6 +61,7 @@ export interface TakeOverModalProps {
   onSubmitTopUp: (order: TopUpOrder) => void;
   hasBackdrop?: boolean;
   onBack?: () => void;
+  onRequireAuth?: () => void;
 }
 
 const CATEGORY_ICON = Tag;
@@ -66,6 +70,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   isOpen,
   onClose,
   onBack,
+  onRequireAuth,
   currentSlots,
   entryFloor,
   categories,
@@ -74,13 +79,16 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   onSubmitTopUp,
   hasBackdrop = true,
 }) => {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [holderId, setHolderId] = useState<string>('');
   const [topUpStr, setTopUpStr] = useState<string>(String(MIN_TOP_UP));
   const [imageUrl, setImageUrl] = useState<string>('');
   const [linkUrl, setLinkUrl] = useState<string>('');
   const [title, setTitle] = useState<string>('');
+  const [creatorHandle, setCreatorHandle] = useState<string>('');
+  const [handleStatus, setHandleStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [handleErrorMsg, setHandleErrorMsg] = useState<string | null>(null);
   const [category, setCategory] = useState<string>(categories[0] ?? 'AI');
   const [imageError, setImageError] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -152,6 +160,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
             }
             if (holderObj.linkUrl) setLinkUrl(holderObj.linkUrl);
             if (holderObj.category) setCategory(holderObj.category);
+            if (holderObj.handle) setCreatorHandle(holderObj.handle.replace(/^@/, ''));
           }
           setTopUpStr(String(MIN_TOP_UP));
         } else if (existingHandles.length > 0) {
@@ -166,6 +175,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           }
           if (firstProj.linkUrl) setLinkUrl(firstProj.linkUrl);
           if (firstProj.category) setCategory(firstProj.category);
+          if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
           const needed = Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid - firstProj.activeValue + 10);
           setTopUpStr(String(needed));
         } else {
@@ -174,15 +184,23 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setTopUpStr(String(Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid + 10)));
           setTitle('');
           setLinkUrl('');
+          const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
+          setCreatorHandle(defaultH.replace(/^@/, ''));
         }
       } else {
         if (existingHandles.length === 0) {
           setMode('new');
         }
         setTopUpStr(String(Math.max(MIN_TOP_UP, entryFloor + 10)));
-        if (mode === 'new' && !title) {
-          setTitle('');
-          setLinkUrl('');
+        if (mode === 'new') {
+          if (!title) {
+            setTitle('');
+            setLinkUrl('');
+          }
+          const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
+          if (!creatorHandle && defaultH) {
+            setCreatorHandle(defaultH.replace(/^@/, ''));
+          }
         }
       }
       setErrorMsg(null);
@@ -194,6 +212,13 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, entryFloor, preselectedTargetSlot]);
+
+  // Sync profile handle when loaded asynchronously for a new project
+  useEffect(() => {
+    if (mode === 'new' && !creatorHandle && profile?.handle) {
+      setCreatorHandle(profile.handle.replace(/^@/, ''));
+    }
+  }, [profile, mode, creatorHandle]);
 
   const holder = existingHandles.find((h) => h.id === holderId) ?? null;
 
@@ -209,6 +234,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
         }
         if (selected.linkUrl) setLinkUrl(selected.linkUrl);
         if (selected.category) setCategory(selected.category);
+        if (selected.handle) setCreatorHandle(selected.handle.replace(/^@/, ''));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,6 +249,8 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setHolderId('');
       setImageUrl('');
       setImageDimensions({});
+      const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
+      setCreatorHandle(defaultH.replace(/^@/, ''));
     } else if (existingHandles.length > 0) {
       const initialHolder = holderId ? existingHandles.find((h) => h.id === holderId) : existingHandles[0];
       if (initialHolder) {
@@ -234,27 +262,84 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
         }
         if (initialHolder.linkUrl) setLinkUrl(initialHolder.linkUrl);
         if (initialHolder.category) setCategory(initialHolder.category);
+        if (initialHolder.handle) setCreatorHandle(initialHolder.handle.replace(/^@/, ''));
       }
     }
   };
+
+  // Debounced handle format and availability validation
+  useEffect(() => {
+    const clean = creatorHandle.trim().replace(/^@/, '').toLowerCase();
+    if (!clean) {
+      setHandleStatus('idle');
+      setHandleErrorMsg(null);
+      return;
+    }
+    if (clean.length < 2) {
+      setHandleStatus('invalid');
+      setHandleErrorMsg('Handle must be at least 2 characters.');
+      return;
+    }
+    if (clean.length > 30) {
+      setHandleStatus('invalid');
+      setHandleErrorMsg('Handle cannot exceed 30 characters.');
+      return;
+    }
+    if (!/^[a-z0-9_]+$/.test(clean)) {
+      setHandleStatus('invalid');
+      setHandleErrorMsg('Only letters, numbers, and underscores allowed.');
+      return;
+    }
+
+    const currentProfileHandle = profile?.handle?.replace(/^@/, '').toLowerCase();
+    if (currentProfileHandle && clean === currentProfileHandle) {
+      setHandleStatus('available');
+      setHandleErrorMsg(null);
+      return;
+    }
+
+    if (mode === 'existing' && holder?.handle?.replace(/^@/, '').toLowerCase() === clean) {
+      setHandleStatus('available');
+      setHandleErrorMsg(null);
+      return;
+    }
+
+    setHandleStatus('checking');
+    setHandleErrorMsg(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/profile/check-handle?handle=${encodeURIComponent(clean)}&userId=${encodeURIComponent(user?.id || '')}`
+        );
+        const data = await res.json();
+        if (!res.ok || !data.available) {
+          setHandleStatus('taken');
+          setHandleErrorMsg(data.error || 'This @handle is already taken.');
+        } else {
+          setHandleStatus('available');
+          setHandleErrorMsg(null);
+        }
+      } catch {
+        setHandleStatus('idle');
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [creatorHandle, profile?.handle, user?.id, mode, holder?.handle]);
 
   const currentValue = mode === 'existing' && holder ? holder.activeValue : 0;
   const parsedTopUp = Math.floor(parseFloat(topUpStr) || 0);
   const resultingValue = currentValue + Math.max(0, parsedTopUp);
 
-  // Derive verified creator handle from authenticated session or selected project holder.
-  // Locked down to prevent impersonation and identity spoofing on the board.
-  const authUsername =
-    user?.user_metadata?.user_name ||
-    user?.user_metadata?.preferred_username ||
-    (user?.email ? user.email.split('@')[0] : null);
-
-  const effectiveHandle =
-    mode === 'existing' && holder
-      ? (holder.handle?.startsWith('@') ? holder.handle : `@${holder.handle || 'creator'}`)
-      : authUsername
-      ? (authUsername.startsWith('@') ? authUsername : `@${authUsername}`)
-      : '@challenger';
+  const cleanHandle = creatorHandle.trim().replace(/^@/, '').toLowerCase();
+  const effectiveHandle = cleanHandle
+    ? `@${cleanHandle}`
+    : profile?.handle
+    ? (profile.handle.startsWith('@') ? profile.handle : `@${profile.handle}`)
+    : user?.user_metadata?.user_name
+    ? `@${user.user_metadata.user_name.replace(/^@/, '')}`
+    : '@creator';
 
   const boardValues = React.useMemo(() => {
     const pool = mode === 'existing' && holder ? currentSlots.filter((s) => s.id !== holder.id) : currentSlots;
@@ -296,6 +381,23 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setErrorMsg('Please enter a project or product name.');
       return;
     }
+    const cleanToSubmit = creatorHandle.trim().replace(/^@/, '').toLowerCase();
+    if (!cleanToSubmit || cleanToSubmit.length < 2) {
+      setErrorMsg('Creator handle must be at least 2 characters long.');
+      return;
+    }
+    if (cleanToSubmit.length > 30) {
+      setErrorMsg('Creator handle cannot exceed 30 characters.');
+      return;
+    }
+    if (!/^[a-z0-9_]+$/.test(cleanToSubmit)) {
+      setErrorMsg('Creator handle can only contain letters, numbers, and underscores.');
+      return;
+    }
+    if (handleStatus === 'taken') {
+      setErrorMsg('This @handle is already taken. Please choose another one.');
+      return;
+    }
     if (!imageUrl.trim()) {
       setErrorMsg(mode === 'new' ? 'Please upload your project logo or artwork.' : 'Project artwork is missing.');
       return;
@@ -311,6 +413,25 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
     setIsSubmitting(true);
     setErrorMsg(null);
+
+    // If authenticated user changed their handle, update public.users
+    if (user && cleanToSubmit !== profile?.handle?.replace(/^@/, '').toLowerCase()) {
+      try {
+        const supabase = createClient();
+        await supabase
+          .from('users')
+          .update({
+            handle: cleanToSubmit,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+        if (refreshProfile) {
+          refreshProfile();
+        }
+      } catch (err) {
+        console.warn('Failed to sync updated handle to public.users:', err);
+      }
+    }
 
     const orderData: TopUpOrder = {
       projectId: mode === 'existing' && holder ? holder.id : undefined,
@@ -376,6 +497,18 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   const eliteSlot13 = currentSlots[12] || currentSlots[currentSlots.length - 1];
   const lordSlot40 = currentSlots[39] || currentSlots[currentSlots.length - 1];
 
+  const modalTitle = preselectedTargetSlot
+    ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
+    : mode === 'existing' && holder
+    ? `Bump "${holder.title}"`
+    : 'Claim Your Turf on the Board';
+
+  const modalSubtitle = preselectedTargetSlot
+    ? `Outbid $${preselectedTargetSlot.amountPaid} to claim Rank #${preselectedTargetSlot.rank}. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`
+    : mode === 'existing' && holder
+    ? `Top up active value to propel "${holder.title}" higher on the grid. Minimum top-up $${MIN_TOP_UP}.`
+    : `Rank is determined by Active Value. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`;
+
   return (
     <Modal
       isOpen={isOpen}
@@ -383,10 +516,49 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       onBack={onBack}
       zIndex="z-[70]"
       hasBackdrop={hasBackdrop}
-      title="Claim Your Turf on the Board"
-      subtitle={`Rank is determined by Active Value. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`}
+      title={modalTitle}
+      subtitle={modalSubtitle}
       maxWidth="lg"
     >
+      {!user ? (
+        <div className="py-8 px-4 text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-xl shadow-amber-500/10">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2 max-w-md mx-auto">
+            <h3 className="text-lg font-bold text-white tracking-tight">
+              Sign In Required to Bid or Bump
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              You must be signed in with your account to bid on slots, lock in your creator handle, and carry forward active value.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              leftIcon={<ShieldCheck className="w-4 h-4 fill-zinc-950" />}
+              onClick={() => {
+                onClose();
+                onRequireAuth?.();
+              }}
+              className="w-full sm:w-auto font-bold px-6 py-2.5 shadow-lg shadow-amber-500/20"
+            >
+              Sign In to Continue
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              onClick={onClose}
+              className="w-full sm:w-auto text-xs text-slate-400 hover:text-white"
+            >
+              Browse Wall
+            </Button>
+          </div>
+        </div>
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Active Value banner in dark glass */}
         <div className="p-3.5 rounded-xl bg-white/[0.04] border border-white/[0.09] flex items-start gap-3">
@@ -743,28 +915,17 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           />
           <Input
             label="Creator Handle"
-            value={effectiveHandle}
+            value={creatorHandle ? `@${creatorHandle.replace(/^@/, '')}` : (profile?.handle ? `@${profile.handle.replace(/^@/, '')}` : '@anonymous')}
             readOnly
             disabled
             leftAddon={<AtSign className="w-3.5 h-3.5 text-slate-400" />}
             rightAddon={
-              user ? (
-                <span title="Verified Account">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                </span>
-              ) : (
-                <span title="Locked Handle">
-                  <Lock className="w-3.5 h-3.5 text-slate-400" />
-                </span>
-              )
+              <span title="Locked to Verified Profile">
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+              </span>
             }
-            helperText={
-              user
-                ? "Locked & verified to your account"
-                : mode === 'existing'
-                ? "Locked to project owner"
-                : "Sign in to bind your verified handle"
-            }
+            helperText="Locked & verified to your account profile. Update handle in Profile settings."
+            className="bg-black/50 text-neutral-300 cursor-not-allowed border-white/[0.08]"
           />
         </div>
         <div>
@@ -838,6 +999,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           Payment buys a visibility service — not ownership, investment, or a wallet balance. Ranking is dynamic and recomputed when payment confirms.
         </p>
       </form>
+      )}
     </Modal>
   );
 };

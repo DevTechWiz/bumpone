@@ -6,6 +6,7 @@ import { User, LogOut, Layers, ChevronDown, Zap, Bell } from 'lucide-react';
 
 export interface UserMenuProps {
   user: SupabaseUser;
+  userHandle?: string;
   onSignOut: () => void;
   onViewProfile?: () => void;
   onViewMySlots?: () => void;
@@ -16,6 +17,7 @@ export interface UserMenuProps {
 
 export const UserMenu: React.FC<UserMenuProps> = ({
   user,
+  userHandle: propUserHandle,
   onSignOut,
   onViewProfile,
   onViewMySlots,
@@ -36,14 +38,20 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const userHandle = (
+    propUserHandle ||
+    user.user_metadata?.user_name ||
+    user.user_metadata?.preferred_username ||
+    'creator'
+  ).toLowerCase().replace('@', '');
+
   const displayName =
     user.user_metadata?.custom_claims?.global_name ||
     user.user_metadata?.full_name ||
-    user.user_metadata?.user_name ||
-    user.email?.split('@')[0] ||
-    'Challenger';
+    user.user_metadata?.name ||
+    userHandle;
 
-  const avatarUrl = user.user_metadata?.avatar_url;
+  const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
   return (
     <div className="relative" ref={menuRef}>
@@ -64,7 +72,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           </div>
         )}
         <span className="font-semibold max-w-[80px] sm:max-w-[120px] truncate text-white">
-          @{displayName}
+          @{userHandle}
         </span>
         {userSlotsCount > 0 && (
           <span className="px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-mono font-bold">
@@ -80,8 +88,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           <div className="px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-white truncate">@{displayName}</p>
-                <p className="text-[11px] text-neutral-400 truncate">{user.email}</p>
+                <p className="text-xs font-semibold text-white truncate">{displayName}</p>
+                <p className="text-[11px] text-amber-300 font-mono truncate">@{userHandle}</p>
               </div>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
                 userSlotsCount > 0 

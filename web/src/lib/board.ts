@@ -42,12 +42,24 @@ export interface User {
   id: string;
   name: string;
   handle: string;
-  avatar_url: string;
-  bio: string;
+  avatar_url?: string;
+  bio?: string;
   twitter?: string;
   github?: string;
   website?: string;
   joined_days_ago?: number;
+  created_at?: string;
+  handle_last_changed_at?: string;
+}
+
+export function getHandleCooldownRemainingDays(lastChangedAt?: string | null): number {
+  if (!lastChangedAt) return 0;
+  const lastChangeMs = new Date(lastChangedAt).getTime();
+  if (isNaN(lastChangeMs)) return 0;
+  const elapsedMs = Date.now() - lastChangeMs;
+  const totalMs = 30 * 24 * 60 * 60 * 1000;
+  if (elapsedMs >= totalMs) return 0;
+  return Math.ceil((totalMs - elapsedMs) / (1000 * 60 * 60 * 24));
 }
 
 export interface Profile {
@@ -136,161 +148,14 @@ const ART: Artwork[] = [
 
 const ART_MAP = new Map(ART.map((a) => [a.url, a]));
 
-const BRANDS: { name: string; handle: string; url: string; category: Category }[] = [
-  { name: "Solana Syndicate DAO", handle: "@sabor_dao", url: "https://solana.com", category: "Tech" },
-  { name: "Neon Samurai #409", handle: "@vortex_eth", url: "https://opensea.io", category: "Creators" },
-  { name: "Prism Waves Genesis", handle: "@chroma_art", url: "https://superrare.com", category: "Design" },
-  { name: "Apex AI Copilot", handle: "@apex_tools", url: "https://github.com", category: "AI" },
-  { name: "Cyberpunk Tokyo", handle: "@shinji_3d", url: "https://artstation.com", category: "Design" },
-  { name: "SaaS Pulse Tracker", handle: "@marcus_builds", url: "https://indiehackers.com", category: "Apps" },
-  { name: "Hyperdrive Engine", handle: "@hyper_labs", url: "https://hyperdrive.xyz", category: "Tech" },
-  { name: "Voxel Punk Arcade", handle: "@pixel_pete", url: "https://itch.io", category: "Games" },
-  { name: "Ether Knight #12", handle: "@eth_knight", url: "https://etherscan.io", category: "Games" },
-  { name: "DeFi Matrix Protocol", handle: "@matrix_defi", url: "https://defillama.com", category: "Tech" },
-  { name: "Nova Quantum Labs", handle: "@novalabs", url: "https://github.com", category: "AI" },
-  { name: "Starlight Collective", handle: "@starlight", url: "https://openai.com", category: "AI" },
-  { name: "Vortex Protocol", handle: "@vortex_fi", url: "https://stripe.com", category: "Apps" },
-  { name: "Obsidian Studio", handle: "@obsidian", url: "https://linear.app", category: "Design" },
-  { name: "Pixel Drifters", handle: "@drifters", url: "https://x.com", category: "Games" },
-  { name: "Lumen Grid", handle: "@lumen_grid", url: "https://vercel.com", category: "Websites" },
-  { name: "Chrome Atlas", handle: "@chrome_atlas", url: "https://atlas.dev", category: "Websites" },
-  { name: "Neon Harbor", handle: "@neon_harbor", url: "https://harbor.gg", category: "Creators" },
-  { name: "Quantum Quill", handle: "@quantum_quill", url: "https://quill.press", category: "Creators" },
-  { name: "Forge & Pixel", handle: "@forge_pixel", url: "https://forgepixel.io", category: "Design" },
-  { name: "Orbit Chat", handle: "@orbit_chat", url: "https://orbit.chat", category: "Apps" },
-  { name: "Synthwave Riders", handle: "@synth_riders", url: "https://riders.gg", category: "Games" },
-  { name: "Data Harbor", handle: "@data_harbor", url: "https://dataharbor.io", category: "Tech" },
-  { name: "Meme Foundry", handle: "@meme_foundry", url: "https://memefoundry.fun", category: "Creators" },
-];
+export const CREATORS: User[] = [];
 
-export const CREATORS: User[] = [
-  {
-    id: "user-1",
-    name: "Alex Rivera",
-    handle: "alexrivera",
-    avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80",
-    bio: "Building decentralized protocols, web apps and AI primitives. Constant shipper.",
-    twitter: "alexrivera",
-    website: "https://alexrivera.dev",
-    joined_days_ago: 54,
-  },
-  {
-    id: "user-2",
-    name: "Sarah Jenkins",
-    handle: "sarah_j",
-    avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&auto=format&fit=crop&q=80",
-    bio: "Founding engineer & design system addict. Crafting developer tools with pixel precision.",
-    twitter: "sarah_j",
-    github: "sarahjenkins",
-    joined_days_ago: 42,
-  },
-  {
-    id: "user-3",
-    name: "Marcus Chen",
-    handle: "marcuschen",
-    avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80",
-    bio: "Indie builder. Running 3 SaaS tools and exploring autonomous agents.",
-    twitter: "marcusc",
-    github: "marcuschen",
-    joined_days_ago: 65,
-  },
-  {
-    id: "user-4",
-    name: "Elena Rostova",
-    handle: "elena_r",
-    avatar_url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=160&auto=format&fit=crop&q=80",
-    bio: "Creative technologist & generative visual designer. WebGL, shaders, and games.",
-    website: "https://elena.design",
-    joined_days_ago: 28,
-  },
-  {
-    id: "user-5",
-    name: "David Kim",
-    handle: "davidk",
-    avatar_url: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=160&auto=format&fit=crop&q=80",
-    bio: "Staff frontend architect. Micro-interactions and performance evangelist.",
-    github: "davidkim",
-    twitter: "davidk_dev",
-    joined_days_ago: 19,
-  },
-  {
-    id: "user-6",
-    name: "Aria Thorne",
-    handle: "ariathorne",
-    avatar_url: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=160&auto=format&fit=crop&q=80",
-    bio: "Crypto native & community strategist. Web3 growth lead and DeFi contributor.",
-    twitter: "ariathorne",
-    joined_days_ago: 33,
-  },
-];
-
-export function getCreator(idOrHandle: string): User | undefined {
-  const clean = idOrHandle.toLowerCase().replace("@", "");
-  return CREATORS.find(
-    (c) => c.id.toLowerCase() === clean || c.handle.toLowerCase() === clean
-  );
-}
-
-function mulberry32(a: number) {
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+export function getCreator(_idOrHandle: string): User | undefined {
+  return undefined;
 }
 
 export function buildProfiles(): Profile[] {
-  const rnd = mulberry32(7);
-  const profiles: Profile[] = [];
-  let value = 100; // Genesis face value: #1 = $100 down to #100 = $1.
-  for (let i = 0; i < 120; i++) {
-    const brand = BRANDS[i % BRANDS.length];
-    const art = ART[(i * 3 + 2) % ART.length];
-    const creator = CREATORS[i % CREATORS.length];
-    const bumps = 1 + Math.floor(rnd() * 12);
-    const journey: number[] = [];
-    let r = Math.min(120, i + 1 + Math.floor(rnd() * 30));
-    for (let k = 0; k < 5 + Math.floor(rnd() * 4); k++) {
-      journey.push(r);
-      r = Math.max(1, r - Math.floor(rnd() * 22));
-    }
-    journey.push(i + 1);
-    profiles.push({
-      id: `slot-${i + 1}`,
-      seq: 1000 + i,
-      name: i < 10 ? brand.name : `${brand.name} #${i + 1}`,
-      handle: brand.handle,
-      category: i < 10 ? brand.category : CATEGORIES[Math.floor(rnd() * CATEGORIES.length)],
-      active_value: value,
-      imageUrl: art.url,
-      linkUrl: brand.url,
-      peak_rank: Math.max(1, Math.min(120, i + 1 - Math.floor(rnd() * 25))),
-      times_bumped: bumps,
-      times_climbed: Math.floor(rnd() * bumps),
-      views: 400 + Math.floor(rnd() * 14000),
-      shares: Math.floor(rnd() * 300),
-      joined_days_ago: 1 + Math.floor(rnd() * 60),
-      owner_id: creator.id,
-      owner_name: creator.name,
-      owner_handle: creator.handle,
-      owner_avatar: creator.avatar_url,
-      owner_bio: creator.bio,
-      // Mock recency mix: ~40% bumped within the last 24h ("Today"), rest older.
-      last_bump_at: Date.now() - (rnd() < 0.4 ? Math.floor(rnd() * 24 * 3600000) : (1 + Math.floor(rnd() * 30)) * 86400000),
-      journey,
-      reactions: {
-        fire: Math.floor(rnd() * 300),
-        eyes: Math.floor(rnd() * 120),
-        heart: Math.floor(rnd() * 90),
-        laugh: Math.floor(rnd() * 40),
-      },
-    });
-    // Genesis ladder $100 → $1, then floor ties broken by sequence.
-    value = value > 1 ? value - 1 : 1;
-  }
-  return profiles;
+  return [];
 }
 
 /** Canonical ordering: active_value DESC, earliest sequence first. */

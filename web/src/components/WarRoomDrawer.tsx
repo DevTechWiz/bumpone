@@ -14,7 +14,8 @@ import {
   Volume2,
   VolumeX,
   AtSign,
-  Hash
+  Hash,
+  Lock,
 } from 'lucide-react';
 import { BumpEvent, Message, SlotItem } from '../lib/slotTypes';
 import { soundEngine } from '../lib/sound';
@@ -32,6 +33,7 @@ export interface WarRoomDrawerProps {
   isMuted: boolean;
   onToggleMute: () => void;
   senderHandle?: string;
+  onRequireAuth?: () => void;
 }
 
 type WarRoomChannel = 'dispatch' | 'lounge' | 'kings';
@@ -48,6 +50,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
   isMuted,
   onToggleMute,
   senderHandle,
+  onRequireAuth,
 }) => {
   const activeMessages = messages;
   const [activeChannel, setActiveChannel] = useState<WarRoomChannel>('dispatch');
@@ -437,16 +440,34 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
       {/* Message Input Bar (Discord-style bottom input) */}
       <form onSubmit={handleSend} className="p-3 border-t border-white/[0.08] bg-black/40 space-y-2">
         <div className="flex items-center gap-2">
-          {/* Sender Handle Input */}
-          <div className="relative w-32 shrink-0">
+          {/* Sender Handle Input (Locked to authenticated user to prevent impersonation) */}
+          <div className="relative w-36 shrink-0">
             <AtSign className="w-3 h-3 text-slate-500 absolute left-2 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              value={senderName}
-              onChange={(e) => setSenderName(e.target.value)}
-              placeholder="@handle"
-              className="w-full bg-white/[0.05] text-white text-[11px] pl-6 pr-2 py-1.5 rounded-lg border border-white/[0.08] focus:border-indigo-400 focus:outline-none font-mono"
+              value={senderHandle ? (senderHandle.startsWith('@') ? senderHandle : `@${senderHandle}`) : '@spectator'}
+              readOnly
+              disabled
+              title={senderHandle ? `Verified handle: ${senderHandle}` : "Sign in to chat with your verified @handle"}
+              className="w-full bg-white/[0.04] text-neutral-300 text-[11px] pl-6 pr-6 py-1.5 rounded-lg border border-white/[0.08] cursor-not-allowed font-mono opacity-85 select-none"
             />
+            {senderHandle ? (
+              <span title="Verified Handle" className="absolute right-2 top-1/2 -translate-y-1/2">
+                <Lock className="w-3 h-3 text-amber-400" />
+              </span>
+            ) : onRequireAuth ? (
+              <button
+                type="button"
+                onClick={onRequireAuth}
+                className="text-[9px] text-amber-400 hover:text-amber-300 absolute right-2 top-1/2 -translate-y-1/2 font-semibold underline cursor-pointer"
+              >
+                Sign In
+              </button>
+            ) : (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                <Lock className="w-3 h-3 text-neutral-500" />
+              </span>
+            )}
           </div>
 
           {/* Target Slot Tag (Optional) */}

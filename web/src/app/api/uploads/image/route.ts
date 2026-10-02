@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
     // Resize to 500x500 (fit: cover), strip EXIF metadata, convert to WebP with 85% quality
     const image = sharp(inputBuffer, { limitInputPixels: 2560 * 2560 });
     const metadata = await image.metadata();
-    if (!metadata.width || !metadata.height || metadata.width < 400 || metadata.height < 400 || metadata.width > 2560 || metadata.height > 2560) {
-      return NextResponse.json({ error: 'Image dimensions must be between 400px and 2560px.' }, { status: 400 });
+    if (!metadata.width || !metadata.height || metadata.width < 64 || metadata.height < 64 || metadata.width > 4096 || metadata.height > 4096) {
+      return NextResponse.json({ error: 'Image dimensions must be between 64px and 4096px.' }, { status: 400 });
     }
     const processedBuffer = await image
       .resize(500, 500, {
