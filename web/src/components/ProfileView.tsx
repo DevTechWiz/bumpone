@@ -73,6 +73,7 @@ import { sessionGetJSON, safeGetJSON } from "../lib/storage";
 export interface ProfileViewProps {
   profileId: string;
   initialMode?: "user" | "project";
+  initialProject?: Profile | null;
   onBack?: () => void;
   onSelectProfile?: (profileId: string) => void;
   onUpdateProfile?: (updated: Profile) => void;
@@ -85,6 +86,7 @@ export interface ProfileViewProps {
 export function ProfileView({
   profileId,
   initialMode,
+  initialProject,
   onBack,
   onSelectProfile,
   onUpdateProfile,
@@ -108,6 +110,7 @@ export function ProfileView({
 
   // Real board profiles from database
   const [profiles, setProfiles] = useState<Profile[]>(() => {
+    if (initialProject) return [initialProject];
     if (typeof window !== "undefined") {
       const cached = sessionGetJSON<Profile[]>("bumped_board_cache");
       if (cached && Array.isArray(cached) && cached.length > 0) return cached;
@@ -117,22 +120,31 @@ export function ProfileView({
     return [];
   });
 
-  // Fetch real board profiles from database
+  // Fetch real board profiles from database (deferred if initialProject is already present)
   useEffect(() => {
-    fetch("/api/board?limit=120")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
-          setProfiles(data.profiles);
-        }
-      })
-      .catch((err) => {
-        console.warn("Could not fetch board profiles:", err);
-      })
-      .finally(() => {
-        setIsProfilesLoading(false);
-      });
-  }, []);
+    const fetchBoard = () => {
+      fetch("/api/board?limit=120")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+            setProfiles(data.profiles);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not fetch board profiles:", err);
+        })
+        .finally(() => {
+          setIsProfilesLoading(false);
+        });
+    };
+
+    if (initialProject) {
+      const timer = setTimeout(fetchBoard, 1500);
+      return () => clearTimeout(timer);
+    } else {
+      fetchBoard();
+    }
+  }, [initialProject]);
 
   const cleanId = (profileId || "self").toLowerCase().replace("@", "").trim();
 
@@ -462,6 +474,9 @@ export function ProfileView({
         reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
       };
     }
+    if (initialProject && (!matchedProject || initialMode === "project")) {
+      return matchedProject || initialProject;
+    }
     return (
       matchedProject ?? {
         id: profileId,
@@ -483,12 +498,13 @@ export function ProfileView({
         reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
       }
     );
-  }, [isViewingUser, creatorProjects, activeUser, matchedProject, profileId]);
+  }, [isViewingUser, creatorProjects, activeUser, initialProject, matchedProject, profileId, initialMode]);
 
   const p: Profile = singleProject;
 
   const isProjectLoading =
     !isViewingUser &&
+    !initialProject &&
     (isProfilesLoading || (!matchedProject && profiles.length === 0));
 
   const sorted = useMemo(() => sortBoard(profiles), [profiles]);
@@ -1802,7 +1818,7 @@ export function ProfileView({
               <div className="relative h-56 sm:h-72 bg-[#0d0e12] overflow-hidden flex items-center justify-center">
                 {p.imageUrl ? (
                   <img
-                    src={p.imageUrl}
+                    src={p.imageUrl.includes("images.unsplash.com") && p.imageUrl.includes("w=") ? p.imageUrl.replace(/w=\d+/, "w=600") : p.imageUrl}
                     alt={p.name || "Project"}
                     loading="eager"
                     fetchPriority="high"

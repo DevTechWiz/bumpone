@@ -260,7 +260,16 @@ export const CosmicBackground: React.FC = () => {
       animationFrameId = requestAnimationFrame(render);
     };
 
-    render();
+    const isMobile = window.innerWidth < 768;
+    if (prefersReducedMotion || isMobile) {
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(() => drawStaticFrame());
+      } else {
+        setTimeout(drawStaticFrame, 500);
+      }
+    } else {
+      render();
+    }
 
     const handleVisibilityChange = () => {
       if (document.hidden) {

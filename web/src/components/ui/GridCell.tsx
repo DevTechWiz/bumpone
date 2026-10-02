@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ExternalLink, AlertTriangle, Crown, Sparkles, Shield, Zap } from 'lucide-react';
 import { Badge, getRankTier } from './Badge';
 import { formatNumber } from '../../lib/board';
@@ -81,10 +81,21 @@ const GridCellComponent: React.FC<GridCellProps> = ({
   const isHero = slot.rank === 1;
   const isFeatured = slot.rank <= 5;
 
+  const optimizedSrc = useMemo(() => {
+    if (!slot.imageUrl) return "";
+    if (slot.imageUrl.includes("images.unsplash.com") && slot.imageUrl.includes("w=")) {
+      return slot.imageUrl.replace(/w=\d+/, isHero ? "w=400" : "w=200");
+    }
+    return slot.imageUrl;
+  }, [slot.imageUrl, isHero]);
+
   return (
     <div
       style={{
         ...style,
+        contain: isHero ? 'layout style' : 'layout style paint',
+        contentVisibility: isHero || slot.rank <= 25 ? 'visible' : 'auto',
+        containIntrinsicSize: style?.width && style?.height ? `${style.width}px ${style.height}px` : undefined,
         transition: 'transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease',
         transform: isHighlighted || isHoveredLocal ? 'scale(1.025)' : 'scale(1)',
         opacity: isDimmed ? 0.22 : 1,
@@ -104,7 +115,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
       {/* Background Image / Fallback */}
       {!imageError && slot.imageUrl ? (
         <img
-          src={slot.imageUrl}
+          src={optimizedSrc}
           alt={slot.title || `Slot #${slot.rank}`}
           onError={() => setImageError(true)}
           loading={isHero ? "eager" : "lazy"}

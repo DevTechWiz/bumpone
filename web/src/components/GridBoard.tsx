@@ -45,8 +45,8 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
     if (typeof window !== 'undefined') {
       const isMobile = window.innerWidth < 768;
       return {
-        w: isMobile ? Math.max(320, window.innerWidth - 32) : 1000,
-        h: isMobile ? 540 : 700,
+        w: isMobile ? Math.max(320, window.innerWidth - 16) : 1000,
+        h: isMobile ? Math.max(480, window.innerHeight - 96) : 700,
       };
     }
     return { w: 1000, h: 700 };
@@ -86,14 +86,17 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
     if (!el) return;
 
     const apply = (w: number, h: number) => {
+      if (w <= 0 || h <= 0) return;
       setSize((prev) =>
-        Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5
+        Math.abs(prev.w - w) < 4 && Math.abs(prev.h - h) < 4
           ? prev
           : { w, h }
       );
     };
 
-    apply(el.clientWidth, el.clientHeight);
+    if (el.clientWidth > 0 && el.clientHeight > 0) {
+      apply(el.clientWidth, el.clientHeight);
+    }
 
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
@@ -104,8 +107,22 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   }, []);
 
   const [mounted, setMounted] = useState(false);
+  const [renderFullBoard, setRenderFullBoard] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        const handle = (window as any).requestIdleCallback(
+          () => setRenderFullBoard(true),
+          { timeout: 4500 }
+        );
+        return () => (window as any).cancelIdleCallback?.(handle);
+      } else {
+        const timer = setTimeout(() => setRenderFullBoard(true), 3500);
+        return () => clearTimeout(timer);
+      }
+    }
   }, []);
 
   const layout = useMemo(() => {
@@ -203,7 +220,7 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
           style={{ transform: `scale(${zoomLevel})` }}
         >
           {cellStyles && (isLoading || slots.length === 0)
-            ? Array.from({ length: 100 }).map((_, idx) => {
+            ? Array.from({ length: renderFullBoard ? 100 : 16 }).map((_, idx) => {
                 const rank = idx + 1;
                 const style = cellStyles[rank];
                 if (!style) return null;
@@ -229,7 +246,7 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
                 );
               })
             : cellStyles &&
-              slots.slice(0, 100).map((slot) => {
+              slots.slice(0, renderFullBoard ? 100 : 16).map((slot) => {
                 const style = cellStyles[slot.rank];
                 if (!style) return null;
 
