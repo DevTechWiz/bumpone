@@ -107,9 +107,9 @@ const GridCellComponent: React.FC<GridCellProps> = ({
           src={slot.imageUrl}
           alt={slot.title || `Slot #${slot.rank}`}
           onError={() => setImageError(true)}
-          loading={isFeatured ? "eager" : "lazy"}
-          fetchPriority={isHero ? "high" : isFeatured ? "auto" : "low"}
-          decoding={isHero ? "sync" : "async"}
+          loading={isHero ? "eager" : "lazy"}
+          fetchPriority={isHero ? "high" : "low"}
+          decoding="async"
           className={`w-full h-full transition-transform duration-300 group-hover:scale-105 ${
             slot.imageFit === "contain" ? "object-contain bg-black/90" : "object-cover"
           }`}

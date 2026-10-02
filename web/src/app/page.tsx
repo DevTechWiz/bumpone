@@ -33,13 +33,25 @@ import {
 import dynamic from 'next/dynamic';
 import { safeGetJSON, safeSetJSON, sessionGetJSON, sessionSetJSON, safeSet, safeRemove } from '../lib/storage';
 import { GridBoard } from '../components/GridBoard';
-import { ProfileView } from '../components/ProfileView';
 import type { TopUpOrder } from '../components/TakeOverModal';
-import { BumpNotification } from '../components/BumpNotification';
-import { RadarMiniMap } from '../components/RadarMiniMap';
 import { GridFilterBar, type GridFilterState } from '../components/GridFilterBar';
 import { soundEngine } from '../lib/sound';
 import type { GridOrientation } from '../lib/boardLayout';
+
+const ProfileView = dynamic(
+  () => import('../components/ProfileView').then((m) => m.ProfileView),
+  { ssr: false }
+);
+
+const BumpNotification = dynamic(
+  () => import('../components/BumpNotification').then((m) => m.BumpNotification),
+  { ssr: false }
+);
+
+const RadarMiniMap = dynamic(
+  () => import('../components/RadarMiniMap').then((m) => m.RadarMiniMap),
+  { ssr: false }
+);
 
 const CosmicBackground = dynamic(
   () => import('../components/CosmicBackground').then((m) => m.CosmicBackground),

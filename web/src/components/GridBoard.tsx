@@ -41,7 +41,16 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   });
 
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [size, setSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 768;
+      return {
+        w: isMobile ? Math.max(320, window.innerWidth - 32) : 1000,
+        h: isMobile ? 540 : 700,
+      };
+    }
+    return { w: 1000, h: 700 };
+  });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleCellClick = useCallback(

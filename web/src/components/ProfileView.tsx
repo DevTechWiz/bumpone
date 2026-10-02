@@ -1804,6 +1804,9 @@ export function ProfileView({
                   <img
                     src={p.imageUrl}
                     alt={p.name || "Project"}
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
                     className="h-full w-full select-none object-cover"
                     style={{
                       objectPosition: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
@@ -1813,9 +1816,9 @@ export function ProfileView({
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
+                  <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                     <ImageIcon className="w-10 h-10 stroke-1" />
-                    <span className="text-xs font-mono text-slate-500">No Image Uploaded</span>
+                    <span className="text-xs font-mono text-slate-400">No Image Uploaded</span>
                   </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#18191d] via-[#18191d]/20 to-transparent pointer-events-none" />
