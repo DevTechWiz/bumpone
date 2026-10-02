@@ -4,22 +4,18 @@ import {
   Swords,
   Crown,
   Send,
-  Sparkles,
-  Flame,
-  Skull,
-  Rocket,
-  Diamond,
-  X,
   Radio,
   Volume2,
   VolumeX,
-  AtSign,
+  Skull,
   Hash,
+  AtSign,
   Lock,
 } from 'lucide-react';
 import { BumpEvent, Message, SlotItem } from '../lib/slotTypes';
 import { soundEngine } from '../lib/sound';
 import { createClient } from '../lib/supabase/client';
+import { Drawer, Skeleton } from './ui';
 
 export interface WarRoomDrawerProps {
   isOpen: boolean;
@@ -161,42 +157,32 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
   const kingSlot = slots.find((s) => s.rank === 1);
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] bg-[#141519]/98 backdrop-blur-2xl border-l border-white/[0.12] shadow-2xl flex flex-col select-none animate-in slide-in-from-right duration-300">
-      {/* Discord Header Bar */}
-      <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.14] flex items-center justify-center text-neutral-200">
-            <Radio className="w-4 h-4 animate-pulse text-neutral-300" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5 font-mono">
-              <span>WAR ROOM DISPATCH</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            </h2>
-            <p className="text-[11px] text-neutral-400">Live battle telemetry & spectator transmissions</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onToggleMute}
-            className={`p-1.5 rounded-lg border transition-colors ${
-              isMuted
-                ? 'bg-rose-500/15 border-rose-400/30 text-rose-300'
-                : 'bg-white/[0.05] border-white/[0.1] text-neutral-300 hover:text-white'
-            }`}
-            title={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      headerIcon={<Radio className="w-4 h-4 animate-pulse text-neutral-300" />}
+      title={
+        <span className="flex items-center gap-1.5">
+          <span>WAR ROOM DISPATCH</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+        </span>
+      }
+      subtitle="Live battle telemetry & spectator transmissions"
+      headerExtra={
+        <button
+          type="button"
+          onClick={onToggleMute}
+          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+            isMuted
+              ? 'bg-rose-500/15 border-rose-400/30 text-rose-300'
+              : 'bg-white/[0.05] border-white/[0.1] text-neutral-300 hover:text-white'
+          }`}
+          title={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+      }
+    >
 
       {/* Discord Channel Switcher Bar */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-white/[0.08] bg-black/40 text-xs">
@@ -384,56 +370,72 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
         )}
 
         {/* CHANNEL 3: KING THRONE HIGHLIGHT */}
-        {activeChannel === 'kings' && kingSlot && (
-          <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-black border border-amber-400/40 text-center relative overflow-hidden">
-              <div className="w-16 h-16 rounded-2xl mx-auto overflow-hidden border-2 border-amber-400 shadow-xl mb-3">
-                <img
-                  src={kingSlot.imageUrl}
-                  alt={kingSlot.title}
-                  className="w-full h-full object-cover"
-                />
+        {activeChannel === 'kings' && (
+          kingSlot ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-black border border-amber-400/40 text-center relative overflow-hidden">
+                <div className="w-16 h-16 rounded-2xl mx-auto overflow-hidden border-2 border-amber-400 shadow-xl mb-3">
+                  <img
+                    src={kingSlot.imageUrl}
+                    alt={kingSlot.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-200 text-xs font-semibold mb-2">
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  REIGNING MONARCH
+                </span>
+
+                <h3 className="text-base font-bold text-white">{kingSlot.title}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Held by <strong className="text-amber-300">{kingSlot.bidderName}</strong>
+                </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs font-mono">
+                  <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08]">
+                    <span className="text-[10px] text-slate-400 block uppercase">Current Bounty</span>
+                    <span className="text-sm font-bold text-emerald-400">${kingSlot.amountPaid}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08]">
+                    <span className="text-[10px] text-slate-400 block uppercase">Center Footprint</span>
+                    <span className="text-sm font-bold text-amber-300">4x4 Block</span>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    onClick={() => onSelectSlot(kingSlot)}
+                    className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all"
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    Bump the King (${kingSlot.amountPaid + 10})
+                  </button>
+                </div>
               </div>
 
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-200 text-xs font-semibold mb-2">
-                <Crown className="w-3.5 h-3.5 text-amber-400" />
-                REIGNING MONARCH
-              </span>
-
-              <h3 className="text-base font-bold text-white">{kingSlot.title}</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Held by <strong className="text-amber-300">{kingSlot.bidderName}</strong>
-              </p>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs font-mono">
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08]">
-                  <span className="text-[10px] text-slate-400 block uppercase">Current Bounty</span>
-                  <span className="text-sm font-bold text-emerald-400">${kingSlot.amountPaid}</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08]">
-                  <span className="text-[10px] text-slate-400 block uppercase">Center Footprint</span>
-                  <span className="text-sm font-bold text-amber-300">4x4 Block</span>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <button
-                  onClick={() => onSelectSlot(kingSlot)}
-                  className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all"
-                >
-                  <Crown className="w-3.5 h-3.5" />
-                  Bump the King (${kingSlot.amountPaid + 10})
-                </button>
+              <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs space-y-1.5 text-slate-400">
+                <span className="font-bold text-slate-300 block font-mono">Crown Rulebook:</span>
+                <p>
+                  The Rank #1 King occupies the central 16-unit square of the board. Holding the throne grants maximum visibility, elevated chat status, and prominent placement across all devices.
+                </p>
               </div>
             </div>
-
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs space-y-1.5 text-slate-400">
-              <span className="font-bold text-slate-300 block font-mono">Crown Rulebook:</span>
-              <p>
-                The Rank #1 King occupies the central 16-unit square of the board. Holding the throne grants maximum visibility, elevated chat status, and prominent placement across all devices.
-              </p>
+          ) : (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-900 to-black border border-amber-400/20 text-center relative overflow-hidden flex flex-col items-center">
+                <Skeleton variant="rounded-2xl" width={64} height={64} className="mb-3" />
+                <Skeleton variant="rounded-full" width={140} height={24} className="mb-2" />
+                <Skeleton variant="text" width={180} height={20} className="mb-1" />
+                <Skeleton variant="text" width={110} height={14} className="mb-4 opacity-60" />
+                <div className="w-full grid grid-cols-2 gap-2 mt-2">
+                  <Skeleton variant="rounded-xl" height={52} />
+                  <Skeleton variant="rounded-xl" height={52} />
+                </div>
+                <Skeleton variant="rounded-xl" width="100%" height={36} className="mt-4" />
+              </div>
             </div>
-          </div>
+          )
         )}
       </div>
 
@@ -504,6 +506,6 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
           </button>
         </div>
       </form>
-    </div>
+    </Drawer>
   );
 };

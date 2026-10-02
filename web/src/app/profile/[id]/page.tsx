@@ -12,6 +12,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-[#121316] text-neutral-100 font-sans py-6">
       <ProfileView
         profileId={id}
+        initialMode="user"
         onBack={() => router.push("/")}
         onSelectProfile={(nextId) => router.push(`/profile/${nextId}`)}
         onRequireAuth={() => router.push("/?auth=true")}

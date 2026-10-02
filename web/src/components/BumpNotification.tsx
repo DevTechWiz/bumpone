@@ -66,14 +66,14 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
             {/* Dropped Casualty */}
             <div className="p-2.5 rounded-xl bg-rose-950/30 border border-rose-500/25">
               <span className="text-[10px] font-mono text-rose-300 uppercase tracking-wider block">
-                Deleted (#101)
+                Off-Board (#101)
               </span>
               <p className="font-medium text-slate-300 truncate mt-0.5">
                 {event.droppedItem.title}
               </p>
               <div className="flex items-center justify-between mt-1 font-mono text-[11px]">
-                <span className="text-rose-400 font-bold line-through">
-                  #100
+                <span className="text-rose-400 font-bold">
+                  Rank #101
                 </span>
                 <span className="text-slate-400">
                   ${event.droppedItem.amountPaid}

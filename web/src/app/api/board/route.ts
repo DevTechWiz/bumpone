@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         .eq('is_active', true)
         .eq('moderation_status', 'approved')
         .not('current_rank', 'is', null)
-        .lte('current_rank', 100);
+        .lte('current_rank', limit);
 
       if (category && category !== 'All') {
         query = query.eq('categories.name', category);
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
           .eq('is_active', true)
           .eq('moderation_status', 'approved')
           .not('current_rank', 'is', null)
-          .lte('current_rank', 100);
+          .lte('current_rank', limit);
 
         if (sort === 'popular') {
           legacyQuery = legacyQuery.order('total_reactions', { ascending: false });
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
           return {
             id: row.id,
             seq: Number(row.ranking_sequence || row.sequence || 0),
-            name: row.title || row.display_name || 'N/A',
+            name: row.title || row.display_name || 'Project',
             handle: row.handle,
             category: (categoryName || 'Tech') as Category,
             active_value: activeValue,

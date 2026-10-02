@@ -16,15 +16,11 @@ import {
   ShieldCheck,
   AtSign,
   ChevronDown,
-  Loader2,
-  AlertCircle,
 } from 'lucide-react';
-import { Modal, Input, Button, Badge } from './ui';
+import { Modal, Input, Button, Badge, getRankTier } from './ui';
 import { SlotItem } from '../lib/slotTypes';
-import { getRankTier } from './ui/Badge';
 import { MIN_TOP_UP } from '../lib/board';
 import { useAuth } from '../lib/useAuth';
-import { createClient } from '../lib/supabase/client';
 
 export interface TopUpOrder {
   projectId?: string;
@@ -79,7 +75,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   onSubmitTopUp,
   hasBackdrop = true,
 }) => {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile } = useAuth();
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [holderId, setHolderId] = useState<string>('');
   const [topUpStr, setTopUpStr] = useState<string>(String(MIN_TOP_UP));
@@ -87,8 +83,6 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   const [linkUrl, setLinkUrl] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [creatorHandle, setCreatorHandle] = useState<string>('');
-  const [handleStatus, setHandleStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
-  const [handleErrorMsg, setHandleErrorMsg] = useState<string | null>(null);
   const [category, setCategory] = useState<string>(categories[0] ?? 'AI');
   const [imageError, setImageError] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -267,67 +261,6 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     }
   };
 
-  // Debounced handle format and availability validation
-  useEffect(() => {
-    const clean = creatorHandle.trim().replace(/^@/, '').toLowerCase();
-    if (!clean) {
-      setHandleStatus('idle');
-      setHandleErrorMsg(null);
-      return;
-    }
-    if (clean.length < 2) {
-      setHandleStatus('invalid');
-      setHandleErrorMsg('Handle must be at least 2 characters.');
-      return;
-    }
-    if (clean.length > 30) {
-      setHandleStatus('invalid');
-      setHandleErrorMsg('Handle cannot exceed 30 characters.');
-      return;
-    }
-    if (!/^[a-z0-9_]+$/.test(clean)) {
-      setHandleStatus('invalid');
-      setHandleErrorMsg('Only letters, numbers, and underscores allowed.');
-      return;
-    }
-
-    const currentProfileHandle = profile?.handle?.replace(/^@/, '').toLowerCase();
-    if (currentProfileHandle && clean === currentProfileHandle) {
-      setHandleStatus('available');
-      setHandleErrorMsg(null);
-      return;
-    }
-
-    if (mode === 'existing' && holder?.handle?.replace(/^@/, '').toLowerCase() === clean) {
-      setHandleStatus('available');
-      setHandleErrorMsg(null);
-      return;
-    }
-
-    setHandleStatus('checking');
-    setHandleErrorMsg(null);
-
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/profile/check-handle?handle=${encodeURIComponent(clean)}&userId=${encodeURIComponent(user?.id || '')}`
-        );
-        const data = await res.json();
-        if (!res.ok || !data.available) {
-          setHandleStatus('taken');
-          setHandleErrorMsg(data.error || 'This @handle is already taken.');
-        } else {
-          setHandleStatus('available');
-          setHandleErrorMsg(null);
-        }
-      } catch {
-        setHandleStatus('idle');
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [creatorHandle, profile?.handle, user?.id, mode, holder?.handle]);
-
   const currentValue = mode === 'existing' && holder ? holder.activeValue : 0;
   const parsedTopUp = Math.floor(parseFloat(topUpStr) || 0);
   const resultingValue = currentValue + Math.max(0, parsedTopUp);
@@ -381,23 +314,6 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setErrorMsg('Please enter a project or product name.');
       return;
     }
-    const cleanToSubmit = creatorHandle.trim().replace(/^@/, '').toLowerCase();
-    if (!cleanToSubmit || cleanToSubmit.length < 2) {
-      setErrorMsg('Creator handle must be at least 2 characters long.');
-      return;
-    }
-    if (cleanToSubmit.length > 30) {
-      setErrorMsg('Creator handle cannot exceed 30 characters.');
-      return;
-    }
-    if (!/^[a-z0-9_]+$/.test(cleanToSubmit)) {
-      setErrorMsg('Creator handle can only contain letters, numbers, and underscores.');
-      return;
-    }
-    if (handleStatus === 'taken') {
-      setErrorMsg('This @handle is already taken. Please choose another one.');
-      return;
-    }
     if (!imageUrl.trim()) {
       setErrorMsg(mode === 'new' ? 'Please upload your project logo or artwork.' : 'Project artwork is missing.');
       return;
@@ -413,25 +329,6 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
     setIsSubmitting(true);
     setErrorMsg(null);
-
-    // If authenticated user changed their handle, update public.users
-    if (user && cleanToSubmit !== profile?.handle?.replace(/^@/, '').toLowerCase()) {
-      try {
-        const supabase = createClient();
-        await supabase
-          .from('users')
-          .update({
-            handle: cleanToSubmit,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id);
-        if (refreshProfile) {
-          refreshProfile();
-        }
-      } catch (err) {
-        console.warn('Failed to sync updated handle to public.users:', err);
-      }
-    }
 
     const orderData: TopUpOrder = {
       projectId: mode === 'existing' && holder ? holder.id : undefined,

@@ -90,9 +90,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
               <ShieldAlert className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-semibold text-white">Graveyard Warning (#100 Drop-off)</div>
+              <div className="font-semibold text-white">Graveyard Alert (#101+ Displacement)</div>
               <div className="text-[11px] text-slate-400">
-                High-priority alert when your slot is pushed close to the #100 offboard boundary.
+                High-priority alert if an outbid pushes your slot past Rank #100 into the Graveyard.
               </div>
             </div>
           </div>

@@ -102,7 +102,7 @@ export async function GET(
 
         return NextResponse.json({
           id: project.id,
-          name: (project as any).title || (project as any).display_name || 'N/A',
+          name: (project as any).title || (project as any).display_name || 'Project',
           handle: project.handle,
           category: categoryName || 'Tech',
           active_value: activeValue,

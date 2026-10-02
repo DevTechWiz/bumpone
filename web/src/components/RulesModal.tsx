@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Sparkles, Shield, Skull, Zap, Compass } from 'lucide-react';
+import { Crown, Sparkles, Shield, Skull, Zap, Compass, ShieldAlert } from 'lucide-react';
 import { Modal, Button } from './ui';
 import { MIN_TOP_UP } from '../lib/board';
 
@@ -87,15 +87,15 @@ export const RulesModal: React.FC<RulesModalProps> = ({
             </div>
 
             {/* Danger Zone */}
-            <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-1">
+            <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-rose-200 flex items-center gap-1">
-                  <Skull className="w-3.5 h-3.5 text-rose-400" /> The Danger Zone (#51–#100)
+                <span className="font-bold text-amber-200 flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Active Grid Floor (#51–#100)
                 </span>
-                <span className="font-mono text-[10px] text-rose-400">Risk of Bump</span>
+                <span className="font-mono text-[10px] text-amber-300">Live Grid Spots</span>
               </div>
               <p className="text-[11px] text-slate-300">
-                Rank #100 is on the brink. When a new slot enters, #100 gets pushed to the Graveyard. You can top up anytime to get back on the grid.
+                All 100 spots on the board are live and active. If a higher top-up pushes a card below Rank #100 (into #101+), it enters the Graveyard. You can top up anytime to reclaim an active spot.
               </p>
             </div>
           </div>

@@ -39,7 +39,12 @@ export const GoogleOneTap: React.FC<GoogleOneTapProps> = ({
   disabled = false,
 }) => {
   useEffect(() => {
-    if (!clientId || disabled) return;
+    const isDevHost =
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+      process.env.NEXT_PUBLIC_ENABLE_ONE_TAP_DEV !== 'true';
+
+    if (!clientId || disabled || isDevHost) return;
 
     let isMounted = true;
 
@@ -71,6 +76,7 @@ export const GoogleOneTap: React.FC<GoogleOneTapProps> = ({
         },
         auto_select: false,
         cancel_on_tap_outside: true,
+        use_fedcm_for_prompt: false,
       });
 
       // Show Google One Tap prompt
@@ -105,7 +111,12 @@ export const GoogleOneTap: React.FC<GoogleOneTapProps> = ({
     };
   }, [clientId, disabled]);
 
-  if (!clientId || disabled) return null;
+  const isDevHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+    process.env.NEXT_PUBLIC_ENABLE_ONE_TAP_DEV !== 'true';
+
+  if (!clientId || disabled || isDevHost) return null;
 
   return (
     <Script

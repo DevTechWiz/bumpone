@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Search, Crown, Sparkles, AlertTriangle } from 'lucide-react';
-import { Modal, Input, Badge } from './ui';
+import { Modal, Input, Badge, Skeleton, SkeletonAvatar } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 
 export interface LeaderboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   slots: SlotItem[];
+  isLoading?: boolean;
   onSelectSlot: (slot: SlotItem) => void;
   hasBackdrop?: boolean;
 }
@@ -15,6 +16,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   isOpen,
   onClose,
   slots,
+  isLoading = false,
   onSelectSlot,
   hasBackdrop = true,
 }) => {
@@ -100,67 +102,89 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   : 'bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
                 }`}
             >
-              Contenders (#51–99)
+              Contenders (#51–100)
             </button>
             <button
               onClick={() => setFilterTier('bubble')}
               className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'bubble'
-                  ? 'bg-rose-950/40 text-rose-300 border border-rose-500/40'
+                  ? 'bg-amber-950/40 text-amber-300 border border-amber-500/40'
                   : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
                 }`}
             >
-              <AlertTriangle className="w-3 h-3 text-rose-400" /> Drop Brink (#100)
+              <AlertTriangle className="w-3 h-3 text-amber-400" /> Active Floor (#100)
             </button>
           </div>
         </div>
 
         {/* List Items in dark glass */}
         <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
-          {filteredSlots.map((slot) => (
-            <div
-              key={slot.id}
-              onClick={() => {
-                onSelectSlot(slot);
-                onClose();
-              }}
-              className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.18] hover:bg-white/[0.06] flex items-center justify-between gap-3 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Badge variant="rank" rank={slot.rank} />
-                <img
-                  src={slot.imageUrl}
-                  alt={slot.title}
-                  className="w-8 h-8 rounded-lg object-cover bg-slate-900 shrink-0 border border-white/[0.08]"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white group-hover:text-slate-200 transition-colors truncate">
-                    {slot.title}
-                  </p>
-                  <p className="text-[10px] text-slate-400 truncate">
-                    {slot.bidderName}
-                  </p>
+          {isLoading || (slots.length === 0 && search === "") ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={`lb-skeleton-${i}`}
+                className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-between gap-3 animate-in fade-in duration-200"
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Skeleton variant="rounded" width={24} height={18} className="rounded" />
+                  <SkeletonAvatar size="sm" shape="rounded-lg" />
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <Skeleton variant="text" width="60%" className="h-3.5" />
+                    <Skeleton variant="text" width="35%" className="h-2.5 opacity-60" />
+                  </div>
+                </div>
+                <div className="text-right space-y-1 shrink-0">
+                  <Skeleton variant="text" width={55} className="h-3.5 ml-auto" />
+                  <Skeleton variant="text" width={70} className="h-2.5 ml-auto opacity-60" />
                 </div>
               </div>
+            ))
+          ) : (
+            filteredSlots.map((slot) => (
+              <div
+                key={slot.id}
+                onClick={() => {
+                  onSelectSlot(slot);
+                  onClose();
+                }}
+                className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.18] hover:bg-white/[0.06] flex items-center justify-between gap-3 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Badge variant="rank" rank={slot.rank} />
+                  <img
+                    src={slot.imageUrl}
+                    alt={slot.title}
+                    className="w-8 h-8 rounded-lg object-cover bg-slate-900 shrink-0 border border-white/[0.08]"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white group-hover:text-slate-200 transition-colors truncate">
+                      {slot.title}
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      {slot.bidderName}
+                    </p>
+                  </div>
+                </div>
 
-              <div className="text-right shrink-0">
-                <span className="font-mono text-xs font-semibold text-white block">
-                  ${slot.amountPaid.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  {slot.rank === 1
-                    ? '👑 Center King'
-                    : slot.rank <= 10
-                      ? '⚡ Top 10 Spot'
-                      : slot.rank <= 50
-                        ? 'Top 50 Spot'
-                        : slot.rank === 100
-                          ? '⚠️ Danger Zone'
-                          : 'Grid Spot'}
-                </span>
+                <div className="text-right shrink-0">
+                  <span className="font-mono text-xs font-semibold text-white block">
+                    ${slot.amountPaid.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {slot.rank === 1
+                      ? '👑 Center King'
+                      : slot.rank <= 10
+                        ? '⚡ Top 10 Spot'
+                        : slot.rank <= 50
+                          ? 'Top 50 Spot'
+                          : slot.rank === 100
+                            ? '🛡️ Active Floor (#100)'
+                            : 'Grid Spot'}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </Modal>

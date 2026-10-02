@@ -26,7 +26,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
       onClose={onClose}
       hasBackdrop={hasBackdrop}
       title="The Graveyard (Off the Grid)"
-      subtitle="Profiles bumped off the top 100 are kept here. Top up anytime to get back on the grid."
+      subtitle="Profiles displaced beyond the top 100 (#101+) are kept here. Top up anytime to reclaim an active spot on the grid."
       maxWidth="lg"
     >
       <div className="space-y-4">
@@ -35,9 +35,9 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] mx-auto flex items-center justify-center text-slate-400">
               <Skull className="w-6 h-6" />
             </div>
-            <h4 className="text-sm font-semibold text-white">No Casualties Yet</h4>
+            <h4 className="text-sm font-semibold text-white">No Off-Board Profiles Yet</h4>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              The wall is full and nobody has been pushed off yet. When a climb pushes #100 off, it lands here — kept, ready to reclaim.
+              All 100 spots on the board are live and active. When a climb displaces a profile beyond Rank #100, it lands here (#101+) — preserved, ready to reclaim.
             </p>
           </div>
         ) : (
@@ -60,7 +60,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
                         {item.title}
                       </h5>
                       <span className="text-[10px] text-rose-300 font-mono bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-500/30">
-                        Dropped to #101
+                        Rank #{item.rank || 101 + index}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 truncate">

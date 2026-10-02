@@ -10,6 +10,7 @@ import { soundEngine } from '../lib/sound';
 
 export interface GridBoardProps {
   slots: SlotItem[];
+  isLoading?: boolean;
   onSlotClick?: (slot: SlotItem) => void;
   highlightedRank?: number | null;
   matchingRanks?: Set<number> | null;
@@ -24,6 +25,7 @@ const GAP_INSET = GAP / 2;
 
 const GridBoardComponent: React.FC<GridBoardProps> = ({
   slots,
+  isLoading = false,
   onSlotClick,
   highlightedRank,
   matchingRanks = null,
@@ -191,32 +193,58 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
           className="absolute inset-0 origin-center transition-transform duration-300 ease-out"
           style={{ transform: `scale(${zoomLevel})` }}
         >
-          {cellStyles &&
-            slots.slice(0, 100).map((slot) => {
-              const style = cellStyles[slot.rank];
-              if (!style) return null;
+          {cellStyles && (isLoading || slots.length === 0)
+            ? Array.from({ length: 100 }).map((_, idx) => {
+                const rank = idx + 1;
+                const style = cellStyles[rank];
+                if (!style) return null;
 
-              const isHighlighted = highlightedRank === slot.rank || hoveredRank === slot.rank;
-              const isDimmed = matchingRanks !== null && !matchingRanks.has(slot.rank);
+                return (
+                  <div
+                    key={`skeleton-cell-${rank}`}
+                    style={style}
+                    className="rounded-lg bg-white/[0.03] border border-white/[0.05] shimmer-effect overflow-hidden p-1.5 sm:p-2 flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[9px] font-bold text-white/30 bg-black/40 px-1 rounded">
+                        #{rank}
+                      </span>
+                    </div>
+                    {rank <= 13 && (
+                      <div className="space-y-1">
+                        <div className="h-2 w-3/4 rounded bg-white/10" />
+                        <div className="h-1.5 w-1/2 rounded bg-white/5" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            : cellStyles &&
+              slots.slice(0, 100).map((slot) => {
+                const style = cellStyles[slot.rank];
+                if (!style) return null;
 
-              return (
-                <GridCell
-                  key={slot.id}
-                  slot={slot}
-                  isHighlighted={isHighlighted}
-                  isDimmed={isDimmed}
-                  isClient={mounted}
-                  style={style}
-                  onClick={handleCellClick}
-                  onHover={handleCellHover}
-                  className={
-                    isHighlighted
-                      ? 'ring-2 ring-white/90 z-30 shadow-2xl shadow-white/30'
-                      : ''
-                  }
-                />
-              );
-            })}
+                const isHighlighted = highlightedRank === slot.rank || hoveredRank === slot.rank;
+                const isDimmed = matchingRanks !== null && !matchingRanks.has(slot.rank);
+
+                return (
+                  <GridCell
+                    key={slot.id}
+                    slot={slot}
+                    isHighlighted={isHighlighted}
+                    isDimmed={isDimmed}
+                    isClient={mounted}
+                    style={style}
+                    onClick={handleCellClick}
+                    onHover={handleCellHover}
+                    className={
+                      isHighlighted
+                        ? 'ring-2 ring-white/90 z-30 shadow-2xl shadow-white/30'
+                        : ''
+                    }
+                  />
+                );
+              })}
         </div>
       </div>
     </div>

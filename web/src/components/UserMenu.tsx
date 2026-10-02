@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { User, LogOut, Layers, ChevronDown, Zap, Bell } from 'lucide-react';
+import { Avatar } from './ui';
 
 export interface UserMenuProps {
   user: SupabaseUser;
@@ -60,17 +61,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.12] text-xs text-neutral-200 transition-all cursor-pointer shadow-sm hover:border-amber-400/40"
         title="Account & Slots"
       >
-        {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt={displayName}
-            className="w-4 h-4 rounded-full object-cover ring-1 ring-white/20"
-          />
-        ) : (
-          <div className="w-4 h-4 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-[9px] font-bold text-amber-300">
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-        )}
+        <Avatar
+          src={avatarUrl}
+          name={displayName}
+          size="xs"
+          ringClassName="ring-1 ring-white/20"
+        />
         <span className="font-semibold max-w-[80px] sm:max-w-[120px] truncate text-white">
           @{userHandle}
         </span>
