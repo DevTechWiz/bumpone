@@ -31,7 +31,22 @@ import {
   Loader2,
   Trash2,
 } from "lucide-react";
-import { Badge, Button, Modal, Input } from "./ui";
+import {
+  Badge,
+  Button,
+  Modal,
+  Input,
+  Avatar,
+  XTwitterIcon,
+  GitHubIcon,
+  StatDisplay,
+  Skeleton,
+  SkeletonAvatar,
+  SkeletonBadge,
+  SkeletonStat,
+  SkeletonCard,
+  SkeletonText,
+} from "./ui";
 import type { TopUpOrder } from "./TakeOverModal";
 import type { SlotItem } from "../lib/slotTypes";
 
@@ -39,26 +54,6 @@ const TakeOverModal = dynamic(
   () => import("./TakeOverModal").then((m) => m.TakeOverModal),
   { ssr: false }
 );
-
-function XTwitterIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
-  );
-}
-
-function GitHubIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-      />
-    </svg>
-  );
-}
 import {
   REACTION_EMOJI,
   CATEGORIES,
@@ -77,6 +72,7 @@ import { sessionGetJSON, safeGetJSON } from "../lib/storage";
 
 export interface ProfileViewProps {
   profileId: string;
+  initialMode?: "user" | "project";
   onBack?: () => void;
   onSelectProfile?: (profileId: string) => void;
   onUpdateProfile?: (updated: Profile) => void;
@@ -88,6 +84,7 @@ export interface ProfileViewProps {
 
 export function ProfileView({
   profileId,
+  initialMode,
   onBack,
   onSelectProfile,
   onUpdateProfile,
@@ -96,7 +93,18 @@ export function ProfileView({
   onBumpProject,
   onRequireAuth,
 }: ProfileViewProps) {
-  const { user } = useAuth();
+  const { user, profile: authProfile, loading: authLoading } = useAuth();
+
+  // Loading state for board profiles
+  const [isProfilesLoading, setIsProfilesLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const cached = sessionGetJSON<Profile[]>("bumped_board_cache");
+      if (cached && Array.isArray(cached) && cached.length > 0) return false;
+      const saved = safeGetJSON<Profile[]>("bumped_board_profiles");
+      if (saved && Array.isArray(saved) && saved.length > 0) return false;
+    }
+    return true;
+  });
 
   // Real board profiles from database
   const [profiles, setProfiles] = useState<Profile[]>(() => {
@@ -120,26 +128,66 @@ export function ProfileView({
       })
       .catch((err) => {
         console.warn("Could not fetch board profiles:", err);
+      })
+      .finally(() => {
+        setIsProfilesLoading(false);
       });
   }, []);
 
   const cleanId = (profileId || "self").toLowerCase().replace("@", "").trim();
 
   // User profile state (for self)
-  const [selfProfile, setSelfProfile] = useState<User>({
-    id: user?.id || "self",
-    name: "N/A",
-    handle: "N/A",
-    avatar_url: "",
-    bio: "",
-    website: "",
-    twitter: "",
-    github: "",
+  const [selfProfile, setSelfProfile] = useState<User | null>(() => {
+    if (authProfile) {
+      return {
+        id: authProfile.id,
+        name: authProfile.display_name || authProfile.handle || "Creator",
+        handle: authProfile.handle || "",
+        avatar_url: authProfile.avatar_url || "",
+        bio: authProfile.bio || "",
+        website: authProfile.website || "",
+        twitter: authProfile.twitter || "",
+        github: authProfile.github || "",
+      };
+    }
+    return null;
   });
+
+  const isSelf =
+    cleanId === "self" ||
+    cleanId === "me" ||
+    Boolean(user && (cleanId === user.id.toLowerCase() || (selfProfile?.handle && cleanId === selfProfile.handle.toLowerCase())));
+
+  const [isSelfLoading, setIsSelfLoading] = useState<boolean>(true);
+  const [isRemoteLoading, setIsRemoteLoading] = useState<boolean>(() => {
+    return cleanId !== "self" && cleanId !== "me";
+  });
+
+  // Keep selfProfile in sync with auth hook
+  useEffect(() => {
+    if (authProfile && (!selfProfile || !selfProfile.name || selfProfile.name === "N/A")) {
+      setSelfProfile({
+        id: authProfile.id,
+        name: authProfile.display_name || authProfile.handle || "Creator",
+        handle: authProfile.handle || "",
+        avatar_url: authProfile.avatar_url || "",
+        bio: authProfile.bio || "",
+        website: authProfile.website || "",
+        twitter: authProfile.twitter || "",
+        github: authProfile.github || "",
+      });
+      setIsSelfLoading(false);
+    }
+  }, [authProfile, selfProfile]);
 
   // Fetch authenticated user profile from Supabase
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      if (!authLoading) {
+        setIsSelfLoading(false);
+      }
+      return;
+    }
     const userId = user.id;
     let isCancelled = false;
 
@@ -165,8 +213,8 @@ export function ProfileView({
         if (!isCancelled && userData) {
           setSelfProfile({
             id: userData.id,
-            name: userData.display_name || "N/A",
-            handle: userData.handle || "N/A",
+            name: userData.display_name || userData.handle || "Creator",
+            handle: userData.handle || "",
             avatar_url: userData.avatar_url || "",
             bio: userData.bio || "",
             website: userData.website || "",
@@ -186,8 +234,8 @@ export function ProfileView({
             if (synced?.user && !isCancelled) {
               setSelfProfile({
                 id: synced.user.id,
-                name: synced.user.display_name || "N/A",
-                handle: synced.user.handle || "N/A",
+                name: synced.user.display_name || synced.user.handle || "Creator",
+                handle: synced.user.handle || "",
                 avatar_url: synced.user.avatar_url || "",
                 bio: synced.user.bio || "",
                 website: synced.user.website || "",
@@ -201,6 +249,10 @@ export function ProfileView({
         }
       } catch (e) {
         console.warn("Failed to load user profile:", e);
+      } finally {
+        if (!isCancelled) {
+          setIsSelfLoading(false);
+        }
       }
     }
 
@@ -208,12 +260,7 @@ export function ProfileView({
     return () => {
       isCancelled = true;
     };
-  }, [user]);
-
-  const isSelf =
-    cleanId === "self" ||
-    cleanId === "me" ||
-    Boolean(user && (cleanId === user.id.toLowerCase() || (selfProfile.handle && cleanId === selfProfile.handle.toLowerCase())));
+  }, [user, authLoading]);
 
   // Fetch remote creator profile if viewing someone else
   const [remoteCreator, setRemoteCreator] = useState<User | null>(null);
@@ -234,7 +281,7 @@ export function ProfileView({
         if (!isCancelled && !error && data) {
           setRemoteCreator({
             id: data.id,
-            name: data.display_name || "N/A",
+            name: data.display_name || data.handle || cleanId,
             handle: data.handle || cleanId,
             avatar_url: data.avatar_url || "",
             bio: data.bio || "",
@@ -246,6 +293,10 @@ export function ProfileView({
         }
       } catch (e) {
         console.warn("Failed to load remote creator:", e);
+      } finally {
+        if (!isCancelled) {
+          setIsRemoteLoading(false);
+        }
       }
     }
 
@@ -283,27 +334,55 @@ export function ProfileView({
   }, [isSelf, remoteCreator, cleanId, profiles]);
 
   // Is viewing a user (self or other creator) vs single project showcase
-  const isViewingUser = isSelf || Boolean(matchedCreator);
+  const isViewingUser =
+    initialMode === "user" ||
+    (initialMode !== "project" &&
+      (cleanId === "self" ||
+        cleanId === "me" ||
+        Boolean(user && (cleanId === user.id.toLowerCase() || (selfProfile?.handle && cleanId === selfProfile.handle.toLowerCase()))) ||
+        Boolean(matchedCreator) ||
+        (cleanId !== "" && !cleanId.startsWith("slot-") && isNaN(Number(cleanId)) && !profiles.some((p) => p.id === cleanId || p.id === profileId))));
+
+  const isUserLoading =
+    isViewingUser &&
+    (
+      (isSelf && (authLoading || (Boolean(user) && (isSelfLoading || !selfProfile)))) ||
+      (!isSelf && (isRemoteLoading || (!matchedCreator && !remoteCreator && isProfilesLoading)))
+    );
 
   // Active creator profile when in user view
   const fallbackUser = useMemo(
     (): User => ({
       id: cleanId,
-      name: cleanId || "N/A",
-      handle: cleanId || "N/A",
+      name: cleanId || "Creator",
+      handle: cleanId || "creator",
       avatar_url: "",
       bio: "",
     }),
     [cleanId]
   );
 
+  const defaultEmptySelf: User = useMemo(
+    () => ({
+      id: user?.id || "self",
+      name: user?.user_metadata?.full_name || user?.user_metadata?.name || "Creator",
+      handle: user?.user_metadata?.user_name || "creator",
+      avatar_url: user?.user_metadata?.avatar_url || "",
+      bio: "",
+      website: "",
+      twitter: "",
+      github: "",
+    }),
+    [user]
+  );
+
   const activeUser: User = useMemo(() => {
-    if (isSelf) return selfProfile;
+    if (isSelf) return selfProfile || defaultEmptySelf;
     if (matchedCreator) return matchedCreator;
     return fallbackUser;
-  }, [isSelf, selfProfile, matchedCreator, fallbackUser]);
+  }, [isSelf, selfProfile, defaultEmptySelf, matchedCreator, fallbackUser]);
 
-  // Human-readable joined text or "N/A"
+  // Human-readable joined text
   const joinedDisplay = useMemo(() => {
     if (activeUser.created_at) {
       const diffMs = Date.now() - new Date(activeUser.created_at).getTime();
@@ -313,14 +392,13 @@ export function ProfileView({
     if (activeUser.joined_days_ago != null && activeUser.joined_days_ago > 0) {
       return `${activeUser.joined_days_ago}d ago`;
     }
-    return "N/A";
+    return "recently";
   }, [activeUser.created_at, activeUser.joined_days_ago]);
 
   // Projects owned by this active creator profile
   const creatorProjects = useMemo(() => {
     if (isSelf) {
-      if (!user && (!selfProfile.handle || selfProfile.handle === "N/A")) return [];
-      const userHandle = (selfProfile.handle || "").toLowerCase().replace("@", "");
+      const userHandle = (selfProfile?.handle || user?.user_metadata?.user_name || "").toLowerCase().replace("@", "");
       return profiles.filter(
         (x) =>
           Boolean(user && x.owner_id === user.id) ||
@@ -343,6 +421,17 @@ export function ProfileView({
     return [];
   }, [isSelf, user, selfProfile, matchedCreator, profiles]);
 
+  const matchedProject = useMemo(() => {
+    return profiles.find(
+      (x) =>
+        x.id === profileId ||
+        x.id === cleanId ||
+        x.seq.toString() === cleanId ||
+        x.name.toLowerCase() === cleanId ||
+        x.handle?.toLowerCase().replace("@", "") === cleanId
+    );
+  }, [profiles, profileId, cleanId]);
+
   // If viewing a single project showcase
   const singleProject = useMemo((): Profile => {
     if (isViewingUser) {
@@ -351,8 +440,8 @@ export function ProfileView({
       }
       return {
         id: "slot-preview",
-        name: activeUser.name || "N/A",
-        handle: activeUser.handle && activeUser.handle !== "N/A" ? `@${activeUser.handle}` : "N/A",
+        name: activeUser.name || "Preview Project",
+        handle: activeUser.handle ? `@${activeUser.handle}` : "@creator",
         category: "Tech",
         active_value: 0,
         seq: 0,
@@ -374,18 +463,11 @@ export function ProfileView({
       };
     }
     return (
-      profiles.find(
-        (x) =>
-          x.id === profileId ||
-          x.id === cleanId ||
-          x.seq.toString() === cleanId ||
-          x.name.toLowerCase() === cleanId ||
-          x.handle?.toLowerCase().replace("@", "") === cleanId
-      ) ?? {
+      matchedProject ?? {
         id: profileId,
         seq: 0,
-        name: "N/A",
-        handle: "N/A",
+        name: "Project",
+        handle: "",
         category: "Tech",
         active_value: 0,
         imageUrl: "",
@@ -401,9 +483,13 @@ export function ProfileView({
         reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
       }
     );
-  }, [isViewingUser, creatorProjects, activeUser, profileId, cleanId, profiles]);
+  }, [isViewingUser, creatorProjects, activeUser, matchedProject, profileId]);
 
   const p: Profile = singleProject;
+
+  const isProjectLoading =
+    !isViewingUser &&
+    (isProfilesLoading || (!matchedProject && profiles.length === 0));
 
   const sorted = useMemo(() => sortBoard(profiles), [profiles]);
 
@@ -508,20 +594,108 @@ export function ProfileView({
     isSelf ||
     (user && (
       p.owner_id === user.id ||
-      (selfProfile.handle && selfProfile.handle !== "N/A" && p.owner_handle?.toLowerCase().replace("@", "") === selfProfile.handle.toLowerCase()) ||
-      (selfProfile.name && selfProfile.name !== "N/A" && p.owner_name?.toLowerCase() === selfProfile.name.toLowerCase())
+      (selfProfile?.handle && p.owner_handle?.toLowerCase().replace("@", "") === selfProfile.handle.toLowerCase()) ||
+      (selfProfile?.name && p.owner_name?.toLowerCase() === selfProfile.name.toLowerCase())
     ))
   );
 
+  // Project reaction state for project view
+  const [projectReactions, setProjectReactions] = useState<Record<string, number>>(() => ({
+    fire: p.reactions?.fire || 0,
+    eyes: p.reactions?.eyes || 0,
+    heart: p.reactions?.heart || 0,
+    laugh: p.reactions?.laugh || 0,
+  }));
+  const [activeProjectReactions, setActiveProjectReactions] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setProjectReactions({
+      fire: p.reactions?.fire || 0,
+      eyes: p.reactions?.eyes || 0,
+      heart: p.reactions?.heart || 0,
+      laugh: p.reactions?.laugh || 0,
+    });
+  }, [p.reactions, p.id]);
+
+  useEffect(() => {
+    if (!isViewingUser && p.id && user) {
+      fetch(`/api/reactions?projectId=${p.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data?.userReactions)) {
+            setActiveProjectReactions(new Set(data.userReactions));
+          }
+        })
+        .catch(() => {});
+    } else {
+      setActiveProjectReactions(new Set());
+    }
+  }, [isViewingUser, p.id, user]);
+
+  const handleProjectReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh') => {
+    soundEngine.playClick();
+    if (!user) {
+      if (onRequireAuth) {
+        onRequireAuth();
+      }
+      return;
+    }
+
+    const isAlreadyActive = activeProjectReactions.has(type);
+    const newActive = new Set(activeProjectReactions);
+
+    if (isAlreadyActive) {
+      newActive.delete(type);
+      setActiveProjectReactions(newActive);
+      setProjectReactions((prev) => ({
+        ...prev,
+        [type]: Math.max(0, (prev[type] || 1) - 1),
+      }));
+
+      try {
+        const res = await fetch(`/api/reactions?projectId=${p.id}&reaction=${type}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data?.count != null) {
+          setProjectReactions((prev) => ({ ...prev, [type]: data.count }));
+        }
+      } catch {
+        // Keep optimistic state
+      }
+    } else {
+      newActive.add(type);
+      setActiveProjectReactions(newActive);
+      setProjectReactions((prev) => ({
+        ...prev,
+        [type]: (prev[type] || 0) + 1,
+      }));
+
+      try {
+        const res = await fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: p.id, reaction: type }),
+        });
+        const data = await res.json();
+        if (data?.count != null) {
+          setProjectReactions((prev) => ({ ...prev, [type]: data.count }));
+        }
+      } catch {
+        // Keep optimistic state
+      }
+    }
+  };
+
   // Edit User Modal state (Self mode)
   const [isEditingUser, setIsEditingUser] = useState(false);
-  const [profileEditName, setProfileEditName] = useState(selfProfile.name);
-  const [profileEditHandle, setProfileEditHandle] = useState(selfProfile.handle);
-  const [profileEditBio, setProfileEditBio] = useState(selfProfile.bio || "");
-  const [profileEditAvatar, setProfileEditAvatar] = useState(selfProfile.avatar_url || "");
-  const [profileEditWebsite, setProfileEditWebsite] = useState(selfProfile.website || "");
-  const [profileEditTwitter, setProfileEditTwitter] = useState(selfProfile.twitter || "");
-  const [profileEditGithub, setProfileEditGithub] = useState(selfProfile.github || "");
+  const [profileEditName, setProfileEditName] = useState(selfProfile?.name || "");
+  const [profileEditHandle, setProfileEditHandle] = useState(selfProfile?.handle || "");
+  const [profileEditBio, setProfileEditBio] = useState(selfProfile?.bio || "");
+  const [profileEditAvatar, setProfileEditAvatar] = useState(selfProfile?.avatar_url || "");
+  const [profileEditWebsite, setProfileEditWebsite] = useState(selfProfile?.website || "");
+  const [profileEditTwitter, setProfileEditTwitter] = useState(selfProfile?.twitter || "");
+  const [profileEditGithub, setProfileEditGithub] = useState(selfProfile?.github || "");
   const [profileSavedSuccess, setProfileSavedSuccess] = useState(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -533,18 +707,18 @@ export function ProfileView({
 
   // 30-day handle cooldown calculation
   const cooldownDaysRemaining = useMemo(() => {
-    return getHandleCooldownRemainingDays(selfProfile.handle_last_changed_at);
-  }, [selfProfile.handle_last_changed_at]);
+    return getHandleCooldownRemainingDays(selfProfile?.handle_last_changed_at);
+  }, [selfProfile?.handle_last_changed_at]);
 
   const handleOpenEditUser = () => {
     soundEngine.playClick();
-    setProfileEditName(selfProfile.name !== "N/A" ? selfProfile.name : "");
-    setProfileEditHandle(selfProfile.handle !== "N/A" ? selfProfile.handle : "");
-    setProfileEditBio(selfProfile.bio || "");
-    setProfileEditAvatar(selfProfile.avatar_url || "");
-    setProfileEditWebsite(selfProfile.website || "");
-    setProfileEditTwitter(selfProfile.twitter || "");
-    setProfileEditGithub(selfProfile.github || "");
+    setProfileEditName(selfProfile?.name && selfProfile.name !== "N/A" ? selfProfile.name : "");
+    setProfileEditHandle(selfProfile?.handle && selfProfile.handle !== "N/A" ? selfProfile.handle : "");
+    setProfileEditBio(selfProfile?.bio || "");
+    setProfileEditAvatar(selfProfile?.avatar_url || "");
+    setProfileEditWebsite(selfProfile?.website || "");
+    setProfileEditTwitter(selfProfile?.twitter || "");
+    setProfileEditGithub(selfProfile?.github || "");
     setProfileSavedSuccess(false);
     setHandleCheckError(null);
     setHandleCheckSuccess(false);
@@ -555,7 +729,7 @@ export function ProfileView({
   // Debounced handle validation & database uniqueness check
   useEffect(() => {
     if (!isEditingUser) return;
-    const cleanCurrent = (selfProfile.handle || "").replace(/^@/, "").trim().toLowerCase();
+    const cleanCurrent = (selfProfile?.handle || "").replace(/^@/, "").trim().toLowerCase();
     const cleanNew = profileEditHandle.replace(/^@/, "").trim().toLowerCase();
 
     if (!cleanNew) {
@@ -623,7 +797,7 @@ export function ProfileView({
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [profileEditHandle, isEditingUser, selfProfile.handle, cooldownDaysRemaining, user?.id]);
+  }, [profileEditHandle, isEditingUser, selfProfile?.handle, cooldownDaysRemaining, user?.id]);
 
   // Handle direct avatar upload via /api/uploads/image
   const handleAvatarFile = async (file: File) => {
@@ -683,7 +857,7 @@ export function ProfileView({
     if (handleCheckError) {
       return;
     }
-    const cleanCurrent = (selfProfile.handle || "").replace(/^@/, "").trim().toLowerCase();
+    const cleanCurrent = (selfProfile?.handle || "").replace(/^@/, "").trim().toLowerCase();
     const cleanNew = profileEditHandle.replace(/^@/, "").trim().toLowerCase();
     const isHandleChanged = Boolean(cleanNew && cleanNew !== cleanCurrent);
 
@@ -695,15 +869,15 @@ export function ProfileView({
     soundEngine.playClick();
     const nowIso = new Date().toISOString();
     const updated: User = {
-      ...selfProfile,
-      name: profileEditName.trim() || (selfProfile.name !== "N/A" ? selfProfile.name : "N/A"),
-      handle: cleanNew || (selfProfile.handle !== "N/A" ? selfProfile.handle : "N/A"),
+      id: user?.id || selfProfile?.id || "self",
+      name: profileEditName.trim() || (selfProfile?.name && selfProfile.name !== "N/A" ? selfProfile.name : "Creator"),
+      handle: cleanNew || (selfProfile?.handle && selfProfile.handle !== "N/A" ? selfProfile.handle : "creator"),
       bio: profileEditBio.trim(),
       avatar_url: profileEditAvatar.trim(),
       website: profileEditWebsite.trim(),
       twitter: profileEditTwitter.trim().replace("@", ""),
       github: profileEditGithub.trim(),
-      handle_last_changed_at: isHandleChanged ? nowIso : selfProfile.handle_last_changed_at,
+      handle_last_changed_at: isHandleChanged ? nowIso : selfProfile?.handle_last_changed_at,
     };
     setSelfProfile(updated);
 
@@ -917,7 +1091,7 @@ export function ProfileView({
     soundEngine.playClick();
     if (typeof window !== "undefined" && navigator.clipboard) {
       const link = isViewingUser
-        ? `${window.location.origin}/profile/${isSelf ? "self" : activeUser.handle !== "N/A" ? activeUser.handle : activeUser.id}`
+        ? `${window.location.origin}/profile/${isSelf ? "self" : activeUser.handle ? activeUser.handle : activeUser.id}`
         : `${window.location.origin}/project/${p.id}`;
       navigator.clipboard.writeText(link);
       setCopiedLink(true);
@@ -927,11 +1101,11 @@ export function ProfileView({
 
   const handleFlexOnX = () => {
     soundEngine.playClick();
-    const handleText = activeUser.handle && activeUser.handle !== "N/A" ? `@${activeUser.handle}` : activeUser.name;
+    const handleText = activeUser.handle ? `@${activeUser.handle.replace("@", "")}` : activeUser.name || "Creator";
     const text = encodeURIComponent(
       isViewingUser
-        ? `Check out ${handleText}'s projects on @bumpone_lol!\n\nhttps://bumpone.lol/profile/${activeUser.handle !== "N/A" ? activeUser.handle : "self"}`
-        : `Check out #${hasSlotOnGrid && globalRank > 0 ? globalRank : "N/A"} "${p.name}" on @bumpone_lol with ${money(p.active_value)} active value!\n\nhttps://bumpone.lol/project/${p.id}`
+        ? `Check out ${handleText}'s projects on @bumpone_lol!\n\nhttps://bumpone.lol/profile/${activeUser.handle ? activeUser.handle.replace("@", "") : "self"}`
+        : `Check out #${hasSlotOnGrid && globalRank > 0 ? globalRank : "1"} "${p.name || "Project"}" on @bumpone_lol with ${money(p.active_value)} active value!\n\nhttps://bumpone.lol/project/${p.id}`
     );
     window.open(`https://x.com/intent/tweet?text=${text}`, "_blank", "noopener,noreferrer");
   };
@@ -949,7 +1123,28 @@ export function ProfileView({
       : 0;
   const totalViews = creatorProjects.reduce((acc, x) => acc + (x.views || 0), 0);
 
-  if (isSelf && !user) {
+  const totalReactionsReceived = creatorProjects.reduce(
+    (sum, proj) =>
+      sum +
+      Number(proj.reactions?.fire || 0) +
+      Number(proj.reactions?.eyes || 0) +
+      Number(proj.reactions?.heart || 0) +
+      Number(proj.reactions?.laugh || 0),
+    0
+  );
+
+  const reactionsBreakdown = creatorProjects.reduce(
+    (acc, proj) => {
+      acc.fire += Number(proj.reactions?.fire || 0);
+      acc.eyes += Number(proj.reactions?.eyes || 0);
+      acc.heart += Number(proj.reactions?.heart || 0);
+      acc.laugh += Number(proj.reactions?.laugh || 0);
+      return acc;
+    },
+    { fire: 0, eyes: 0, heart: 0, laugh: 0 }
+  );
+
+  if (isSelf && !user && !authLoading) {
     return (
       <div className="mx-auto max-w-[640px] w-full px-4 sm:px-6 py-12">
         <div className="flex items-center justify-between mb-8">
@@ -1080,145 +1275,198 @@ export function ProfileView({
       {isViewingUser ? (
         <div className="space-y-6 pb-8">
           {/* User Profile Card */}
-          <div className="rounded-2xl border border-white/[0.1] bg-[#18191d]/90 p-6 shadow-2xl backdrop-blur-xl">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5">
-              <div className="flex items-start gap-4">
-                {activeUser.avatar_url ? (
-                  <img
+          {isUserLoading ? (
+            <div className="rounded-2xl border border-white/[0.1] bg-[#18191d]/90 p-6 shadow-2xl backdrop-blur-xl animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5">
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <SkeletonAvatar size="xl" shape="rounded-2xl" className="ring-2 ring-white/[0.08]" />
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Skeleton variant="text" width={180} className="h-6 sm:h-7" />
+                      <SkeletonBadge width={120} />
+                    </div>
+                    <Skeleton variant="text" width={100} className="h-3.5" />
+                    <SkeletonText lines={2} widths={["90%", "65%"]} className="space-y-1.5 pt-1" />
+                    <div className="flex items-center gap-3 pt-2">
+                      <Skeleton variant="rounded-full" width={110} height={20} />
+                      <Skeleton variant="rounded-full" width={90} height={20} />
+                      <Skeleton variant="rounded-full" width={80} height={20} />
+                    </div>
+                  </div>
+                </div>
+                {isSelf && (
+                  <Skeleton variant="rounded-lg" width={105} height={32} />
+                )}
+              </div>
+
+              {/* Aggregated Portfolio Stats Across Projects */}
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-white/[0.08]">
+                <SkeletonStat variant="metric" />
+                <SkeletonStat variant="metric" />
+                <SkeletonStat variant="metric" />
+                <SkeletonStat variant="metric" />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.1] bg-[#18191d]/90 p-6 shadow-2xl backdrop-blur-xl">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5">
+                <div className="flex items-start gap-4">
+                  <Avatar
                     src={activeUser.avatar_url}
-                    alt={activeUser.name || "N/A"}
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover ring-2 ring-amber-400/40 shadow-xl shrink-0"
+                    alt={activeUser.name || "Creator"}
+                    name={activeUser.name || "Creator"}
+                    size="xl"
+                    shape="rounded-2xl"
+                    ringClassName="ring-2 ring-amber-400/40 shadow-xl shrink-0"
+                    fallbackClassName="bg-amber-500/10 border border-amber-500/30 text-amber-300"
                   />
-                ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl font-bold text-amber-300 shadow-xl shrink-0">
-                    {activeUser.name && activeUser.name !== "N/A"
-                      ? activeUser.name.charAt(0).toUpperCase()
-                      : "N/A"}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                        {activeUser.name || "Creator"}
+                      </h1>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-medium flex items-center gap-1">
+                        <UserCheck className="w-3 h-3" /> {isSelf ? "Your Creator Account" : "Creator Profile"}
+                      </span>
+                    </div>
+                    {activeUser.handle ? (
+                      <p className="text-xs text-amber-300 font-mono">
+                        @{activeUser.handle.replace("@", "")}
+                      </p>
+                    ) : null}
+                    {activeUser.bio ? (
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-xl pt-1">
+                        {activeUser.bio}
+                      </p>
+                    ) : isSelf ? (
+                      <p className="text-xs text-slate-500 italic max-w-xl pt-1">
+                        No bio added yet. Click &quot;Edit Profile&quot; to add one.
+                      </p>
+                    ) : null}
+
+                    {/* Social, Web Links, and Joined date */}
+                    <div className="flex items-center gap-3 pt-2 text-xs text-slate-400 flex-wrap">
+                      {activeUser.website && (
+                        <a
+                          href={activeUser.website.startsWith("http") ? activeUser.website : `https://${activeUser.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          <Globe className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="font-mono text-[11px] truncate max-w-[150px]">
+                            {activeUser.website.replace(/^https?:\/\//, "")}
+                          </span>
+                        </a>
+                      )}
+                      {activeUser.twitter && (
+                        <a
+                          href={`https://x.com/${activeUser.twitter.replace("@", "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          <XTwitterIcon className="w-3.5 h-3.5 text-slate-300" />
+                          <span className="font-mono text-[11px]">@{activeUser.twitter.replace("@", "")}</span>
+                        </a>
+                      )}
+                      {activeUser.github && (
+                        <a
+                          href={`https://github.com/${activeUser.github}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          <GitHubIcon className="w-3.5 h-3.5 text-slate-300" />
+                          <span className="font-mono text-[11px]">{activeUser.github}</span>
+                        </a>
+                      )}
+                      {activeUser.created_at && (
+                        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400">
+                          Joined {joinedDisplay}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {isSelf && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<Edit3 className="w-3.5 h-3.5 text-slate-300" />}
+                      onClick={handleOpenEditUser}
+                      className="text-xs py-1.5"
+                    >
+                      Edit Profile
+                    </Button>
                   </div>
                 )}
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                      {activeUser.name || "N/A"}
-                    </h1>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-medium flex items-center gap-1">
-                      <UserCheck className="w-3 h-3" /> {isSelf ? "Your Creator Account" : "Creator Profile"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-300 font-mono">
-                    {activeUser.handle && activeUser.handle !== "N/A" ? `@${activeUser.handle.replace("@", "")}` : "N/A"}
-                  </p>
-                  <p className="text-xs text-slate-300 leading-relaxed max-w-xl pt-1">
-                    {activeUser.bio || "N/A"}
-                  </p>
+              </div>
 
-                  {/* Social, Web Links, and Joined date */}
-                  <div className="flex items-center gap-3 pt-2 text-xs text-slate-400 flex-wrap">
-                    {activeUser.website ? (
-                      <a
-                        href={activeUser.website.startsWith("http") ? activeUser.website : `https://${activeUser.website}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                      >
-                        <Globe className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="font-mono text-[11px] truncate max-w-[150px]">
-                          {activeUser.website.replace(/^https?:\/\//, "")}
-                        </span>
-                      </a>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
-                        <Globe className="w-3.5 h-3.5 text-slate-500" /> N/A
-                      </span>
-                    )}
-                    {activeUser.twitter ? (
-                      <a
-                        href={`https://x.com/${activeUser.twitter.replace("@", "")}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                      >
-                        <XTwitterIcon className="w-3.5 h-3.5 text-slate-300" />
-                        <span className="font-mono text-[11px]">@{activeUser.twitter.replace("@", "")}</span>
-                      </a>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
-                        <XTwitterIcon className="w-3.5 h-3.5 text-slate-500" /> N/A
-                      </span>
-                    )}
-                    {activeUser.github ? (
-                      <a
-                        href={`https://github.com/${activeUser.github}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                      >
-                        <GitHubIcon className="w-3.5 h-3.5 text-slate-300" />
-                        <span className="font-mono text-[11px]">{activeUser.github}</span>
-                      </a>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
-                        <GitHubIcon className="w-3.5 h-3.5 text-slate-500" /> N/A
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400">
-                      Joined: {joinedDisplay}
+              {/* Aggregated Portfolio Stats Across Projects */}
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-white/[0.08]">
+                <StatDisplay
+                  variant="metric"
+                  value={creatorProjects.length}
+                  label="Total Projects"
+                  icon={<Layers className="w-3 h-3 text-sky-400" />}
+                />
+                <StatDisplay
+                  variant="metric"
+                  value={creatorProjects.length > 0 && totalInvested > 0 ? money(totalInvested) : "$0"}
+                  valueClassName="text-amber-300"
+                  label="Value on Wall"
+                  icon={<Zap className="w-3 h-3 text-amber-400" />}
+                />
+                <StatDisplay
+                  variant="metric"
+                  value={bestRank > 0 && bestRank <= 100 ? `#${bestRank}` : "Unranked"}
+                  valueClassName="text-emerald-300"
+                  label="Best Live Rank"
+                  icon={<Crown className="w-3 h-3 text-amber-400" />}
+                />
+                <StatDisplay
+                  variant="metric"
+                  value={creatorProjects.length > 0 && totalViews > 0 ? totalViews.toLocaleString() : "0"}
+                  valueClassName="text-slate-200"
+                  label="Total Views"
+                  icon={<Eye className="w-3 h-3 text-indigo-400" />}
+                />
+              </div>
+
+              {/* Aggregated Community Clout Across Creator Portfolio */}
+              <div className="mt-4 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">🔥</span>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="text-amber-300 font-mono text-sm">{totalReactionsReceived.toLocaleString()}</span>
+                      <span className="text-slate-300 font-medium">Combined Community Reactions</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">
+                      Total reaction clout earned across {creatorProjects.length} {creatorProjects.length === 1 ? 'project' : 'projects'} on the board
                     </span>
                   </div>
                 </div>
-              </div>
-
-              {isSelf && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<Edit3 className="w-3.5 h-3.5 text-slate-300" />}
-                    onClick={handleOpenEditUser}
-                    className="text-xs py-1.5"
-                  >
-                    Edit Profile
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Aggregated Portfolio Stats Across Projects */}
-            <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-white/[0.08]">
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
-                <div className="font-mono text-2xl font-bold text-white">
-                  {creatorProjects.length > 0 ? creatorProjects.length : "N/A"}
-                </div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
-                  <Layers className="w-3 h-3 text-sky-400" /> Total Projects
-                </div>
-              </div>
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
-                <div className="font-mono text-2xl font-bold text-amber-300">
-                  {creatorProjects.length > 0 && totalInvested > 0 ? money(totalInvested) : "N/A"}
-                </div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
-                  <Zap className="w-3 h-3 text-amber-400" /> Value on Wall
-                </div>
-              </div>
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
-                <div className="font-mono text-2xl font-bold text-emerald-300">
-                  {bestRank > 0 && bestRank <= 100 ? `#${bestRank}` : "N/A"}
-                </div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
-                  <Crown className="w-3 h-3 text-amber-400" /> Best Live Rank
-                </div>
-              </div>
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 text-center">
-                <div className="font-mono text-2xl font-bold text-slate-200">
-                  {creatorProjects.length > 0 && totalViews > 0 ? totalViews.toLocaleString() : "N/A"}
-                </div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
-                  <Eye className="w-3 h-3 text-indigo-400" /> Total Views
+                <div className="flex items-center gap-1.5 text-xs font-mono flex-wrap">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-neutral-300" title="Fire reactions">
+                    <span>🔥</span> <span>{reactionsBreakdown.fire}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-neutral-300" title="Eyes reactions">
+                    <span>👀</span> <span>{reactionsBreakdown.eyes}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-neutral-300" title="Heart reactions">
+                    <span>❤️</span> <span>{reactionsBreakdown.heart}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-neutral-300" title="Laugh reactions">
+                    <span>😂</span> <span>{reactionsBreakdown.laugh}</span>
+                  </span>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Portfolio Section: Projects Owned by This Profile */}
           <div className="space-y-4">
@@ -1248,7 +1496,13 @@ export function ProfileView({
               )}
             </div>
 
-            {creatorProjects.length === 0 ? (
+            {isUserLoading || (isProfilesLoading && creatorProjects.length === 0) ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            ) : creatorProjects.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/[0.14] bg-white/[0.01] p-10 text-center space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
                   <Layers className="w-6 h-6" />
@@ -1290,7 +1544,7 @@ export function ProfileView({
                           {proj.imageUrl ? (
                             <img
                               src={proj.imageUrl}
-                              alt={proj.name || "N/A"}
+                              alt={proj.name || "Project"}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                               style={{
                                 objectPosition: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
@@ -1302,7 +1556,7 @@ export function ProfileView({
                           ) : (
                             <div className="flex flex-col items-center justify-center gap-1 text-slate-500">
                               <ImageIcon className="w-8 h-8 stroke-1" />
-                              <span className="text-[10px] font-mono">No Image (N/A)</span>
+                              <span className="text-[10px] font-mono text-slate-500">No Image</span>
                             </div>
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
@@ -1317,16 +1571,16 @@ export function ProfileView({
                               </span>
                             )}
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-black/70 text-slate-300 border border-white/10 backdrop-blur-md">
-                              {proj.category || "N/A"}
+                              {proj.category || "General"}
                             </span>
                           </div>
 
                           <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between">
                             <span className="text-xs font-mono font-bold text-amber-300">
-                              {proj.active_value != null && proj.active_value > 0 ? `${money(proj.active_value)} paid` : "N/A"}
+                              {proj.active_value != null && proj.active_value > 0 ? `${money(proj.active_value)} paid` : "$0 paid"}
                             </span>
                             <span className="text-[10px] text-slate-300 font-mono">
-                              {proj.views != null && proj.views > 0 ? `${proj.views.toLocaleString()} views` : "N/A"}
+                              {proj.views != null && proj.views > 0 ? `${proj.views.toLocaleString()} views` : "0 views"}
                             </span>
                           </div>
                         </div>
@@ -1334,7 +1588,7 @@ export function ProfileView({
                         {/* Project Details */}
                         <div className="mt-3">
                           <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors truncate">
-                            {proj.name || "N/A"}
+                            {proj.name || "Untitled Project"}
                           </h3>
                           {proj.linkUrl ? (
                             <a
@@ -1346,9 +1600,7 @@ export function ProfileView({
                               <span className="truncate">{proj.linkUrl.replace(/^https?:\/\//, "")}</span>
                               <ExternalLink className="w-3 h-3 shrink-0" />
                             </a>
-                          ) : (
-                            <span className="text-[11px] text-slate-500 font-mono mt-0.5">N/A</span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 
@@ -1395,6 +1647,96 @@ export function ProfileView({
             )}
           </div>
         </div>
+      ) : isProjectLoading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start pb-8 animate-in fade-in duration-200">
+          {/* Left Column: Primary Project Details (7 cols) */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#18191d]/90 shadow-2xl backdrop-blur-xl">
+              {/* Cover Banner Skeleton */}
+              <div className="relative h-56 sm:h-72 bg-[#0d0e12] overflow-hidden flex items-center justify-center">
+                <Skeleton variant="rectangular" className="w-full h-full" />
+                <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <SkeletonBadge width={70} />
+                    <SkeletonBadge width={90} />
+                  </div>
+                  <SkeletonBadge width={60} />
+                </div>
+              </div>
+
+              {/* Project Details */}
+              <div className="p-6 space-y-4">
+                <div className="space-y-2">
+                  <Skeleton variant="text" width={220} className="h-7 sm:h-8" />
+                  <Skeleton variant="text" width={260} className="h-3.5 opacity-60" />
+                </div>
+
+                {/* Website Destination Bar Skeleton */}
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1.5 flex-1">
+                    <Skeleton variant="text" width={110} className="h-3 opacity-60" />
+                    <Skeleton variant="text" width={180} className="h-3.5" />
+                  </div>
+                  <Skeleton variant="rounded-lg" width={95} height={32} />
+                </div>
+
+                {/* 4 KPI Metric Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <SkeletonStat variant="metric" />
+                  <SkeletonStat variant="metric" />
+                  <SkeletonStat variant="metric" />
+                  <SkeletonStat variant="metric" />
+                </div>
+              </div>
+            </div>
+
+            {/* Creator Attribution Card Skeleton */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-4 shadow-xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <SkeletonAvatar size="lg" shape="rounded-xl" />
+                <div className="space-y-1.5 flex-1">
+                  <Skeleton variant="text" width={90} className="h-2.5 opacity-60" />
+                  <Skeleton variant="text" width={140} className="h-4" />
+                  <Skeleton variant="text" width={80} className="h-3" />
+                </div>
+              </div>
+              <Skeleton variant="rounded-lg" width={140} height={32} />
+            </div>
+
+            {/* Rank History Skeleton */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-5 shadow-xl space-y-3">
+              <Skeleton variant="text" width={120} className="h-3.5" />
+              <Skeleton variant="rounded-xl" className="w-full h-24" />
+            </div>
+          </div>
+
+          {/* Right Column: Actions & Bump Box Skeleton (5 cols) */}
+          <div className="lg:col-span-5 space-y-4">
+            <div className="rounded-2xl border border-white/[0.1] bg-[#18191d]/90 p-5 shadow-2xl backdrop-blur-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <Skeleton variant="text" width={130} className="h-4" />
+                <Skeleton variant="text" width={50} className="h-4" />
+              </div>
+              <SkeletonText lines={2} widths={["95%", "80%"]} />
+              <Skeleton variant="rounded-xl" className="w-full h-11" />
+            </div>
+          </div>
+        </div>
+      ) : !matchedProject && profiles.length > 0 ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-8 text-center max-w-lg mx-auto space-y-4 my-8">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-white">Project Not Found</h2>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            This project is not currently active on the 100-slot wall, or the link may be outdated.
+          </p>
+          {onBack && (
+            <Button variant="outline" size="sm" onClick={onBack}>
+              Return to Wall
+            </Button>
+          )}
+        </div>
       ) : (
         /* ========================================================================= */
         /* VIEW B: SINGLE PROJECT / PRODUCT SHOWCASE                                 */
@@ -1409,7 +1751,7 @@ export function ProfileView({
                 {p.imageUrl ? (
                   <img
                     src={p.imageUrl}
-                    alt={p.name || "N/A"}
+                    alt={p.name || "Project"}
                     className="h-full w-full select-none object-cover"
                     style={{
                       objectPosition: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
@@ -1421,7 +1763,7 @@ export function ProfileView({
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
                     <ImageIcon className="w-10 h-10 stroke-1" />
-                    <span className="text-xs font-mono">No Image (N/A)</span>
+                    <span className="text-xs font-mono text-slate-500">No Image Uploaded</span>
                   </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#18191d] via-[#18191d]/20 to-transparent pointer-events-none" />
@@ -1433,7 +1775,7 @@ export function ProfileView({
                       <>
                         <Badge variant="rank" rank={Math.min(globalRank, 100)} />
                         <span className="rounded-full bg-black/80 px-3 py-1 font-mono text-xs font-bold text-white border border-white/[0.2] backdrop-blur-md">
-                          {p.active_value != null && p.active_value > 0 ? `${money(p.active_value)} paid` : "N/A"}
+                          {p.active_value != null && p.active_value > 0 ? `${money(p.active_value)} paid` : "$0 paid"}
                         </span>
                       </>
                     ) : (
@@ -1443,7 +1785,7 @@ export function ProfileView({
                     )}
                   </div>
                   <span className="text-[11px] font-medium text-slate-200 bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-md border border-white/[0.15]">
-                    {p.category || "N/A"}
+                    {p.category || "General"}
                   </span>
                 </div>
               </div>
@@ -1452,15 +1794,15 @@ export function ProfileView({
               <div className="p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{p.name || "N/A"}</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{p.name || "Untitled Project"}</h1>
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-400 font-mono">
-                      <span>Project #{p.id || "N/A"}</span>
+                      <span>Project #{p.id}</span>
                       <span>·</span>
-                      <span>{p.category || "N/A"}</span>
+                      <span>{p.category || "General"}</span>
                       {hasSlotOnGrid && (
                         <>
                           <span>·</span>
-                          <span>{p.joined_days_ago ? `On the wall for ${p.joined_days_ago} days` : "N/A"}</span>
+                          <span>{p.joined_days_ago ? `On the wall for ${p.joined_days_ago} days` : "Just joined the wall"}</span>
                         </>
                       )}
                     </div>
@@ -1480,7 +1822,7 @@ export function ProfileView({
                 <div className="mt-5 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Website Destination</div>
-                    <div className="text-xs text-slate-200 truncate font-mono mt-0.5">{p.linkUrl || "N/A"}</div>
+                    <div className="text-xs text-slate-200 truncate font-mono mt-0.5">{p.linkUrl || "No website attached"}</div>
                   </div>
                   {p.linkUrl && (
                     <a
@@ -1497,29 +1839,62 @@ export function ProfileView({
 
                 {/* Key Performance Indicators */}
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                    <div className="font-mono text-xl font-bold text-white">
-                      {hasSlotOnGrid && globalRank > 0 ? `#${globalRank}` : "N/A"}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">Overall Rank</div>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                    <div className="font-mono text-xl font-bold text-sky-300">
-                      {hasSlotOnGrid && catRank > 0 ? `#${catRank}` : "N/A"}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">{p.category || "Category"} Rank</div>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                    <div className="font-mono text-xl font-bold text-amber-300">
-                      {hasSlotOnGrid && p.peak_rank > 0 ? `#${p.peak_rank}` : "N/A"}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">Best Rank</div>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                    <div className="font-mono text-xl font-bold text-white">
-                      {p.views != null && p.views > 0 ? p.views.toLocaleString() : "N/A"}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">Total Views</div>
+                  <StatDisplay
+                    variant="metric"
+                    value={hasSlotOnGrid && globalRank > 0 ? `#${globalRank}` : "Unranked"}
+                    label="Overall Rank"
+                  />
+                  <StatDisplay
+                    variant="metric"
+                    value={hasSlotOnGrid && catRank > 0 ? `#${catRank}` : "—"}
+                    valueClassName="text-sky-300"
+                    label={`${p.category || "Category"} Rank`}
+                  />
+                  <StatDisplay
+                    variant="metric"
+                    value={hasSlotOnGrid && p.peak_rank > 0 ? `#${p.peak_rank}` : "—"}
+                    valueClassName="text-amber-300"
+                    label="Best Rank"
+                  />
+                  <StatDisplay
+                    variant="metric"
+                    value={p.views != null && p.views > 0 ? p.views.toLocaleString() : "0"}
+                    label="Total Views"
+                  />
+                </div>
+
+                {/* Interactive Project Community Reactions */}
+                <div className="mt-5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between gap-3">
+                  <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider font-semibold">
+                    Community Reactions
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { type: 'fire', emoji: '🔥', label: 'Fire' },
+                      { type: 'eyes', emoji: '👀', label: 'Eyes' },
+                      { type: 'heart', emoji: '❤️', label: 'Heart' },
+                      { type: 'laugh', emoji: '😂', label: 'Laugh' },
+                    ].map(({ type, emoji, label }) => {
+                      const isActive = activeProjectReactions.has(type);
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => handleProjectReaction(type as any)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20 scale-105'
+                              : 'bg-white/[0.04] hover:bg-white/[0.1] border-white/[0.08] text-neutral-300 hover:scale-105 active:scale-95'
+                          } border`}
+                          title={user ? (isActive ? `Remove ${label}` : `React with ${label}`) : `Sign in to react with ${label}`}
+                        >
+                          <span className="text-sm">{emoji}</span>
+                          <span className={`text-[10px] font-mono font-medium ${isActive ? 'text-amber-300 font-bold' : 'text-neutral-300'}`}>
+                            {projectReactions[type] || 0}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1528,38 +1903,32 @@ export function ProfileView({
             {/* Creator Attribution Card: Connects Project to Owner Profile */}
             <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-4 shadow-xl flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
-                {p.owner_avatar ? (
-                  <img
-                    src={p.owner_avatar}
-                    alt={p.owner_name || p.handle || "N/A"}
-                    className="w-12 h-12 rounded-xl object-cover ring-1 ring-amber-400/40 shrink-0"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-base shrink-0">
-                    {p.owner_name && p.owner_name !== "N/A"
-                      ? p.owner_name.charAt(0).toUpperCase()
-                      : p.handle && p.handle !== "N/A"
-                      ? p.handle.replace("@", "").charAt(0).toUpperCase()
-                      : "N/A"}
-                  </div>
-                )}
+                <Avatar
+                  src={p.owner_avatar}
+                  alt={p.owner_name || p.handle || "Creator"}
+                  name={p.owner_name || p.handle}
+                  size="lg"
+                  shape="rounded-xl"
+                  ringClassName="ring-1 ring-amber-400/40 shrink-0"
+                  fallbackClassName="bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold text-base"
+                />
                 <div className="min-w-0">
                   <div className="text-[11px] text-slate-400 uppercase tracking-wider font-medium">Created & Owned By</div>
                   <div className="text-sm font-bold text-white flex items-center gap-1.5 truncate">
-                    <span className="truncate">{p.owner_name || p.handle || "N/A"}</span>
+                    <span className="truncate">{p.owner_name || (p.handle ? `@${p.handle.replace("@", "")}` : "Anonymous")}</span>
                     {isOwnerOfP && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium shrink-0">
                         You own this
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-amber-300 font-mono">
-                    {p.owner_handle
-                      ? `@${p.owner_handle.replace("@", "")}`
-                      : p.handle && p.handle !== "N/A"
-                      ? `@${p.handle.replace("@", "")}`
-                      : "N/A"}
-                  </div>
+                  {(p.owner_handle || p.handle) && (
+                    <div className="text-xs text-amber-300 font-mono">
+                      {p.owner_handle
+                        ? `@${p.owner_handle.replace("@", "")}`
+                        : `@${p.handle.replace("@", "")}`}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1568,7 +1937,7 @@ export function ProfileView({
                 size="sm"
                 leftIcon={<UserIcon className="w-3.5 h-3.5 text-slate-300" />}
                 onClick={() => {
-                  const targetId = p.owner_handle || p.owner_id || (p.handle && p.handle !== "N/A" ? p.handle.replace("@", "") : "");
+                  const targetId = p.owner_handle || p.owner_id || (p.handle ? p.handle.replace("@", "") : "");
                   if (targetId && onSelectProfile) {
                     onSelectProfile(targetId);
                   }
@@ -1587,14 +1956,14 @@ export function ProfileView({
                   Rank History
                 </h2>
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {p.times_bumped != null && p.times_bumped > 0 ? `${p.times_bumped} bumps total` : "N/A"}
+                  {p.times_bumped != null && p.times_bumped > 0 ? `${p.times_bumped} bumps total` : "0 bumps total"}
                 </span>
               </div>
 
               {!hasSlotOnGrid || !p.journey || p.journey.length === 0 ? (
                 <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center">
                   <p className="text-xs text-slate-400">
-                    N/A
+                    No previous rank changes recorded yet.
                   </p>
                 </div>
               ) : (
@@ -1631,7 +2000,7 @@ export function ProfileView({
                   <Zap className="w-4 h-4" /> {isOwnerOfP ? "Protect / Top-Up Project" : "Take Over / Bump Slot"}
                 </span>
                 <span className="font-mono text-sm font-bold text-white">
-                  {p.active_value != null && p.active_value > 0 ? `$${p.active_value}` : "N/A"}
+                  {p.active_value != null && p.active_value > 0 ? `$${p.active_value}` : "$0"}
                 </span>
               </div>
 

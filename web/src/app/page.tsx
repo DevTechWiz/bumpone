@@ -14,7 +14,7 @@ import {
   HelpCircle,
   User as UserIcon,
 } from 'lucide-react';
-import { Button } from '../components/ui';
+import { Button, Skeleton } from '../components/ui';
 import { useAuth } from '../lib/useAuth';
 import { createClient } from '../lib/supabase/client';
 import { UserMenu } from '../components/UserMenu';
@@ -127,7 +127,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-3',
     sender: '@neon_hunter',
     avatarColor: 'bg-rose-500',
-    text: 'Rank #100 is dangerously close to getting shoved off the wall!',
+    text: 'Rank #100 is holding the active floor! One more bump and someone drops to #101 Graveyard!',
     slotTag: 100,
     timestamp: Date.now() - 1200000,
   },
@@ -135,19 +135,25 @@ const INITIAL_MESSAGES: Message[] = [
 
 export default function Home() {
   // 1. Core state: profiles (canonical domain) + off-board keep-list.
+  // Initial states start consistent between server & client to prevent hydration mismatch.
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [offboard, setOffboard] = useState<Profile[]>([]);
+  const [isBoardLoading, setIsBoardLoading] = useState<boolean>(true);
+  const [hasMounted, setHasMounted] = useState<boolean>(false);
   const seqRef = useRef(100000);
 
   useEffect(() => {
+    setHasMounted(true);
     // 1. Session cache: instant 0ms restoration when navigating back from profiles
     const cachedSession = sessionGetJSON<Profile[]>('bumped_board_cache');
     if (cachedSession && Array.isArray(cachedSession) && cachedSession.length > 0) {
       setProfiles(cachedSession);
+      setIsBoardLoading(false);
     } else {
       const saved = safeGetJSON<Profile[]>(STORAGE_KEY_PROFILES);
       if (saved && Array.isArray(saved) && saved.length > 0 && typeof saved[0].active_value === 'number') {
         setProfiles(saved);
+        setIsBoardLoading(false);
       }
     }
     const savedOffboard = safeGetJSON<Profile[]>(STORAGE_KEY_OFFBOARD);
@@ -161,9 +167,23 @@ export default function Home() {
       .then((data) => {
         if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
           setProfiles(data.profiles);
+          const sorted = sortBoard(data.profiles);
+          if (sorted.length > 100) {
+            const dbOffboard = sorted.slice(100);
+            setOffboard((prev) => {
+              const combined = [...dbOffboard];
+              for (const p of prev) {
+                if (!combined.some((c) => c.id === p.id)) {
+                  combined.push(p);
+                }
+              }
+              return combined.slice(0, 50);
+            });
+          }
         }
       })
-      .catch((err) => console.warn('Could not fetch board profiles:', err));
+      .catch((err) => console.warn('Could not fetch board profiles:', err))
+      .finally(() => setIsBoardLoading(false));
 
     // Preload modal bundles in background so 1st click is instantaneous with zero chunk fetch delay
     if (typeof window !== 'undefined') {
@@ -187,6 +207,7 @@ export default function Home() {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [viewingProfileMode, setViewingProfileMode] = useState<'user' | 'project'>('user');
   const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
   const [bumpResult, setBumpResult] = useState<BumpResultData | null>(null);
 
@@ -228,7 +249,7 @@ export default function Home() {
   const [isAutoSimulate, setIsAutoSimulate] = useState(false);
   const [isWarRoomOpen, setIsWarRoomOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, loading: authLoading, signOut } = useAuth();
   // Mute preference loads post-mount: server has no localStorage, so the
   // first render must match the server (unmuted) to avoid hydration mismatch.
   const [isMuted, setIsMuted] = useState(false);
@@ -345,7 +366,7 @@ export default function Home() {
     fetchBoard(true);
     interval = setInterval(() => fetchBoard(true), 15000);
 
-    // Subscribe to Supabase Realtime for instant 0ms bump updates
+    // Subscribe to Supabase Realtime for instant 0ms bump updates and live reaction updates
     try {
       const supabase = createClient();
       realtimeChannel = supabase
@@ -356,6 +377,31 @@ export default function Home() {
           () => {
             if (isMounted) {
               fetchBoard(false);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'projects' },
+          (payload: any) => {
+            if (isMounted && payload?.new) {
+              const row = payload.new;
+              setProfiles((prev) =>
+                prev.map((item) => {
+                  if (item.id === row.id) {
+                    return {
+                      ...item,
+                      reactions: {
+                        fire: Number(row.reactions_fire || 0),
+                        eyes: Number(row.reactions_eyes || 0),
+                        heart: Number(row.reactions_heart || 0),
+                        laugh: Number(row.reactions_laugh || 0),
+                      },
+                    };
+                  }
+                  return item;
+                })
+              );
             }
           }
         )
@@ -411,23 +457,23 @@ export default function Home() {
     };
     setReactions((prev) => [...prev, newReaction]);
 
-    // Send anonymous reaction to backend
-    const emojiMap: Record<string, string> = {
-      '🔥': 'fire',
-      '👀': 'eyes',
-      '❤️': 'heart',
-      '😂': 'laugh',
-      '👑': 'fire',
-      '⚔️': 'fire',
-    };
-    const reactionType = emojiMap[emoji] || 'fire';
-    const targetId = hoveredRank ? slots.find((s) => s.rank === hoveredRank)?.id : slots[0]?.id;
-    if (targetId) {
+    // Send reaction to backend ONLY if a specific slot is explicitly hovered or open
+    const targetId = hoveredRank ? slots.find((s) => s.rank === hoveredRank)?.id : selectedSlot?.id;
+    if (targetId && user) {
+      const emojiMap: Record<string, string> = {
+        '🔥': 'fire',
+        '👀': 'eyes',
+        '❤️': 'heart',
+        '😂': 'laugh',
+        '👑': 'fire',
+        '⚔️': 'fire',
+      };
+      const reactionType = emojiMap[emoji] || 'fire';
       fetch('/api/reactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: targetId, reaction: reactionType }),
-      }).catch(() => { });
+        body: JSON.stringify({ projectId: targetId, reaction: reactionType }),
+      }).catch(() => {});
     }
   };
 
@@ -1063,16 +1109,24 @@ export default function Home() {
             }}
             className="text-xs py-1 px-2.5"
           >
-            <span className="hidden xs:inline">Graveyard</span> ({offboard.length})
+            <span className="hidden xs:inline">Graveyard</span>{' '}
+            {!hasMounted || isBoardLoading ? (
+              <Skeleton variant="rounded" width={14} height={12} className="inline-block ml-1 align-middle" />
+            ) : (
+              `(${offboard.length})`
+            )}
           </Button>
 
-          {user ? (
+          {authLoading ? (
+            <Skeleton variant="rounded-xl" width={110} height={30} className="shrink-0" />
+          ) : user ? (
             <UserMenu
               user={user}
               userHandle={profile?.handle || userAuthHandle}
               onSignOut={signOut}
               onViewProfile={() => {
                 soundEngine.playClick();
+                setViewingProfileMode('user');
                 setViewingProfileId('self');
                 if (typeof window !== 'undefined') {
                   window.history.pushState({ viewingProfile: true, profileId: 'self' }, '', '/profile');
@@ -1136,9 +1190,15 @@ export default function Home() {
               }
               setIsTakeOverOpen(true);
             }}
-            className="text-xs font-bold py-1.5 px-3"
+            className="text-xs font-bold py-1.5 px-3 min-w-[105px]"
           >
-            BUMP #1 (${Math.max(MIN_TOP_UP, entryFloor + 10)})
+            {!hasMounted || isBoardLoading ? (
+              <span className="inline-flex items-center gap-1.5">
+                BUMP #1 (<Skeleton variant="text" width={28} height={12} className="inline-block" />)
+              </span>
+            ) : (
+              `BUMP #1 ($${Math.max(MIN_TOP_UP, entryFloor + 10)})`
+            )}
           </Button>
         </div>
       </header>
@@ -1148,6 +1208,7 @@ export default function Home() {
         <div className="flex-1 w-full h-full min-h-0 relative">
           <GridBoard
             slots={slots}
+            isLoading={!hasMounted || isBoardLoading}
             onSlotClick={handleSlotClick}
             highlightedRank={highlightedRank}
             matchingRanks={matchingRanks}
@@ -1186,7 +1247,7 @@ export default function Home() {
             <div className="flex items-center gap-2 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               <span className="truncate">
-                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. <strong className="text-rose-300">Rank #100 on the brink</strong> leaves the wall but is kept off-board.
+                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. Spots #1–#100 are live on the wall; profiles displaced beyond #100 (into #101+) enter the Graveyard.
               </span>
             </div>
           )}
@@ -1201,19 +1262,44 @@ export default function Home() {
             </div>
             <div className="hidden xl:block h-2.5 w-px bg-white/[0.1]" />
             <span className="hidden lg:inline text-neutral-400 font-mono text-[10px]">
-              Total Active Value: <strong className="text-white font-bold">${formatNumber(stats.totalBidsVolume)}</strong>
+              Total Active Value:{' '}
+              {!hasMounted || isBoardLoading ? (
+                <Skeleton variant="rounded" width={52} height={12} className="inline-block ml-1 align-middle" />
+              ) : (
+                <strong className="text-white font-bold">${formatNumber(stats.totalBidsVolume)}</strong>
+              )}
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
-              Floor <strong className="text-white font-bold">${entryFloor}</strong>
+              Floor{' '}
+              {!hasMounted || isBoardLoading ? (
+                <Skeleton variant="rounded" width={24} height={12} className="inline-block ml-1 align-middle" />
+              ) : (
+                <strong className="text-white font-bold">${entryFloor}</strong>
+              )}
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
-              King <strong className="text-amber-200 font-bold">${stats.rank1Bid}</strong>
+              King{' '}
+              {!hasMounted || isBoardLoading ? (
+                <Skeleton variant="rounded" width={28} height={12} className="inline-block ml-1 align-middle" />
+              ) : (
+                <strong className="text-amber-200 font-bold">${stats.rank1Bid}</strong>
+              )}
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
-              #10 <strong className="text-neutral-200 font-bold">${stats.rank10Bid}</strong>
+              #10{' '}
+              {!hasMounted || isBoardLoading ? (
+                <Skeleton variant="rounded" width={24} height={12} className="inline-block ml-1 align-middle" />
+              ) : (
+                <strong className="text-neutral-200 font-bold">${stats.rank10Bid}</strong>
+              )}
             </span>
             <span className="hidden sm:inline font-mono text-[10px] text-rose-300">
-              Off-board <strong className="font-bold">{offboard.length}</strong>
+              Off-board{' '}
+              {!hasMounted || isBoardLoading ? (
+                <Skeleton variant="rounded" width={16} height={12} className="inline-block ml-1 align-middle" />
+              ) : (
+                <strong className="font-bold">{offboard.length}</strong>
+              )}
             </span>
             <button
               onClick={handleResetBoard}
@@ -1283,7 +1369,7 @@ export default function Home() {
           isOpen={isGraveyardOpen}
           hasBackdrop={false}
           onClose={() => setIsGraveyardOpen(false)}
-          bumpedHistory={offboard.slice(0, 50).map((p) => toSlotItem(p, 101))}
+          bumpedHistory={offboard.slice(0, 50).map((p, idx) => toSlotItem(p, 101 + idx))}
           onReclaimTurf={(item) => {
             if (!user) {
               setIsAuthOpen(true);
@@ -1302,6 +1388,7 @@ export default function Home() {
           hasBackdrop={false}
           onClose={() => setIsLeaderboardOpen(false)}
           slots={slots}
+          isLoading={isBoardLoading}
           onSelectSlot={(slot) => setSelectedSlot(slot)}
         />
       )}
@@ -1309,10 +1396,13 @@ export default function Home() {
       {selectedSlot && (
         <SlotDetailModal
           slot={selectedSlot}
+          user={user}
           hasBackdrop={false}
           onClose={() => setSelectedSlot(null)}
+          onRequireAuth={() => setIsAuthOpen(true)}
           onViewProfile={(creatorIdentifier) => {
             setSelectedSlot(null);
+            setViewingProfileMode('user');
             setViewingProfileId(creatorIdentifier);
             if (typeof window !== 'undefined') {
               window.history.pushState({ viewingProfile: true, profileId: creatorIdentifier }, '', `/profile/${creatorIdentifier}`);
@@ -1320,6 +1410,7 @@ export default function Home() {
           }}
           onViewProject={(projectId) => {
             setSelectedSlot(null);
+            setViewingProfileMode('project');
             setViewingProfileId(projectId);
             if (typeof window !== 'undefined') {
               window.history.pushState({ viewingProfile: true, profileId: projectId }, '', `/project/${projectId}`);
@@ -1341,6 +1432,7 @@ export default function Home() {
         <div className="fixed inset-0 z-50 overflow-y-auto py-8 px-2 sm:px-4 pointer-events-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <ProfileView
             profileId={viewingProfileId}
+            initialMode={viewingProfileMode}
             onBack={handleCloseProfile}
             onSelectProfile={(nextId) => {
               setViewingProfileId(nextId);

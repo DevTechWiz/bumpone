@@ -1,45 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 const VALID_REACTIONS = ['fire', 'eyes', 'heart', 'laugh'] as const;
 type ReactionType = (typeof VALID_REACTIONS)[number];
 
-const SECRET = process.env.ANON_COOKIE_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'development-only-anon-secret');
+// Lightweight sliding-window rate limiter: max 60 reactions per minute per authenticated user
+const userRateMap = new Map<string, { count: number; resetAt: number }>();
 
-function signAnonId(id: string): string {
-  const hmac = crypto.createHmac('sha256', SECRET).update(id).digest('hex');
-  return `${id}.${hmac}`;
-}
-
-function verifyAnonId(signedValue: string): string | null {
-  const parts = signedValue.split('.');
-  if (parts.length !== 2) return null;
-  const [id, signature] = parts;
-  const expected = crypto.createHmac('sha256', SECRET).update(id).digest('hex');
-  try {
-    if (crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expected, 'utf8'))) {
-      return id;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-// In-memory sliding window rate limiter: max 30 reactions per minute per anon identity
-const reactionRateMap = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(id: string): boolean {
+function checkUserRateLimit(userId: string): boolean {
   const now = Date.now();
-  const entry = reactionRateMap.get(id);
+  const entry = userRateMap.get(userId);
+
+  // Periodic cleanup if map grows large
+  if (userRateMap.size > 2000) {
+    for (const [key, val] of userRateMap.entries()) {
+      if (now > val.resetAt) {
+        userRateMap.delete(key);
+      }
+    }
+  }
 
   if (!entry || now > entry.resetAt) {
-    reactionRateMap.set(id, { count: 1, resetAt: now + 60000 });
+    userRateMap.set(userId, { count: 1, resetAt: now + 60000 });
     return true;
   }
 
-  if (entry.count >= 30) {
+  if (entry.count >= 60) {
     return false;
   }
 
@@ -47,32 +34,72 @@ function checkRateLimit(id: string): boolean {
   return true;
 }
 
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const projectId = searchParams.get('projectId') || searchParams.get('profileId');
+
+    if (!projectId) {
+      return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
+    }
+
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ userReactions: [] });
+    }
+
+    const isSupabaseConfigured = Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('your-project')
+    );
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('reactions')
+        .select('reaction_type')
+        .eq('project_id', projectId)
+        .eq('user_id', user.id);
+
+      if (!error && data) {
+        return NextResponse.json({
+          userReactions: data.map((r: any) => r.reaction_type),
+        });
+      }
+    }
+
+    return NextResponse.json({ userReactions: [] });
+  } catch (err: any) {
+    console.error('Error fetching user reactions:', err);
+    return NextResponse.json({ userReactions: [] });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    if (!SECRET) return NextResponse.json({ error: 'Anonymous identity service is unavailable' }, { status: 503 });
-    const body = await request.json();
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    const isUserTarget = Boolean(body.userId || body.targetType === 'user');
-    const targetId = body.userId || body.projectId || body.profileId;
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required. Please sign in to react.' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const targetId = body.projectId || body.profileId;
     const reaction = body.reaction as ReactionType;
 
     if (!targetId || !VALID_REACTIONS.includes(reaction)) {
-      return NextResponse.json({ error: 'Invalid targetId or reaction type' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid projectId or reaction type' }, { status: 400 });
     }
 
-    const rawCookie = request.cookies.get('bumped_anon_id')?.value;
-    let anonId = rawCookie ? verifyAnonId(rawCookie) : null;
-    let isNewCookie = false;
-
-    if (!anonId) {
-      anonId = crypto.randomUUID();
-      isNewCookie = true;
-    }
-
-    // Rate limiting check
-    if (!checkRateLimit(anonId)) {
+    if (!checkUserRateLimit(user.id)) {
       return NextResponse.json(
-        { error: 'Rate limit exceeded: max 30 reactions per minute' },
+        { error: 'Rate limit exceeded: max 60 reactions per minute' },
         { status: 429, headers: { 'Retry-After': '60' } }
       );
     }
@@ -87,69 +114,54 @@ export async function POST(request: NextRequest) {
     let alreadyReacted = false;
 
     if (isSupabaseConfigured) {
-      if (isUserTarget) {
-        // Atomic creator/user profile reaction
-        const rpcRes = await supabaseAdmin.rpc('add_user_reaction', {
-          p_user_id: targetId,
-          p_anonymous_id: anonId,
-          p_reaction_type: reaction,
-        });
+      const rpcRes = await supabaseAdmin.rpc('add_project_reaction_auth', {
+        p_project_id: targetId,
+        p_user_id: user.id,
+        p_reaction_type: reaction,
+      });
 
-        if (!rpcRes.error && rpcRes.data) {
-          count = rpcRes.data.count ?? count;
-          alreadyReacted = Boolean(rpcRes.data.already_reacted);
-        }
-      } else {
-        // Atomic project (reel/slot) reaction
-        const rpcRes = await supabaseAdmin.rpc('add_project_reaction', {
+      if (!rpcRes.error && rpcRes.data) {
+        count = rpcRes.data.count ?? count;
+        alreadyReacted = Boolean(rpcRes.data.already_reacted);
+      } else if (rpcRes.error) {
+        // Fallback to legacy RPC if auth migration has not been applied yet
+        const legacyRpc = await supabaseAdmin.rpc('add_project_reaction', {
           p_project_id: targetId,
-          p_anonymous_id: anonId,
+          p_anonymous_id: user.id,
           p_reaction_type: reaction,
         });
-
-        if (!rpcRes.error && rpcRes.data) {
-          count = rpcRes.data.count ?? count;
-          alreadyReacted = Boolean(rpcRes.data.already_reacted);
+        if (!legacyRpc.error && legacyRpc.data) {
+          count = legacyRpc.data.count ?? count;
+          alreadyReacted = Boolean(legacyRpc.data.already_reacted);
         }
       }
     }
 
-    const res = NextResponse.json({ success: true, count, alreadyReacted });
-    if (isNewCookie) {
-      res.cookies.set('bumped_anon_id', signAnonId(anonId), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 365 * 24 * 3600, // 1 year
-      });
-    }
-
-    return res;
+    return NextResponse.json({ success: true, count, alreadyReacted });
   } catch (err: any) {
-    console.error('Error handling reaction:', err);
+    console.error('Error recording reaction:', err);
     return NextResponse.json({ error: 'Failed to record reaction' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const projectId = searchParams.get('projectId') || searchParams.get('profileId');
-    const targetType = searchParams.get('targetType');
-    const isUserTarget = Boolean(userId || targetType === 'user');
-    const targetId = userId || projectId;
+    const targetId = searchParams.get('projectId') || searchParams.get('profileId');
     const reaction = searchParams.get('reaction') as ReactionType;
 
     if (!targetId || !reaction || !VALID_REACTIONS.includes(reaction)) {
-      return NextResponse.json({ error: 'Invalid targetId or reaction type' }, { status: 400 });
-    }
-
-    const rawCookie = request.cookies.get('bumped_anon_id')?.value;
-    const anonId = rawCookie ? verifyAnonId(rawCookie) : null;
-
-    if (!anonId) {
-      return NextResponse.json({ success: true, count: 0 });
+      return NextResponse.json({ error: 'Invalid projectId or reaction type' }, { status: 400 });
     }
 
     const isSupabaseConfigured = Boolean(
@@ -161,23 +173,22 @@ export async function DELETE(request: NextRequest) {
     let count = 0;
 
     if (isSupabaseConfigured) {
-      if (isUserTarget) {
-        const rpcRes = await supabaseAdmin.rpc('remove_user_reaction', {
-          p_user_id: targetId,
-          p_anonymous_id: anonId,
-          p_reaction_type: reaction,
-        });
-        if (!rpcRes.error && rpcRes.data) {
-          count = rpcRes.data.count ?? count;
-        }
-      } else {
-        const rpcRes = await supabaseAdmin.rpc('remove_project_reaction', {
+      const rpcRes = await supabaseAdmin.rpc('remove_project_reaction_auth', {
+        p_project_id: targetId,
+        p_user_id: user.id,
+        p_reaction_type: reaction,
+      });
+
+      if (!rpcRes.error && rpcRes.data) {
+        count = rpcRes.data.count ?? count;
+      } else if (rpcRes.error) {
+        const legacyRpc = await supabaseAdmin.rpc('remove_project_reaction', {
           p_project_id: targetId,
-          p_anonymous_id: anonId,
+          p_anonymous_id: user.id,
           p_reaction_type: reaction,
         });
-        if (!rpcRes.error && rpcRes.data) {
-          count = rpcRes.data.count ?? count;
+        if (!legacyRpc.error && legacyRpc.data) {
+          count = legacyRpc.data.count ?? count;
         }
       }
     }

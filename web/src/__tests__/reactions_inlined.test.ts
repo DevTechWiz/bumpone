@@ -1,31 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import crypto from 'crypto';
 
-describe('Inlined Reactions Architecture', () => {
+describe('Auth-Gated Reactions & Creator Clout Architecture', () => {
   const VALID_REACTIONS = ['fire', 'eyes', 'heart', 'laugh'] as const;
   type ReactionType = (typeof VALID_REACTIONS)[number];
-
-  const TEST_SECRET = 'test-secret-key-12345';
-
-  function signAnonId(id: string, secret = TEST_SECRET): string {
-    const hmac = crypto.createHmac('sha256', secret).update(id).digest('hex');
-    return `${id}.${hmac}`;
-  }
-
-  function verifyAnonId(signedValue: string, secret = TEST_SECRET): string | null {
-    const parts = signedValue.split('.');
-    if (parts.length !== 2) return null;
-    const [id, signature] = parts;
-    const expected = crypto.createHmac('sha256', secret).update(id).digest('hex');
-    try {
-      if (crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expected, 'utf8'))) {
-        return id;
-      }
-    } catch {
-      return null;
-    }
-    return null;
-  }
 
   it('validates allowed emoji reaction keys', () => {
     expect(VALID_REACTIONS).toContain('fire');
@@ -35,24 +12,7 @@ describe('Inlined Reactions Architecture', () => {
     expect(VALID_REACTIONS).not.toContain('thumbsup');
   });
 
-  it('signs and verifies anonymous identity cookies securely', () => {
-    const anonId = '550e8400-e29b-41d4-a716-446655440000';
-    const signed = signAnonId(anonId);
-    expect(signed).toContain(anonId);
-
-    const verified = verifyAnonId(signed);
-    expect(verified).toBe(anonId);
-
-    // Tampered signature must fail
-    const tampered = `${anonId}.badsignature12345`;
-    expect(verifyAnonId(tampered)).toBeNull();
-
-    // Wrong secret must fail
-    expect(verifyAnonId(signed, 'different-secret')).toBeNull();
-  });
-
-  it('maps inlined reaction columns with 0 joins', () => {
-    // Simulated row returned directly from projects table
+  it('maps inlined reaction columns with 0 joins on projects', () => {
     const mockProjectRow = {
       id: 'proj-123',
       title: 'BumpOne',
@@ -79,27 +39,61 @@ describe('Inlined Reactions Architecture', () => {
     expect(calculatedTotal).toBe(mockProjectRow.total_reactions);
   });
 
-  it('maps inlined user profile reactions symmetrically', () => {
-    const mockUserRow = {
-      id: 'user-456',
-      handle: 'satoshivibe',
-      reactions_fire: 120,
-      reactions_eyes: 45,
-      reactions_heart: 200,
-      reactions_laugh: 10,
-      total_reactions: 375,
-    };
+  it('aggregates combined clout across a creator portfolio of projects', () => {
+    const creatorProjects = [
+      {
+        id: 'proj-1',
+        reactions: { fire: 10, eyes: 5, heart: 20, laugh: 2 },
+      },
+      {
+        id: 'proj-2',
+        reactions: { fire: 25, eyes: 12, heart: 40, laugh: 8 },
+      },
+      {
+        id: 'proj-3',
+        reactions: { fire: 5, eyes: 3, heart: 10, laugh: 0 },
+      },
+    ];
 
-    const userReactions = {
-      fire: Number(mockUserRow.reactions_fire || 0),
-      eyes: Number(mockUserRow.reactions_eyes || 0),
-      heart: Number(mockUserRow.reactions_heart || 0),
-      laugh: Number(mockUserRow.reactions_laugh || 0),
-    };
+    const totalReactionsReceived = creatorProjects.reduce(
+      (sum, p) => sum + p.reactions.fire + p.reactions.eyes + p.reactions.heart + p.reactions.laugh,
+      0
+    );
 
-    expect(userReactions.fire).toBe(120);
-    expect(userReactions.heart).toBe(200);
-    expect(mockUserRow.total_reactions).toBe(375);
+    const reactionsBreakdown = creatorProjects.reduce(
+      (acc, p) => {
+        acc.fire += p.reactions.fire;
+        acc.eyes += p.reactions.eyes;
+        acc.heart += p.reactions.heart;
+        acc.laugh += p.reactions.laugh;
+        return acc;
+      },
+      { fire: 0, eyes: 0, heart: 0, laugh: 0 }
+    );
+
+    expect(totalReactionsReceived).toBe(140);
+    expect(reactionsBreakdown.fire).toBe(40);
+    expect(reactionsBreakdown.eyes).toBe(20);
+    expect(reactionsBreakdown.heart).toBe(70);
+    expect(reactionsBreakdown.laugh).toBe(10);
+  });
+
+  it('handles Option A toggle (adding and un-reacting) correctly', () => {
+    const activeReactions = new Set<ReactionType>(['fire', 'heart']);
+
+    // User un-reacts to 'fire'
+    const newActiveAfterToggleOff = new Set(activeReactions);
+    if (newActiveAfterToggleOff.has('fire')) {
+      newActiveAfterToggleOff.delete('fire');
+    }
+    expect(newActiveAfterToggleOff.has('fire')).toBe(false);
+    expect(newActiveAfterToggleOff.has('heart')).toBe(true);
+
+    // User adds 'eyes'
+    const newActiveAfterToggleOn = new Set(newActiveAfterToggleOff);
+    newActiveAfterToggleOn.add('eyes');
+    expect(newActiveAfterToggleOn.has('eyes')).toBe(true);
+    expect(newActiveAfterToggleOn.size).toBe(2); // 'heart' and 'eyes'
   });
 
   it('sorts popular items by total_reactions descending', () => {

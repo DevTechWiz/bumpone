@@ -1,24 +1,28 @@
 import React, { useState } from 'react';
-import { Zap, ArrowUpRight, Share2, Copy, Check, ShieldCheck, Skull, Flag, AlertCircle, User } from 'lucide-react';
-import { Modal, Button, Badge } from './ui';
+import { Zap, ArrowUpRight, Share2, Check, ShieldCheck, Flag, AlertCircle, User } from 'lucide-react';
+import { Modal, Button, Badge, Avatar } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import { soundEngine } from '../lib/sound';
 
 export interface SlotDetailModalProps {
   slot: SlotItem | null;
+  user?: any;
   onClose: () => void;
   onBumpSlot: (slot: SlotItem) => void;
   onViewProfile?: (creatorIdentifier: string) => void;
   onViewProject?: (projectId: string) => void;
+  onRequireAuth?: () => void;
   hasBackdrop?: boolean;
 }
 
 export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   slot,
+  user,
   onClose,
   onBumpSlot,
   onViewProfile,
   onViewProject,
+  onRequireAuth,
   hasBackdrop = true,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -34,6 +38,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
     heart: slot?.reactions?.heart || 0,
     laugh: slot?.reactions?.laugh || 0,
   }));
+  const [activeReactions, setActiveReactions] = useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     if (slot) {
@@ -46,22 +51,79 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
     }
   }, [slot]);
 
+  React.useEffect(() => {
+    if (slot?.id && user) {
+      fetch(`/api/reactions?projectId=${slot.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data?.userReactions)) {
+            setActiveReactions(new Set(data.userReactions));
+          }
+        })
+        .catch(() => {});
+    } else {
+      setActiveReactions(new Set());
+    }
+  }, [slot?.id, user]);
+
   const handleReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh') => {
     soundEngine.playClick();
-    setLocalReactions((prev) => ({
-      ...prev,
-      [type]: (prev[type] || 0) + 1,
-    }));
-    try {
-      if (slot?.id) {
-        await fetch('/api/reactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ profileId: slot.id, reaction: type }),
-        });
+    if (!user) {
+      if (onRequireAuth) {
+        onRequireAuth();
       }
-    } catch {
-      // Local optimistic reaction
+      return;
+    }
+
+    const isAlreadyActive = activeReactions.has(type);
+    const newActive = new Set(activeReactions);
+
+    if (isAlreadyActive) {
+      // Toggle off / un-react
+      newActive.delete(type);
+      setActiveReactions(newActive);
+      setLocalReactions((prev) => ({
+        ...prev,
+        [type]: Math.max(0, (prev[type] || 1) - 1),
+      }));
+
+      try {
+        if (slot?.id) {
+          const res = await fetch(`/api/reactions?projectId=${slot.id}&reaction=${type}`, {
+            method: 'DELETE',
+          });
+          const data = await res.json();
+          if (data?.count != null) {
+            setLocalReactions((prev) => ({ ...prev, [type]: data.count }));
+          }
+        }
+      } catch {
+        // Keep optimistic state
+      }
+    } else {
+      // Toggle on / add reaction
+      newActive.add(type);
+      setActiveReactions(newActive);
+      setLocalReactions((prev) => ({
+        ...prev,
+        [type]: (prev[type] || 0) + 1,
+      }));
+
+      try {
+        if (slot?.id) {
+          const res = await fetch('/api/reactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: slot.id, reaction: type }),
+          });
+          const data = await res.json();
+          if (data?.count != null) {
+            setLocalReactions((prev) => ({ ...prev, [type]: data.count }));
+          }
+        }
+      } catch {
+        // Keep optimistic state
+      }
     }
   };
 
@@ -183,13 +245,14 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
               className="inline-flex items-center gap-2.5 min-w-0 text-left group cursor-pointer"
               title={`View ${creatorDisplayName}'s Profile`}
             >
-              <div className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden bg-white/[0.06] border border-white/[0.12] flex items-center justify-center group-hover:border-amber-400/50 transition-colors">
-                {slot.owner_avatar ? (
-                  <img src={slot.owner_avatar} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-4 h-4 text-slate-400 group-hover:text-amber-300 transition-colors" />
-                )}
-              </div>
+              <Avatar
+                src={slot.owner_avatar}
+                name={creatorDisplayName}
+                size="md"
+                className="border border-white/[0.12] group-hover:border-amber-400/50 transition-colors"
+                fallbackClassName="bg-white/[0.06]"
+                fallbackIcon={<User className="w-4 h-4 text-slate-400 group-hover:text-amber-300 transition-colors" />}
+              />
               <div className="min-w-0">
                 <span className="text-[10px] text-slate-400 block uppercase font-medium tracking-wider">
                   Created by
@@ -243,20 +306,27 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
               { type: 'eyes', emoji: '👀', label: 'Eyes' },
               { type: 'heart', emoji: '❤️', label: 'Heart' },
               { type: 'laugh', emoji: '😂', label: 'Laugh' },
-            ].map(({ type, emoji, label }) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => handleReaction(type as any)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-white/[0.04] hover:bg-white/[0.1] border border-white/[0.08] hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                title={`React with ${label}`}
-              >
-                <span>{emoji}</span>
-                <span className="text-[10px] font-mono text-neutral-300 font-medium">
-                  {localReactions[type] || 0}
-                </span>
-              </button>
-            ))}
+            ].map(({ type, emoji, label }) => {
+              const isActive = activeReactions.has(type);
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleReaction(type as any)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20 scale-105'
+                      : 'bg-white/[0.04] hover:bg-white/[0.1] border-white/[0.08] text-neutral-300 hover:scale-105 active:scale-95'
+                  } border`}
+                  title={user ? (isActive ? `Remove ${label}` : `React with ${label}`) : `Sign in to react with ${label}`}
+                >
+                  <span className="text-sm">{emoji}</span>
+                  <span className={`text-[10px] font-mono font-medium ${isActive ? 'text-amber-300 font-bold' : 'text-neutral-300'}`}>
+                    {localReactions[type] || 0}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
