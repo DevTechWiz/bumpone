@@ -1144,7 +1144,30 @@ export function ProfileView({
     { fire: 0, eyes: 0, heart: 0, laugh: 0 }
   );
 
-  if (isSelf && !user && !authLoading) {
+  if (isSelf && !user) {
+    if (authLoading) {
+      return (
+        <div className="mx-auto max-w-[640px] w-full px-4 sm:px-6 py-12">
+          <div className="flex items-center justify-between mb-8">
+            <Skeleton variant="rounded-lg" width={110} height={32} />
+          </div>
+
+          <div className="rounded-3xl border border-white/[0.1] bg-[#18191d]/90 p-8 sm:p-10 shadow-2xl backdrop-blur-xl text-center space-y-6">
+            <Skeleton variant="rounded-2xl" className="w-20 h-20 mx-auto" />
+
+            <div className="space-y-2 max-w-md mx-auto flex flex-col items-center">
+              <Skeleton variant="text" width={240} className="h-7" />
+              <SkeletonText lines={2} widths={["95%", "75%"]} className="w-full flex flex-col items-center pt-2" />
+            </div>
+
+            <div className="pt-2 flex justify-center">
+              <Skeleton variant="rounded-xl" width={220} height={44} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-[640px] w-full px-4 sm:px-6 py-12">
         <div className="flex items-center justify-between mb-8">
@@ -1306,6 +1329,23 @@ export function ProfileView({
                 <SkeletonStat variant="metric" />
                 <SkeletonStat variant="metric" />
               </div>
+
+              {/* Aggregated Community Clout Across Creator Portfolio Skeleton */}
+              <div className="mt-4 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Skeleton variant="rounded-lg" width={28} height={28} />
+                  <div className="space-y-1">
+                    <Skeleton variant="text" width={160} className="h-3.5" />
+                    <Skeleton variant="text" width={220} className="h-2.5 opacity-60" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Skeleton variant="rounded-lg" width={52} height={28} />
+                  <Skeleton variant="rounded-lg" width={52} height={28} />
+                  <Skeleton variant="rounded-lg" width={52} height={28} />
+                  <Skeleton variant="rounded-lg" width={52} height={28} />
+                </div>
+              </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-white/[0.1] bg-[#18191d]/90 p-6 shadow-2xl backdrop-blur-xl">
@@ -1339,7 +1379,7 @@ export function ProfileView({
                         {activeUser.bio}
                       </p>
                     ) : isSelf ? (
-                      <p className="text-xs text-slate-500 italic max-w-xl pt-1">
+                      <p className="text-xs text-slate-400 italic max-w-xl pt-1">
                         No bio added yet. Click &quot;Edit Profile&quot; to add one.
                       </p>
                     ) : null}
@@ -1445,7 +1485,7 @@ export function ProfileView({
                       <span className="text-amber-300 font-mono text-sm">{totalReactionsReceived.toLocaleString()}</span>
                       <span className="text-slate-300 font-medium">Combined Community Reactions</span>
                     </div>
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-[10px] text-slate-400">
                       Total reaction clout earned across {creatorProjects.length} {creatorProjects.length === 1 ? 'project' : 'projects'} on the board
                     </span>
                   </div>
@@ -1655,6 +1695,7 @@ export function ProfileView({
               {/* Cover Banner Skeleton */}
               <div className="relative h-56 sm:h-72 bg-[#0d0e12] overflow-hidden flex items-center justify-center">
                 <Skeleton variant="rectangular" className="w-full h-full" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#18191d] via-[#18191d]/20 to-transparent pointer-events-none" />
                 <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <SkeletonBadge width={70} />
@@ -1686,6 +1727,17 @@ export function ProfileView({
                   <SkeletonStat variant="metric" />
                   <SkeletonStat variant="metric" />
                   <SkeletonStat variant="metric" />
+                </div>
+
+                {/* Reactions Skeleton */}
+                <div className="mt-5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between gap-3">
+                  <Skeleton variant="text" width={110} className="h-3 opacity-60" />
+                  <div className="flex items-center gap-1.5">
+                    <Skeleton variant="rounded-lg" width={48} height={28} />
+                    <Skeleton variant="rounded-lg" width={48} height={28} />
+                    <Skeleton variant="rounded-lg" width={48} height={28} />
+                    <Skeleton variant="rounded-lg" width={48} height={28} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1955,7 +2007,7 @@ export function ProfileView({
                   <TrendingUp className="w-4 h-4 text-emerald-400" />
                   Rank History
                 </h2>
-                <span className="text-[11px] text-slate-500 font-mono">
+                <span className="text-[11px] text-slate-400 font-mono">
                   {p.times_bumped != null && p.times_bumped > 0 ? `${p.times_bumped} bumps total` : "0 bumps total"}
                 </span>
               </div>
