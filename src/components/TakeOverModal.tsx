@@ -449,7 +449,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     };
 
     try {
-      const res = await fetch('/api/purchase/create', {
+      const res = await fetch('/api/purchase/razorpay/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -470,16 +470,74 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       const data = await res.json().catch(() => ({ error: 'Failed to initiate purchase session.' }));
 
       if (!res.ok) {
-        setErrorMsg(data.error || 'Failed to initiate purchase session.');
+        setErrorMsg(data.error || 'Failed to initiate Razorpay checkout order.');
         return;
       }
 
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
+      // Dynamically load Razorpay Checkout script if needed
+      const loadScript = () => {
+        return new Promise<boolean>((resolve) => {
+          if ((window as any).Razorpay) return resolve(true);
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = () => resolve(true);
+          script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        });
+      };
+
+      const loaded = await loadScript();
+      if (!loaded) {
+        setErrorMsg('Failed to load Razorpay payment SDK. Please check your internet connection.');
         return;
       }
 
-      setErrorMsg(data.error || 'Failed to initiate purchase checkout session.');
+      const rzp = new (window as any).Razorpay({
+        key: data.key_id,
+        amount: data.amount,
+        currency: data.currency,
+        name: 'BumpOne',
+        description: data.description,
+        order_id: data.order_id,
+        prefill: {
+          name: user?.user_metadata?.full_name || user?.user_metadata?.name || '',
+          email: user?.email || '',
+        },
+        theme: {
+          color: '#e11d48',
+        },
+        handler: async function (response: any) {
+          setIsSubmitting(true);
+          try {
+            const verifyRes = await fetch('/api/purchase/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                quoteId: data.quote_id,
+                orderId: response.razorpay_order_id || data.order_id,
+                paymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+              }),
+            });
+            const verifyData = await verifyRes.json().catch(() => ({}));
+            if (verifyRes.ok && verifyData.success) {
+              window.location.href = `/?status=success&quote_id=${data.quote_id}`;
+              return;
+            }
+          } catch (e) {
+            console.error('Immediate verification error, fallback to pending redirect:', e);
+          }
+          window.location.href = `/?status=pending_payment&quote_id=${data.quote_id}&payment_id=${response.razorpay_payment_id}`;
+        },
+      });
+
+      rzp.on('payment.failed', function (resp: any) {
+        console.error('Razorpay payment failed:', resp.error);
+        setErrorMsg(resp.error?.description || 'Payment was cancelled or failed.');
+      });
+
+      rzp.open();
+      return;
     } catch (err: any) {
       console.error('Purchase checkout error:', err);
       setErrorMsg('Payment gateway is currently unavailable. Please try again.');

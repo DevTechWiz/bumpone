@@ -24,30 +24,44 @@ export async function uploadImageToR2(
   filename: string,
   contentType: string = 'image/webp'
 ): Promise<string> {
-  const r2 = getR2Client();
-  const bucketName = process.env.R2_BUCKET_NAME || 'bumped-assets';
+  const bucketName = process.env.R2_BUCKET_NAME || 'bumpone-assets';
   const publicBaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://assets.bumpone.lol';
-
   const key = `profiles/${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
-  if (!r2) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('R2 storage is not configured');
+  // 1. Primary: Native Cloudflare R2 bucket binding via OpenNext
+  try {
+    const { getCloudflareContext } = await import('@opennextjs/cloudflare');
+    const cf = await getCloudflareContext({ async: true });
+    const r2Bucket = (cf?.env as any)?.bumpone_assets;
+    if (r2Bucket && typeof r2Bucket.put === 'function') {
+      await r2Bucket.put(key, buffer, {
+        httpMetadata: {
+          contentType,
+          cacheControl: 'public, max-age=31536000, immutable',
+        },
+      });
+      return `${publicBaseUrl.replace(/\/$/, '')}/${key}`;
     }
-    // Dev fallback: convert buffer to base64 data URI if R2 is not configured
-    const base64 = buffer.toString('base64');
-    return `data:${contentType};base64,${base64}`;
+  } catch (cfErr) {
+    // OpenNext context not available (e.g. running in standard Node.js or local dev)
   }
 
-  await r2.send(
-    new PutObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-      CacheControl: 'public, max-age=31536000, immutable',
-    })
-  );
+  // 2. Secondary: AWS S3 Client compatibility if R2 API keys are provided
+  const r2 = getR2Client();
+  if (r2) {
+    await r2.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000, immutable',
+      })
+    );
+    return `${publicBaseUrl.replace(/\/$/, '')}/${key}`;
+  }
 
-  return `${publicBaseUrl.replace(/\/$/, '')}/${key}`;
+  // 3. Fallback: Base64 data URI if no external object storage is bound
+  const base64 = buffer.toString('base64');
+  return `data:${contentType};base64,${base64}`;
 }

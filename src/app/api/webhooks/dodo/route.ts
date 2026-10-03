@@ -5,14 +5,25 @@ import { invalidateBoardCache } from '@/lib/boardCache';
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
-  const headers = { 'webhook-id': request.headers.get('webhook-id') || '', 'webhook-timestamp': request.headers.get('webhook-timestamp') || '', 'webhook-signature': request.headers.get('webhook-signature') || '' };
+  const webhookId = request.headers.get('webhook-id') || request.headers.get('svix-id') || '';
+  const webhookTimestamp = request.headers.get('webhook-timestamp') || request.headers.get('svix-timestamp') || '';
+  const webhookSignature = request.headers.get('webhook-signature') || request.headers.get('svix-signature') || '';
+
+  const headers: Record<string, string> = {
+    'webhook-id': webhookId,
+    'webhook-timestamp': webhookTimestamp,
+    'webhook-signature': webhookSignature,
+    'svix-id': webhookId,
+    'svix-timestamp': webhookTimestamp,
+    'svix-signature': webhookSignature,
+  };
   let event: any;
   try { event = verifyDodoWebhook(rawBody, headers); }
   catch { return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 }); }
   try {
     const type = event.type || event.event_type;
     const payload = event.data || event;
-    const eventId = headers['webhook-id'];
+    const eventId = webhookId;
     if (!eventId) return NextResponse.json({ error: 'Missing webhook id' }, { status: 400 });
 
     if (type === 'payment.succeeded') {
