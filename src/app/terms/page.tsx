@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Terms of Service - BumpOne.lol",
-  description: "Terms of Service and auction rules for BumpOne.lol.",
+  description: "Terms of Service, digital auction rules, and legal conditions for BumpOne.lol.",
 };
 
 export default function TermsPage() {
@@ -19,7 +19,11 @@ export default function TermsPage() {
             <span>◀</span>
             <span>BUMPONE.LOL</span>
           </Link>
-          <span className="font-mono text-xs text-neutral-500 uppercase tracking-widest">Legal Document</span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-amber-400 border border-amber-500/20">
+              LEGAL TERMS 2026
+            </span>
+          </div>
         </div>
       </nav>
 
@@ -30,29 +34,32 @@ export default function TermsPage() {
           </span>
           <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">Terms of Service</h1>
           <p className="mt-3 text-sm font-mono text-neutral-400">
-            Last Updated: October 3, 2026 • Effective Immediately
+            Last Updated: October 3, 2026 • Effective for all transactions and users
           </p>
         </div>
 
         <div className="space-y-10 text-[15px] leading-relaxed text-neutral-300">
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">01.</span> Agreement to Terms
+              <span className="text-amber-400 font-mono text-sm">01.</span> Agreement & Age Requirement (18+)
             </h2>
-            <p>
-              By accessing, browsing, registering an account, or submitting payments on BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;), you agree to be legally bound by these Terms of Service (&quot;Terms&quot;). If you do not agree to all provisions contained herein, you must immediately discontinue use of the platform.
+            <p className="mb-3">
+              By accessing, browsing, registering an account, or submitting micro-payments on BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;), you agree to be legally bound by these Terms of Service (&quot;Terms&quot;) and our Privacy Policy.
             </p>
+            <div className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-4 text-sm text-rose-200">
+              <strong className="block mb-1">Age Eligibility:</strong> You represent and warrant that you are at least <strong>18 years of age</strong> (or the age of majority in your jurisdiction) and have the legal capacity to enter into binding contracts. Minors are strictly prohibited from submitting financial bids or paid slot takeovers.
+            </div>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">02.</span> Description of the Platform Mechanics
+              <span className="text-amber-400 font-mono text-sm">02.</span> Platform Dynamic & Auction Mechanics
             </h2>
             <p className="mb-3">
-              BumpOne operates a dynamic, competitive 100-slot attention billboard. Users submit digital projects (comprising titles, URLs, graphics, and descriptions) and pay micro-transaction fees to &quot;bump&quot; slots upwards in rank, competing for the #1 King throne.
+              BumpOne operates a dynamic, competitive 100-slot attention billboard. Users submit digital project listings (comprising titles, destination URLs, graphics, and descriptions) and pay micro-transaction fees to &quot;bump&quot; slots upwards in rank, competing for the #1 King throne.
             </p>
             <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4 text-sm text-neutral-300">
-              <strong className="text-amber-300 block mb-1">Core Auction Dynamic:</strong>
+              <strong className="text-amber-300 block mb-1">Core Dynamic Notice:</strong>
               Slot rank is strictly fluid. Any project occupying any slot (including #1) may be outbid, displaced, pushed down the ranking hierarchy, or knocked off the live 100-slot arena into the Graveyard at any second by another participant. BumpOne does not guarantee permanent placement, fixed time duration, or specific impression volumes for any slot.
             </div>
           </section>
@@ -79,17 +86,18 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">04.</span> Acceptable Use & Content Standards
+              <span className="text-amber-400 font-mono text-sm">04.</span> Acceptable Use & Intermediary Guidelines
             </h2>
             <p className="mb-3">
-              You are solely responsible for all content, titles, images, and destination URLs associated with your submitted projects. You expressly agree not to submit or link to:
+              In accordance with Section 79 of the Information Technology Act, 2000 and the Intermediary Guidelines Rules 2021, you agree not to submit or link to content that:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-neutral-300">
-              <li>Malicious software, phishing schemes, fraudulent offers, or deceptive financial scams.</li>
-              <li>Hate speech, harassment, defamation, threats, or incitement of violence against individuals or groups.</li>
-              <li>Sexually explicit, pornographic, or non-consensual imagery.</li>
-              <li>Materials that infringe upon any patent, trademark, trade secret, copyright, or other proprietary rights.</li>
-              <li>Illegal substances, unauthorized firearms, or activities prohibited by applicable local, state, national, or international law.</li>
+              <li>Belongs to another person and to which you do not have any right.</li>
+              <li>Is defamatory, obscene, pornographic, pedophilic, or invasive of another&apos;s privacy.</li>
+              <li>Infringes upon any patent, trademark, copyright, or other proprietary rights.</li>
+              <li>Deceives or misleads visitors about the origin of messages, or constitutes financial scams/phishing.</li>
+              <li>Contains software viruses or code designed to disrupt, destroy, or limit platform functionality.</li>
+              <li>Threatens the unity, integrity, defense, security, or sovereignty of any state or friendly foreign nation.</li>
             </ul>
           </section>
 
@@ -116,15 +124,16 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">07.</span> Contact & Legal Notice
+              <span className="text-amber-400 font-mono text-sm">07.</span> Grievance Redressal & Contact
             </h2>
-            <p>
-              For legal inquiries, copyright notices (DMCA), or terms clarification, please contact our administrative team:
+            <p className="mb-3">
+              For legal inquiries, copyright notices (DMCA/IP takedowns), or grievances regarding content published on the grid:
             </p>
-            <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 font-mono text-sm">
-              <p className="text-white">BumpOne Operations & Legal</p>
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 font-mono text-sm space-y-1">
+              <p className="text-white font-bold">BumpOne Legal & Grievance Desk</p>
               <p className="text-neutral-400">Website: https://bumpone.lol</p>
-              <p className="text-amber-400">Email: legal@bumpone.lol</p>
+              <p className="text-amber-400">Grievance Email: grievance@bumpone.lol</p>
+              <p className="text-neutral-400">General Legal: legal@bumpone.lol</p>
             </div>
           </section>
         </div>
