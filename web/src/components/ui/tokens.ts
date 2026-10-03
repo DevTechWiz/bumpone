@@ -35,7 +35,7 @@ export const DESIGN_TOKENS = {
       // #14 - #54 Lords: Balanced Neutral Ash/Grey
       contender: '#71717a',
       contenderBg: 'rgba(113, 113, 122, 0.08)',
-      // #100 The Bubble / Drop-off: Subtle Crimson Beacon
+      // #100 The Floor / Brink (Last live slot before #101 Graveyard): Subtle Crimson Beacon
       dropZone: '#f43f5e',
       dropZoneBg: 'rgba(244, 63, 94, 0.15)',
       dropZoneBorder: 'rgba(244, 63, 94, 0.5)',

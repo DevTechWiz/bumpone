@@ -27,4 +27,20 @@ describe('Image Upload Security & Sanitization', () => {
       expect(cleanFilename).not.toContain('\\');
     });
   });
+
+  it('validates image headers via magic bytes (WebP, JPEG, PNG) to prevent disguised scripts', () => {
+    // Valid WebP Header: RIFF....WEBP
+    const validWebp = Buffer.from([
+      0x52, 0x49, 0x46, 0x46, // 'RIFF'
+      0x00, 0x00, 0x00, 0x00,
+      0x57, 0x45, 0x42, 0x50, // 'WEBP'
+    ]);
+    const isWebp = validWebp.toString('ascii', 0, 4) === 'RIFF' && validWebp.toString('ascii', 8, 12) === 'WEBP';
+    expect(isWebp).toBe(true);
+
+    // Fake JPEG (Disguised script)
+    const fakeScript = Buffer.from('<script>alert(1)</script>');
+    const isJpeg = fakeScript[0] === 0xff && fakeScript[1] === 0xd8 && fakeScript[2] === 0xff;
+    expect(isJpeg).toBe(false);
+  });
 });

@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bumpone-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-01-01",
+  "workers_dev": true,
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "bumpone_assets",
+      "bucket_name": "bumpone-assets"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "bumpone.lol",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.bumpone.lol",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://lgpejkhnlxdekozwyczi.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxncGVqa2hubHhkZWtvend5Y3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0NzQ0NDksImV4cCI6MjEwNjA1MDQ0OX0.U-R1ieQ_FsLOiKd4OwWBqLVR68gs-3VcQw3G5SWHzP4",
+    "NEXT_PUBLIC_GOOGLE_CLIENT_ID": "991881014010-3o60g98nqent0bc6em2kqb0ahu0b88s9.apps.googleusercontent.com",
+    "NEXT_PUBLIC_APP_URL": "https://bumpone.lol",
+    "NEXT_PUBLIC_R2_PUBLIC_URL": "https://bumpone.lol",
+    "DODO_PAYMENTS_ENVIRONMENT": "test_mode",
+    "DODO_PRODUCT_ID": "p_bumped_top_up",
+    "R2_BUCKET_NAME": "bumpone-assets"
+  }
+}

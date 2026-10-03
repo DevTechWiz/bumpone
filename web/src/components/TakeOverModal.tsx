@@ -21,6 +21,7 @@ import { Modal, Input, Button, Badge, getRankTier } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import { MIN_TOP_UP } from '../lib/board';
 import { useAuth } from '../lib/useAuth';
+import { processImageForUpload } from '../lib/imageOptimization';
 
 export interface TopUpOrder {
   projectId?: string;
@@ -54,13 +55,16 @@ export interface TakeOverModalProps {
     owner_id?: string;
   }[];
   preselectedTargetSlot?: SlotItem | null;
-  onSubmitTopUp: (order: TopUpOrder) => void;
+  onSubmitTopUp?: (order: TopUpOrder) => void;
   hasBackdrop?: boolean;
   onBack?: () => void;
   onRequireAuth?: () => void;
 }
 
 const CATEGORY_ICON = Tag;
+
+import { normalizeUrl } from '../lib/urls';
+export { normalizeUrl };
 
 export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   isOpen,
@@ -93,6 +97,9 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const prevOpenRef = useRef(false);
+  const initializedSlotIdRef = useRef<string | null>(null);
+
   const measureImageDimensions = (src: string) => {
     const img = new Image();
     img.onload = () => {
@@ -108,11 +115,31 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   };
 
   const handleFileUpload = async (file: File) => {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select a valid image file (JPG, PNG, or WebP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMsg('Image exceeds 5MB size limit.');
+      return;
+    }
+
     setIsUploading(true);
     setErrorMsg(null);
     try {
+      let uploadFile: File = file;
+      try {
+        const processed = await processImageForUpload(file);
+        uploadFile = processed.file;
+      } catch (procErr) {
+        console.warn('Client-side image processing fallback to original:', procErr);
+      }
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       const res = await fetch('/api/uploads/image', {
         method: 'POST',
         body: formData,
@@ -123,23 +150,38 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       if (res.ok && data?.url) {
         setImageUrl(data.url);
         setImageError(false);
-        measureImageDimensions(data.url);
-        setIsUploading(false);
-        return;
+        if (data.width && data.height) {
+          setImageDimensions({
+            width: data.width,
+            height: data.height,
+            aspectRatio: data.aspectRatio || 1,
+          });
+        } else {
+          measureImageDimensions(data.url);
+        }
       } else {
         setErrorMsg(data?.error || 'Failed to upload image. Max 5MB, JPG/PNG/WebP only.');
-        setIsUploading(false);
-        return;
       }
     } catch {
       setErrorMsg('Network error while uploading image. Please try again.');
+    } finally {
       setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
-  // Sync defaults when opened: prefill top-up to pass the preselected target.
+  // Sync defaults only once when opened or when preselected target explicitly changes.
+  // Never re-run while modal is already open to prevent clearing user in-progress edits!
   useEffect(() => {
-    if (isOpen) {
+    const isOpening = isOpen && !prevOpenRef.current;
+    const currentTargetId = preselectedTargetSlot?.id ?? null;
+    const isTargetChanged = isOpen && currentTargetId !== initializedSlotIdRef.current;
+
+    if (isOpening || isTargetChanged) {
+      initializedSlotIdRef.current = currentTargetId;
+
       if (preselectedTargetSlot) {
         const isMine = existingHandles.some((h) => h.id === preselectedTargetSlot.id);
         if (isMine) {
@@ -147,12 +189,15 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setHolderId(preselectedTargetSlot.id);
           const holderObj = existingHandles.find((h) => h.id === preselectedTargetSlot.id);
           if (holderObj) {
-            setTitle(holderObj.title);
+            setTitle(holderObj.title || '');
             if (holderObj.imageUrl) {
               setImageUrl(holderObj.imageUrl);
               measureImageDimensions(holderObj.imageUrl);
+            } else {
+              setImageUrl('');
+              setImageDimensions({});
             }
-            if (holderObj.linkUrl) setLinkUrl(holderObj.linkUrl);
+            setLinkUrl(holderObj.linkUrl || '');
             if (holderObj.category) setCategory(holderObj.category);
             if (holderObj.handle) setCreatorHandle(holderObj.handle.replace(/^@/, ''));
           }
@@ -162,12 +207,15 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setMode('existing');
           const firstProj = existingHandles[0];
           setHolderId(firstProj.id);
-          setTitle(firstProj.title);
+          setTitle(firstProj.title || '');
           if (firstProj.imageUrl) {
             setImageUrl(firstProj.imageUrl);
             measureImageDimensions(firstProj.imageUrl);
+          } else {
+            setImageUrl('');
+            setImageDimensions({});
           }
-          if (firstProj.linkUrl) setLinkUrl(firstProj.linkUrl);
+          setLinkUrl(firstProj.linkUrl || '');
           if (firstProj.category) setCategory(firstProj.category);
           if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
           const needed = Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid - firstProj.activeValue + 10);
@@ -178,34 +226,52 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setTopUpStr(String(Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid + 10)));
           setTitle('');
           setLinkUrl('');
+          setImageUrl('');
+          setImageDimensions({});
           const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
           setCreatorHandle(defaultH.replace(/^@/, ''));
         }
       } else {
         if (existingHandles.length === 0) {
           setMode('new');
+          setHolderId('');
+          setTitle('');
+          setLinkUrl('');
+          setImageUrl('');
+          setImageDimensions({});
+        } else {
+          setMode('existing');
+          const firstProj = existingHandles[0];
+          setHolderId(firstProj.id);
+          setTitle(firstProj.title || '');
+          if (firstProj.imageUrl) {
+            setImageUrl(firstProj.imageUrl);
+            measureImageDimensions(firstProj.imageUrl);
+          } else {
+            setImageUrl('');
+            setImageDimensions({});
+          }
+          setLinkUrl(firstProj.linkUrl || '');
+          if (firstProj.category) setCategory(firstProj.category);
+          if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
         }
         setTopUpStr(String(Math.max(MIN_TOP_UP, entryFloor + 10)));
-        if (mode === 'new') {
-          if (!title) {
-            setTitle('');
-            setLinkUrl('');
-          }
-          const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
-          if (!creatorHandle && defaultH) {
-            setCreatorHandle(defaultH.replace(/^@/, ''));
-          }
+        const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
+        if (defaultH) {
+          setCreatorHandle(defaultH.replace(/^@/, ''));
         }
       }
       setErrorMsg(null);
       setFailed(false);
       setImageError(false);
-      if (imageUrl) {
-        measureImageDimensions(imageUrl);
-      }
     }
+
+    if (!isOpen) {
+      initializedSlotIdRef.current = null;
+    }
+    prevOpenRef.current = isOpen;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, entryFloor, preselectedTargetSlot]);
+  }, [isOpen, preselectedTargetSlot?.id]);
 
   // Sync profile handle when loaded asynchronously for a new project
   useEffect(() => {
@@ -216,25 +282,31 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
   const holder = existingHandles.find((h) => h.id === holderId) ?? null;
 
-  // Sync details once when an existing project is selected from dropdown
-  useEffect(() => {
-    if (mode === 'existing' && holderId) {
-      const selected = existingHandles.find((h) => h.id === holderId);
-      if (selected) {
-        if (selected.title) setTitle(selected.title);
-        if (selected.imageUrl) {
-          setImageUrl(selected.imageUrl);
-          measureImageDimensions(selected.imageUrl);
-        }
-        if (selected.linkUrl) setLinkUrl(selected.linkUrl);
-        if (selected.category) setCategory(selected.category);
-        if (selected.handle) setCreatorHandle(selected.handle.replace(/^@/, ''));
+  const handleSelectHolder = (newHolderId: string) => {
+    setHolderId(newHolderId);
+    setErrorMsg(null);
+    const selected = existingHandles.find((h) => h.id === newHolderId);
+    if (selected) {
+      setTitle(selected.title || '');
+      if (selected.imageUrl) {
+        setImageUrl(selected.imageUrl);
+        measureImageDimensions(selected.imageUrl);
+      } else {
+        setImageUrl('');
+        setImageDimensions({});
+      }
+      setLinkUrl(selected.linkUrl || '');
+      if (selected.category) setCategory(selected.category);
+      if (selected.handle) setCreatorHandle(selected.handle.replace(/^@/, ''));
+      if (preselectedTargetSlot) {
+        const needed = Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid - selected.activeValue + 10);
+        setTopUpStr(String(needed));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, holderId]);
+  };
 
   const handleModeChange = (newMode: 'new' | 'existing') => {
+    if (newMode === mode) return;
     setMode(newMode);
     setErrorMsg(null);
     if (newMode === 'new') {
@@ -245,18 +317,31 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setImageDimensions({});
       const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
       setCreatorHandle(defaultH.replace(/^@/, ''));
+      if (preselectedTargetSlot) {
+        setTopUpStr(String(Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid + 10)));
+      } else {
+        setTopUpStr(String(Math.max(MIN_TOP_UP, entryFloor + 10)));
+      }
     } else if (existingHandles.length > 0) {
       const initialHolder = holderId ? existingHandles.find((h) => h.id === holderId) : existingHandles[0];
-      if (initialHolder) {
-        setHolderId(initialHolder.id);
-        if (initialHolder.title) setTitle(initialHolder.title);
-        if (initialHolder.imageUrl) {
-          setImageUrl(initialHolder.imageUrl);
-          measureImageDimensions(initialHolder.imageUrl);
+      const targetHolder = initialHolder || existingHandles[0];
+      if (targetHolder) {
+        setHolderId(targetHolder.id);
+        setTitle(targetHolder.title || '');
+        if (targetHolder.imageUrl) {
+          setImageUrl(targetHolder.imageUrl);
+          measureImageDimensions(targetHolder.imageUrl);
+        } else {
+          setImageUrl('');
+          setImageDimensions({});
         }
-        if (initialHolder.linkUrl) setLinkUrl(initialHolder.linkUrl);
-        if (initialHolder.category) setCategory(initialHolder.category);
-        if (initialHolder.handle) setCreatorHandle(initialHolder.handle.replace(/^@/, ''));
+        setLinkUrl(targetHolder.linkUrl || '');
+        if (targetHolder.category) setCategory(targetHolder.category);
+        if (targetHolder.handle) setCreatorHandle(targetHolder.handle.replace(/^@/, ''));
+        if (preselectedTargetSlot) {
+          const needed = Math.max(MIN_TOP_UP, preselectedTargetSlot.amountPaid - targetHolder.activeValue + 10);
+          setTopUpStr(String(needed));
+        }
       }
     }
   };
@@ -272,6 +357,8 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     ? (profile.handle.startsWith('@') ? profile.handle : `@${profile.handle}`)
     : user?.user_metadata?.user_name
     ? `@${user.user_metadata.user_name.replace(/^@/, '')}`
+    : user?.user_metadata?.preferred_username
+    ? `@${user.user_metadata.preferred_username.replace(/^@/, '')}`
     : '@creator';
 
   const boardValues = React.useMemo(() => {
@@ -292,8 +379,8 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
   const bumpedVictim = projectedRank && projectedRank <= 100 ? currentSlots[projectedRank - 1] : null;
   const victimSlot100 = currentSlots[99] || null;
-  // Only new project bids displace slot #100 off the board (existing top-ups reorder internally)
-  const willDisplaceSlot100 = mode === 'new' && victimSlot100 && projectedRank && projectedRank <= 100;
+  // Only new project bids displace the current occupant of #100 off the board into #101 (existing top-ups reorder internally)
+  const willDisplaceOccupantOf100 = mode === 'new' && victimSlot100 && projectedRank && projectedRank <= 100;
 
   const handleQuickPreset = (targetAmount: number) => {
     // Canonical presets: top-up needed for a fresh profile to pass a tier anchor.
@@ -318,14 +405,30 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setErrorMsg(mode === 'new' ? 'Please upload your project logo or artwork.' : 'Project artwork is missing.');
       return;
     }
-    if (!linkUrl.trim()) {
-      setErrorMsg('Please enter a destination link URL (https://).');
+
+    const finalUrl = normalizeUrl(linkUrl);
+    if (!finalUrl) {
+      setErrorMsg('Please enter a destination link URL.');
       return;
     }
-    if (!/^https:\/\//i.test(linkUrl.trim())) {
-      setErrorMsg('Destination link must start with https://');
+
+    try {
+      const parsed = new URL(finalUrl);
+      if (!parsed.hostname || !parsed.hostname.includes('.')) {
+        setErrorMsg('Please enter a valid website domain (e.g. myproject.com).');
+        return;
+      }
+    } catch {
+      setErrorMsg('Please enter a valid website URL (e.g. https://myproject.com).');
       return;
     }
+
+    if (mode === 'new' && (!projectedRank || projectedRank > 100)) {
+      setErrorMsg(`Your top-up of $${parsedTopUp} is below the board floor ($${entryFloor}). Top up at least $${Math.max(MIN_TOP_UP, entryFloor + 10)} to enter the 100-slot wall.`);
+      return;
+    }
+
+    const calculatedTargetRank = Math.min(100, Math.max(1, projectedRank || 100));
 
     setIsSubmitting(true);
     setErrorMsg(null);
@@ -336,7 +439,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       resultingValue,
       currentValue,
       imageUrl: imageUrl.trim(),
-      linkUrl: linkUrl.trim(),
+      linkUrl: finalUrl,
       title: title.trim(),
       handle: effectiveHandle,
       category,
@@ -355,7 +458,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           profileId: mode === 'existing' && holder ? holder.id : undefined,
           topUpAmount: parsedTopUp,
           currentValue,
-          targetRank: projectedRank,
+          targetRank: calculatedTargetRank,
           title: orderData.title,
           handle: effectiveHandle,
           linkUrl: orderData.linkUrl,
@@ -364,27 +467,22 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ error: 'Failed to initiate purchase session.' }));
 
       if (!res.ok) {
         setErrorMsg(data.error || 'Failed to initiate purchase session.');
-        setIsSubmitting(false);
         return;
       }
 
-      if (data.checkout_url && !data.checkout_url.includes('localhost') && !data.checkout_url.includes('127.0.0.1')) {
-        // Redirect to external Dodo Hosted Checkout
+      if (data.checkout_url) {
         window.location.href = data.checkout_url;
         return;
       }
 
-      // Local / simulated checkout confirmation: apply to interactive UI
-      onSubmitTopUp(orderData);
-      onClose();
+      setErrorMsg(data.error || 'Failed to initiate purchase checkout session.');
     } catch (err: any) {
-      console.warn('Purchase API offline or local fallback:', err);
-      onSubmitTopUp(orderData);
-      onClose();
+      console.error('Purchase checkout error:', err);
+      setErrorMsg('Payment gateway is currently unavailable. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -394,13 +492,21 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   const eliteSlot13 = currentSlots[12] || currentSlots[currentSlots.length - 1];
   const lordSlot40 = currentSlots[39] || currentSlots[currentSlots.length - 1];
 
-  const modalTitle = preselectedTargetSlot
+  const isTargetMine = Boolean(
+    preselectedTargetSlot && existingHandles.some((h) => h.id === preselectedTargetSlot.id)
+  );
+
+  const modalTitle = isTargetMine
+    ? `Top Up "${preselectedTargetSlot?.title}" (Rank #${preselectedTargetSlot?.rank})`
+    : preselectedTargetSlot
     ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
     : mode === 'existing' && holder
     ? `Bump "${holder.title}"`
     : 'Claim Your Turf on the Board';
 
-  const modalSubtitle = preselectedTargetSlot
+  const modalSubtitle = isTargetMine
+    ? `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the board. Minimum top-up $${MIN_TOP_UP}.`
+    : preselectedTargetSlot
     ? `Outbid $${preselectedTargetSlot.amountPaid} to claim Rank #${preselectedTargetSlot.rank}. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`
     : mode === 'existing' && holder
     ? `Top up active value to propel "${holder.title}" higher on the grid. Minimum top-up $${MIN_TOP_UP}.`
@@ -514,7 +620,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
             <div className="relative">
               <select
                 value={holderId}
-                onChange={(e) => setHolderId(e.target.value)}
+                onChange={(e) => handleSelectHolder(e.target.value)}
                 className="w-full appearance-none bg-[#141519] text-neutral-100 text-xs rounded-xl border border-white/[0.12] px-3.5 py-2.5 pr-9 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/20 hover:border-white/[0.2] transition-colors cursor-pointer"
               >
                 <option value="" className="bg-[#18191d] text-neutral-400">
@@ -654,14 +760,20 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                 <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">
                   Projected Outcome:
                 </span>
-                <Badge variant="rank" rank={projectedRank <= 100 ? projectedRank : 100} />
+                {projectedRank <= 100 ? (
+                  <Badge variant="rank" rank={projectedRank} />
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-rose-950/40 text-rose-300 border border-rose-500/30">
+                    Rank #{projectedRank} (Graveyard)
+                  </span>
+                )}
               </div>
               <span className="text-xs font-mono font-medium text-neutral-300">
                 {tierProjected === 'king' && '👑 #1 King Spot (4x4 center)'}
                 {tierProjected === 'elite' && '⚡ Top 10 Spot (2x2 grid)'}
                 {tierProjected === 'lord' && '🛡️ Top 40 Spot'}
                 {tierProjected === 'contender' && '🎯 Active Spot (1x1)'}
-                {tierProjected === 'dropped' && 'Below #100 — saved off-grid'}
+                {tierProjected === 'dropped' && 'Rank #101+ (Graveyard) — below live top 100 wall'}
               </span>
             </div>
 
@@ -673,9 +785,9 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                     {' '}You shift <strong>{bumpedVictim.title}</strong> down to #{projectedRank + 1}.
                   </span>
                 )}
-                {willDisplaceSlot100 && victimSlot100 && (
+                {willDisplaceOccupantOf100 && victimSlot100 && (
                   <span className="text-rose-400 font-medium block mt-1">
-                    Slot #100 (<strong>{victimSlot100.title}</strong>) leaves the wall into the graveyard.
+                    <strong>{victimSlot100.title}</strong> (currently at #100) will be displaced to Rank #101 in the Graveyard. Slot #100 remains live on the wall.
                   </span>
                 )}
               </p>
@@ -790,14 +902,26 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
         {/* 3. Destination Link */}
         <Input
-          label="3. Destination Link URL (https only)"
-          type="url"
+          label="3. Destination Link URL"
+          type="text"
+          inputMode="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           required
           value={linkUrl}
-          onChange={(e) => setLinkUrl(e.target.value)}
-          leftAddon={<LinkIcon className="w-4 h-4" />}
-          placeholder="https://yourproject.com"
-          helperText="Where users go when clicking your tile on the board"
+          onChange={(e) => {
+            setLinkUrl(e.target.value);
+            setErrorMsg(null);
+          }}
+          onBlur={() => {
+            if (linkUrl.trim()) {
+              setLinkUrl(normalizeUrl(linkUrl));
+            }
+          }}
+          leftAddon={<LinkIcon className="w-4 h-4 text-slate-400" />}
+          placeholder="https://yourproject.com or yourproject.com"
+          helperText="Where users go when clicking your tile (e.g. yourproject.com or https://...)"
         />
 
         {/* Project Name & Creator Handle + Category */}

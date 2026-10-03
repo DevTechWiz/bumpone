@@ -43,16 +43,21 @@ declare
   v_is_new boolean := false;
   v_new_count int := 0;
   v_project_owner_id uuid;
+  v_project_handle text;
 begin
   -- Validate reaction type enum values
   if p_reaction_type not in ('fire', 'eyes', 'heart', 'laugh') then
     return jsonb_build_object('success', false, 'error', 'Invalid reaction type');
   end if;
 
-  -- Ensure project exists and obtain owner user_id
-  select user_id into v_project_owner_id from projects where id = p_project_id;
+  -- Ensure project exists and obtain owner user_id (with handle fallback)
+  select user_id, handle into v_project_owner_id, v_project_handle from projects where id = p_project_id;
   if not found then
     return jsonb_build_object('success', false, 'error', 'Project not found');
+  end if;
+
+  if v_project_owner_id is null and v_project_handle is not null then
+    select id into v_project_owner_id from users where lower(replace(handle, '@', '')) = lower(replace(v_project_handle, '@', '')) limit 1;
   end if;
 
   -- Insert into ledger (Option A: unique per project, user, emoji)
@@ -119,14 +124,20 @@ declare
   v_deleted boolean := false;
   v_new_count int := 0;
   v_project_owner_id uuid;
+  v_project_handle text;
 begin
   if p_reaction_type not in ('fire', 'eyes', 'heart', 'laugh') then
     return jsonb_build_object('success', false, 'error', 'Invalid reaction type');
   end if;
 
-  select user_id into v_project_owner_id from projects where id = p_project_id;
+  -- Ensure project exists and obtain owner user_id (with handle fallback)
+  select user_id, handle into v_project_owner_id, v_project_handle from projects where id = p_project_id;
   if not found then
     return jsonb_build_object('success', false, 'error', 'Project not found');
+  end if;
+
+  if v_project_owner_id is null and v_project_handle is not null then
+    select id into v_project_owner_id from users where lower(replace(handle, '@', '')) = lower(replace(v_project_handle, '@', '')) limit 1;
   end if;
 
   with deleted as (

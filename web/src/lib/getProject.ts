@@ -89,7 +89,7 @@ export async function getProject(id: string): Promise<Profile | null> {
       owner_handle: owner.handle || undefined,
       owner_avatar: owner.avatar_url || undefined,
       owner_bio: owner.bio || undefined,
-      peak_rank: (project as any).current_rank || 100,
+      peak_rank: (project as any).current_rank || 101,
       views: Number((project as any).views_count || 0),
       shares: 0,
       times_bumped: 0,

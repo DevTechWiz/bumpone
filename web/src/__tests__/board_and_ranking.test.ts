@@ -127,4 +127,77 @@ describe('BumpOne Board & Ranking Engine', () => {
     // New entrant with 50 lands at the bottom -> Rank 4
     expect(recomputeRank(mockProfiles, 50, 99)).toBe(4);
   });
+
+  it('guarantees slot #100 is live on the wall and graveyard starts at #101', () => {
+    // Generate 105 mock profiles
+    const hundredFiveProfiles: Profile[] = Array.from({ length: 105 }, (_, i) => ({
+      id: `p-${i + 1}`,
+      seq: i + 1,
+      name: `Project ${i + 1}`,
+      handle: `p${i + 1}`,
+      category: 'AI',
+      active_value: 200 - i, // Highest value first
+      imageUrl: '',
+      linkUrl: 'https://example.com',
+      peak_rank: i + 1,
+      times_bumped: 0,
+      times_climbed: 0,
+      views: 0,
+      shares: 0,
+      joined_days_ago: 1,
+      last_bump_at: Date.now(),
+      journey: [i + 1],
+      reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
+    }));
+
+    const sorted = sortBoard(hundredFiveProfiles);
+    const liveWall = sorted.slice(0, 100);
+    const graveyard = sorted.slice(100);
+
+    expect(liveWall.length).toBe(100);
+    // Rank 100 is the 100th item (index 99) and is part of the live wall
+    const slot100 = liveWall[99];
+    expect(slot100.id).toBe('p-100');
+    expect(sorted.findIndex((x) => x.id === slot100.id) + 1).toBe(100);
+
+    // Graveyard starts strictly at index 100 (Rank 101)
+    expect(graveyard.length).toBe(5);
+    const firstGraveyard = graveyard[0];
+    expect(firstGraveyard.id).toBe('p-101');
+    expect(sorted.findIndex((x) => x.id === firstGraveyard.id) + 1).toBe(101);
+
+    // When an entrant outbids #100, the old #100 is pushed to #101 (Graveyard)
+    const newEntrant: Profile = {
+      id: 'p-new',
+      seq: 200,
+      name: 'New Entrant',
+      handle: 'pnew',
+      category: 'Tech',
+      active_value: 150, // Lands around rank 51
+      imageUrl: '',
+      linkUrl: 'https://new.com',
+      peak_rank: 101,
+      times_bumped: 1,
+      times_climbed: 0,
+      views: 0,
+      shares: 0,
+      joined_days_ago: 0,
+      last_bump_at: Date.now(),
+      journey: [],
+      reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
+    };
+
+    const newSorted = sortBoard([...hundredFiveProfiles, newEntrant]);
+    const casualty = newSorted.length > 100 ? newSorted[100] : null;
+
+    // The casualty displaced past rank 100 into graveyard rank #101 was previously on the live wall
+    expect(casualty).not.toBeNull();
+    expect(casualty?.id).toBe('p-100');
+    expect(newSorted.findIndex((x) => x.id === casualty?.id) + 1).toBe(101);
+
+    // Slot 100 on the live wall is still live and active
+    const newLive100 = newSorted.slice(0, 100)[99];
+    expect(newSorted.findIndex((x) => x.id === newLive100.id) + 1).toBe(100);
+    expect(newLive100.id).not.toBe('p-100');
+  });
 });

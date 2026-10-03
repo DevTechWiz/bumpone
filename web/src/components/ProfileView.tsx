@@ -47,8 +47,9 @@ import {
   SkeletonCard,
   SkeletonText,
 } from "./ui";
-import type { TopUpOrder } from "./TakeOverModal";
+import { normalizeUrl, type TopUpOrder } from "./TakeOverModal";
 import type { SlotItem } from "../lib/slotTypes";
+import { processImageForUpload } from "../lib/imageOptimization";
 
 const TakeOverModal = dynamic(
   () => import("./TakeOverModal").then((m) => m.TakeOverModal),
@@ -69,13 +70,14 @@ import { soundEngine } from "../lib/sound";
 import { useAuth } from "../lib/useAuth";
 import { createClient } from "../lib/supabase/client";
 import { sessionGetJSON, safeGetJSON } from "../lib/storage";
+import { fetchBoardClient, invalidateClientBoardCache } from "../lib/boardClient";
 
 export interface ProfileViewProps {
   profileId: string;
   initialMode?: "user" | "project";
   initialProject?: Profile | null;
   onBack?: () => void;
-  onSelectProfile?: (profileId: string) => void;
+  onSelectProfile?: (profileId: string, mode?: "user" | "project") => void;
   onUpdateProfile?: (updated: Profile) => void;
   onClaimSlot?: () => void;
   onOpenAlerts?: () => void;
@@ -120,31 +122,21 @@ export function ProfileView({
     return [];
   });
 
-  // Fetch real board profiles from database (deferred if initialProject is already present)
+  // Fetch real board profiles with client-side deduplication & memory cache
   useEffect(() => {
-    const fetchBoard = () => {
-      fetch("/api/board?limit=120")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
-            setProfiles(data.profiles);
-          }
-        })
-        .catch((err) => {
-          console.warn("Could not fetch board profiles:", err);
-        })
-        .finally(() => {
-          setIsProfilesLoading(false);
-        });
-    };
-
-    if (initialProject) {
-      const timer = setTimeout(fetchBoard, 1500);
-      return () => clearTimeout(timer);
-    } else {
-      fetchBoard();
-    }
-  }, [initialProject]);
+    fetchBoardClient({ limit: 120 })
+      .then((data) => {
+        if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          setProfiles(data.profiles);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch board profiles:", err);
+      })
+      .finally(() => {
+        setIsProfilesLoading(false);
+      });
+  }, []);
 
   const cleanId = (profileId || "self").toLowerCase().replace("@", "").trim();
 
@@ -433,6 +425,18 @@ export function ProfileView({
     return [];
   }, [isSelf, user, selfProfile, matchedCreator, profiles]);
 
+  // Projects strictly owned by the currently authenticated user (used for Bump / TakeOver modal)
+  const myProjects = useMemo(() => {
+    if (!user) return [];
+    const myHandle = (selfProfile?.handle || user?.user_metadata?.user_name || "").toLowerCase().replace("@", "");
+    return profiles.filter(
+      (x) =>
+        Boolean(user && x.owner_id === user.id) ||
+        Boolean(myHandle && myHandle !== "n/a" && x.owner_handle?.toLowerCase().replace("@", "") === myHandle) ||
+        Boolean(myHandle && myHandle !== "n/a" && x.handle.toLowerCase().replace("@", "") === myHandle)
+    );
+  }, [user, selfProfile, profiles]);
+
   const matchedProject = useMemo(() => {
     return profiles.find(
       (x) =>
@@ -589,8 +593,8 @@ export function ProfileView({
 
   const handleProcessTopUp = (_order: TopUpOrder) => {
     soundEngine.playCoronation();
-    fetch("/api/board?limit=120")
-      .then((res) => res.json())
+    invalidateClientBoardCache();
+    fetchBoardClient({ limit: 120, forceFresh: true })
       .then((data) => {
         if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
           setProfiles(data.profiles);
@@ -599,11 +603,14 @@ export function ProfileView({
       .catch(() => {});
   };
 
-  const hasSlotOnGrid = Boolean(p.id !== "slot-preview" && p.active_value > 0);
-  const globalRank = hasSlotOnGrid ? sorted.findIndex((x) => x.id === p.id) + 1 : 0;
-  const catRank = hasSlotOnGrid
+  const calculatedRank = p.id !== "slot-preview" ? sorted.findIndex((x) => x.id === p.id) + 1 : 0;
+  const isLiveOnWall = calculatedRank >= 1 && calculatedRank <= 100 && Boolean(p.active_value && p.active_value > 0);
+  const isGraveyard = calculatedRank > 100 && Boolean(p.active_value && p.active_value > 0);
+  const globalRank = (isLiveOnWall || isGraveyard) ? calculatedRank : 0;
+  const catRank = (isLiveOnWall || isGraveyard)
     ? sortBoard(profiles.filter((x) => x.category === p.category)).findIndex((x) => x.id === p.id) + 1
     : 0;
+  const hasSlotOnGrid = isLiveOnWall;
 
   // Is current viewer the owner of the active project p?
   const isOwnerOfP = Boolean(
@@ -616,7 +623,7 @@ export function ProfileView({
   );
 
   // Project reaction state for project view
-  const [projectReactions, setProjectReactions] = useState<Record<string, number>>(() => ({
+  const [projectReactions, setProjectReactions] = useState<Record<ReactionKey, number>>(() => ({
     fire: p.reactions?.fire || 0,
     eyes: p.reactions?.eyes || 0,
     heart: p.reactions?.heart || 0,
@@ -634,19 +641,36 @@ export function ProfileView({
   }, [p.reactions, p.id]);
 
   useEffect(() => {
-    if (!isViewingUser && p.id && user) {
+    let isCancelled = false;
+    if (p.id) {
       fetch(`/api/reactions?projectId=${p.id}`)
         .then((res) => res.json())
         .then((data) => {
+          if (isCancelled) return;
           if (Array.isArray(data?.userReactions)) {
             setActiveProjectReactions(new Set(data.userReactions));
+          }
+          if (data?.reactions) {
+            setProjectReactions(data.reactions);
+            setProfiles((prev) =>
+              prev.map((item) =>
+                item.id === p.id ? { ...item, reactions: data.reactions } : item
+              )
+            );
+            onUpdateProfile?.({
+              ...p,
+              reactions: data.reactions,
+            });
           }
         })
         .catch(() => {});
     } else {
       setActiveProjectReactions(new Set());
     }
-  }, [isViewingUser, p.id, user]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [p.id, user]);
 
   const handleProjectReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh') => {
     soundEngine.playClick();
@@ -659,47 +683,73 @@ export function ProfileView({
 
     const isAlreadyActive = activeProjectReactions.has(type);
     const newActive = new Set(activeProjectReactions);
+    const prevCount = projectReactions[type] || 0;
+    const newCount = isAlreadyActive ? Math.max(0, prevCount - 1) : prevCount + 1;
 
+    // 1. Optimistic toggle
     if (isAlreadyActive) {
       newActive.delete(type);
-      setActiveProjectReactions(newActive);
-      setProjectReactions((prev) => ({
-        ...prev,
-        [type]: Math.max(0, (prev[type] || 1) - 1),
-      }));
+    } else {
+      newActive.add(type);
+    }
+    setActiveProjectReactions(newActive);
 
-      try {
+    const updatedReactions: Record<ReactionKey, number> = {
+      fire: projectReactions.fire || 0,
+      eyes: projectReactions.eyes || 0,
+      heart: projectReactions.heart || 0,
+      laugh: projectReactions.laugh || 0,
+      [type]: newCount,
+    };
+    setProjectReactions(updatedReactions);
+
+    // 2. Synchronize into ProfileView's profiles array so creator clout recalculates immediately
+    setProfiles((prev) =>
+      prev.map((item) =>
+        item.id === p.id ? { ...item, reactions: updatedReactions } : item
+      )
+    );
+
+    // 3. Notify parent (HomePageClient) to keep the global board state in sync
+    onUpdateProfile?.({
+      ...p,
+      reactions: updatedReactions,
+    });
+
+    try {
+      if (isAlreadyActive) {
         const res = await fetch(`/api/reactions?projectId=${p.id}&reaction=${type}`, {
           method: 'DELETE',
         });
         const data = await res.json();
-        if (data?.count != null) {
-          setProjectReactions((prev) => ({ ...prev, [type]: data.count }));
+        const serverReactions: Record<ReactionKey, number> | null =
+          data?.reactions || (data?.count != null ? { ...updatedReactions, [type]: data.count } : null);
+        if (serverReactions) {
+          setProjectReactions(serverReactions);
+          setProfiles((prev) =>
+            prev.map((item) => (item.id === p.id ? { ...item, reactions: serverReactions } : item))
+          );
+          onUpdateProfile?.({ ...p, reactions: serverReactions });
         }
-      } catch {
-        // Keep optimistic state
-      }
-    } else {
-      newActive.add(type);
-      setActiveProjectReactions(newActive);
-      setProjectReactions((prev) => ({
-        ...prev,
-        [type]: (prev[type] || 0) + 1,
-      }));
-
-      try {
+      } else {
         const res = await fetch('/api/reactions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectId: p.id, reaction: type }),
         });
         const data = await res.json();
-        if (data?.count != null) {
-          setProjectReactions((prev) => ({ ...prev, [type]: data.count }));
+        const serverReactions: Record<ReactionKey, number> | null =
+          data?.reactions || (data?.count != null ? { ...updatedReactions, [type]: data.count } : null);
+        if (serverReactions) {
+          setProjectReactions(serverReactions);
+          setProfiles((prev) =>
+            prev.map((item) => (item.id === p.id ? { ...item, reactions: serverReactions } : item))
+          );
+          onUpdateProfile?.({ ...p, reactions: serverReactions });
         }
-      } catch {
-        // Keep optimistic state
       }
+    } catch {
+      // Retain optimistic state
     }
   };
 
@@ -830,8 +880,16 @@ export function ProfileView({
 
     setIsUploadingAvatar(true);
     try {
+      let uploadFile: File = file;
+      try {
+        const processed = await processImageForUpload(file);
+        uploadFile = processed.file;
+      } catch (procErr) {
+        console.warn('Avatar pre-processing fallback to raw file:', procErr);
+      }
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
       const res = await fetch("/api/uploads/image", {
         method: "POST",
         body: formData,
@@ -1051,10 +1109,11 @@ export function ProfileView({
     if (!editingProject) return;
     soundEngine.playClick();
 
+    const finalEditLinkUrl = normalizeUrl(editLinkUrl);
     const updated: Profile = {
       ...editingProject,
       name: editName.trim() || editingProject.name,
-      linkUrl: editLinkUrl.trim() || editingProject.linkUrl,
+      linkUrl: finalEditLinkUrl || editingProject.linkUrl,
       imageUrl: editImageUrl || editingProject.imageUrl,
       category: editCategory,
       imagePosX: editImagePosX,
@@ -1068,6 +1127,8 @@ export function ProfileView({
     if (onUpdateProfile) {
       onUpdateProfile(updated);
     }
+
+    invalidateClientBoardCache();
 
     // Persist project changes directly to Supabase database
     if (user) {
@@ -1265,7 +1326,7 @@ export function ProfileView({
             onClick={onBack}
             className="inline-flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer bg-white/[0.04] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg border border-white/[0.08]"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to Grid
+            <ArrowLeft className="w-3.5 h-3.5" /> Back
           </button>
         ) : (
           <Link
@@ -1588,6 +1649,7 @@ export function ProfileView({
                 {creatorProjects.map((proj) => {
                   const rankOnGrid = sorted.findIndex((s) => s.id === proj.id) + 1;
                   const isLive = rankOnGrid > 0 && rankOnGrid <= 100;
+                  const isGraveyardProj = rankOnGrid > 100;
 
                   return (
                     <div
@@ -1621,9 +1683,13 @@ export function ProfileView({
                           <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
                             {isLive ? (
                               <Badge variant="rank" rank={rankOnGrid} />
-                            ) : (
+                            ) : isGraveyardProj ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/30 text-rose-300 border border-rose-500/40">
-                                Displaced
+                                Displaced (#{rankOnGrid})
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/[0.06] text-neutral-400 border border-white/[0.1]">
+                                Unranked
                               </span>
                             )}
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-black/70 text-slate-300 border border-white/10 backdrop-blur-md">
@@ -1665,7 +1731,7 @@ export function ProfileView({
                         <button
                           type="button"
                           onClick={() => {
-                            if (onSelectProfile) onSelectProfile(proj.id);
+                            if (onSelectProfile) onSelectProfile(proj.id, "project");
                           }}
                           className="text-xs text-slate-400 hover:text-white transition-colors font-medium cursor-pointer"
                         >
@@ -1840,18 +1906,27 @@ export function ProfileView({
                 <div className="absolute inset-0 bg-gradient-to-t from-[#18191d] via-[#18191d]/20 to-transparent pointer-events-none" />
 
                 {/* Floating Rank & Value Badges on Cover */}
-                <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between">
+                <div className="absolute bottom-4 left-5 right-5 z-20 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    {hasSlotOnGrid ? (
+                    {isLiveOnWall ? (
                       <>
-                        <Badge variant="rank" rank={Math.min(globalRank, 100)} />
+                        <Badge variant="rank" rank={globalRank} />
+                        <span className="rounded-full bg-black/80 px-3 py-1 font-mono text-xs font-bold text-white border border-white/[0.2] backdrop-blur-md">
+                          {p.active_value != null && p.active_value > 0 ? `${money(p.active_value)} paid` : "$0 paid"}
+                        </span>
+                      </>
+                    ) : isGraveyard ? (
+                      <>
+                        <span className="rounded-full bg-rose-500/20 px-3 py-1 font-mono text-xs font-bold text-rose-300 border border-rose-500/30 backdrop-blur-md">
+                          Rank #{globalRank} (Graveyard)
+                        </span>
                         <span className="rounded-full bg-black/80 px-3 py-1 font-mono text-xs font-bold text-white border border-white/[0.2] backdrop-blur-md">
                           {p.active_value != null && p.active_value > 0 ? `${money(p.active_value)} paid` : "$0 paid"}
                         </span>
                       </>
                     ) : (
-                      <span className="rounded-full bg-rose-500/20 px-3 py-1 font-mono text-xs font-bold text-rose-300 border border-rose-500/30 backdrop-blur-md">
-                        Displaced (Graveyard)
+                      <span className="rounded-full bg-white/[0.05] px-3 py-1 font-mono text-xs font-medium text-slate-400 border border-white/[0.1] backdrop-blur-md">
+                        Unranked
                       </span>
                     )}
                   </div>
@@ -1870,10 +1945,16 @@ export function ProfileView({
                       <span>Project #{p.id}</span>
                       <span>·</span>
                       <span>{p.category || "General"}</span>
-                      {hasSlotOnGrid && (
+                      {isLiveOnWall && (
                         <>
                           <span>·</span>
                           <span>{p.joined_days_ago ? `On the wall for ${p.joined_days_ago} days` : "Just joined the wall"}</span>
+                        </>
+                      )}
+                      {isGraveyard && (
+                        <>
+                          <span>·</span>
+                          <span className="text-rose-400">In Graveyard (Rank #{globalRank})</span>
                         </>
                       )}
                     </div>
@@ -1912,18 +1993,36 @@ export function ProfileView({
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <StatDisplay
                     variant="metric"
-                    value={hasSlotOnGrid && globalRank > 0 ? `#${globalRank}` : "Unranked"}
+                    value={
+                      isLiveOnWall && globalRank > 0
+                        ? `#${globalRank}`
+                        : isGraveyard
+                        ? `#${globalRank} (Graveyard)`
+                        : "Unranked"
+                    }
                     label="Overall Rank"
                   />
                   <StatDisplay
                     variant="metric"
-                    value={hasSlotOnGrid && catRank > 0 ? `#${catRank}` : "—"}
+                    value={
+                      isLiveOnWall && catRank > 0
+                        ? `#${catRank}`
+                        : isGraveyard && catRank > 0
+                        ? `#${catRank}`
+                        : "—"
+                    }
                     valueClassName="text-sky-300"
                     label={`${p.category || "Category"} Rank`}
                   />
                   <StatDisplay
                     variant="metric"
-                    value={hasSlotOnGrid && p.peak_rank > 0 ? `#${p.peak_rank}` : "—"}
+                    value={
+                      p.peak_rank > 0 && p.peak_rank <= 100
+                        ? `#${p.peak_rank}`
+                        : p.peak_rank > 100
+                        ? `#${p.peak_rank} (Graveyard)`
+                        : "—"
+                    }
                     valueClassName="text-amber-300"
                     label="Best Rank"
                   />
@@ -1961,7 +2060,7 @@ export function ProfileView({
                         >
                           <span className="text-sm">{emoji}</span>
                           <span className={`text-[10px] font-mono font-medium ${isActive ? 'text-amber-300 font-bold' : 'text-neutral-300'}`}>
-                            {projectReactions[type] || 0}
+                            {projectReactions[type as ReactionKey] || 0}
                           </span>
                         </button>
                       );
@@ -2010,7 +2109,7 @@ export function ProfileView({
                 onClick={() => {
                   const targetId = p.owner_handle || p.owner_id || (p.handle ? p.handle.replace("@", "") : "");
                   if (targetId && onSelectProfile) {
-                    onSelectProfile(targetId);
+                    onSelectProfile(targetId, "user");
                   }
                 }}
                 className="text-xs shrink-0 py-1.5"
@@ -2365,11 +2464,20 @@ export function ProfileView({
             {/* Website Destination URL */}
             <Input
               label="Destination Website URL"
-              leftAddon={<Globe className="w-4 h-4" />}
+              leftAddon={<Globe className="w-4 h-4 text-slate-400" />}
               value={editLinkUrl}
               onChange={(e) => setEditLinkUrl(e.target.value)}
-              placeholder="https://yourproduct.com"
-              type="url"
+              onBlur={() => {
+                if (editLinkUrl.trim()) {
+                  setEditLinkUrl(normalizeUrl(editLinkUrl));
+                }
+              }}
+              placeholder="https://yourproduct.com or yourproduct.com"
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
             />
 
@@ -2545,7 +2653,7 @@ export function ProfileView({
           currentSlots={slots}
           entryFloor={entryFloor}
           categories={[...CATEGORIES]}
-          existingHandles={creatorProjects.map((proj) => ({
+          existingHandles={myProjects.map((proj) => ({
             id: proj.id,
             title: proj.name,
             activeValue: proj.active_value,

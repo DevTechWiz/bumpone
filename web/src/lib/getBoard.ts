@@ -99,7 +99,7 @@ export async function getBoardProfiles(limit: number = 120): Promise<Profile[]> 
         owner_handle: owner.handle || undefined,
         owner_avatar: owner.avatar_url || undefined,
         owner_bio: owner.bio || undefined,
-        peak_rank: row.current_rank || 100,
+        peak_rank: row.current_rank || 101,
         times_bumped: 0,
         times_climbed: 0,
         views,
@@ -114,10 +114,12 @@ export async function getBoardProfiles(limit: number = 120): Promise<Profile[]> 
       };
     });
 
+    const etag = profiles.length > 0 ? `W/"${profiles.length}-${profiles[0].id}-${profiles[0].active_value}"` : 'W/"empty"';
     boardMemoryCache.set(cacheKey, {
       rawJson: JSON.stringify({ profiles }),
       data: { profiles },
       timestamp: now,
+      etag,
     });
 
     return profiles;

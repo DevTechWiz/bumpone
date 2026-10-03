@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { invalidateBoardCache } from '@/lib/boardCache';
 
 const VALID_REACTIONS = ['fire', 'eyes', 'heart', 'laugh'] as const;
 type ReactionType = (typeof VALID_REACTIONS)[number];
@@ -46,34 +47,50 @@ export async function GET(request: NextRequest) {
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ userReactions: [] });
-    }
-
     const isSupabaseConfigured = Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
       process.env.SUPABASE_SERVICE_ROLE_KEY &&
       !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('your-project')
     );
 
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabaseAdmin
-        .from('reactions')
-        .select('reaction_type')
-        .eq('project_id', projectId)
-        .eq('user_id', user.id);
+    let reactions = { fire: 0, eyes: 0, heart: 0, laugh: 0 };
+    let userReactions: string[] = [];
 
-      if (!error && data) {
-        return NextResponse.json({
-          userReactions: data.map((r: any) => r.reaction_type),
-        });
+    if (isSupabaseConfigured) {
+      // 1. Fetch live reaction counts directly from projects table
+      const { data: proj } = await supabaseAdmin
+        .from('projects')
+        .select('reactions_fire, reactions_eyes, reactions_heart, reactions_laugh')
+        .eq('id', projectId)
+        .single();
+
+      if (proj) {
+        reactions = {
+          fire: Number(proj.reactions_fire || 0),
+          eyes: Number(proj.reactions_eyes || 0),
+          heart: Number(proj.reactions_heart || 0),
+          laugh: Number(proj.reactions_laugh || 0),
+        };
+      }
+
+      // 2. Fetch authenticated user's active reactions
+      if (user) {
+        const { data, error } = await supabaseAdmin
+          .from('reactions')
+          .select('reaction_type')
+          .eq('project_id', projectId)
+          .eq('user_id', user.id);
+
+        if (!error && data) {
+          userReactions = data.map((r: any) => r.reaction_type);
+        }
       }
     }
 
-    return NextResponse.json({ userReactions: [] });
+    return NextResponse.json({ userReactions, reactions });
   } catch (err: any) {
     console.error('Error fetching user reactions:', err);
-    return NextResponse.json({ userReactions: [] });
+    return NextResponse.json({ userReactions: [], reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 } });
   }
 }
 
@@ -112,6 +129,7 @@ export async function POST(request: NextRequest) {
 
     let count = 1;
     let alreadyReacted = false;
+    let reactions: { fire: number; eyes: number; heart: number; laugh: number } | undefined = undefined;
 
     if (isSupabaseConfigured) {
       const rpcRes = await supabaseAdmin.rpc('add_project_reaction_auth', {
@@ -135,9 +153,28 @@ export async function POST(request: NextRequest) {
           alreadyReacted = Boolean(legacyRpc.data.already_reacted);
         }
       }
+
+      // Invalidate board in-memory cache so subsequent board queries return fresh counts
+      invalidateBoardCache();
+
+      // Query latest full reactions object
+      const { data: proj } = await supabaseAdmin
+        .from('projects')
+        .select('reactions_fire, reactions_eyes, reactions_heart, reactions_laugh')
+        .eq('id', targetId)
+        .single();
+
+      if (proj) {
+        reactions = {
+          fire: Number(proj.reactions_fire || 0),
+          eyes: Number(proj.reactions_eyes || 0),
+          heart: Number(proj.reactions_heart || 0),
+          laugh: Number(proj.reactions_laugh || 0),
+        };
+      }
     }
 
-    return NextResponse.json({ success: true, count, alreadyReacted });
+    return NextResponse.json({ success: true, count, alreadyReacted, reactions });
   } catch (err: any) {
     console.error('Error recording reaction:', err);
     return NextResponse.json({ error: 'Failed to record reaction' }, { status: 500 });
@@ -171,6 +208,7 @@ export async function DELETE(request: NextRequest) {
     );
 
     let count = 0;
+    let reactions: { fire: number; eyes: number; heart: number; laugh: number } | undefined = undefined;
 
     if (isSupabaseConfigured) {
       const rpcRes = await supabaseAdmin.rpc('remove_project_reaction_auth', {
@@ -191,11 +229,31 @@ export async function DELETE(request: NextRequest) {
           count = legacyRpc.data.count ?? count;
         }
       }
+
+      // Invalidate board in-memory cache so subsequent board queries return fresh counts
+      invalidateBoardCache();
+
+      // Query latest full reactions object
+      const { data: proj } = await supabaseAdmin
+        .from('projects')
+        .select('reactions_fire, reactions_eyes, reactions_heart, reactions_laugh')
+        .eq('id', targetId)
+        .single();
+
+      if (proj) {
+        reactions = {
+          fire: Number(proj.reactions_fire || 0),
+          eyes: Number(proj.reactions_eyes || 0),
+          heart: Number(proj.reactions_heart || 0),
+          laugh: Number(proj.reactions_laugh || 0),
+        };
+      }
     }
 
-    return NextResponse.json({ success: true, count });
+    return NextResponse.json({ success: true, count, reactions });
   } catch (err: any) {
     console.error('Error removing reaction:', err);
     return NextResponse.json({ error: 'Failed to remove reaction' }, { status: 500 });
   }
 }
+

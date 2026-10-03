@@ -6,8 +6,6 @@ import {
   Radio,
   Skull,
   Search,
-  RotateCcw,
-  Shuffle,
   Compass,
   Volume2,
   VolumeX,
@@ -32,6 +30,7 @@ import {
 } from '../lib/board';
 import dynamic from 'next/dynamic';
 import { safeGetJSON, safeSetJSON, sessionGetJSON, sessionSetJSON, safeSet, safeRemove } from '../lib/storage';
+import { fetchBoardClient, invalidateClientBoardCache } from '../lib/boardClient';
 import { GridBoard } from '../components/GridBoard';
 import type { TopUpOrder } from '../components/TakeOverModal';
 import { GridFilterBar, type GridFilterState } from '../components/GridFilterBar';
@@ -195,8 +194,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
 
     // If initialProfiles is provided from SSR, delay background sync to keep main thread completely idle
     const fetchLiveBoard = () => {
-      fetch('/api/board?limit=120')
-      .then((res) => res.json())
+      fetchBoardClient({ limit: 120 })
       .then((data) => {
         if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
           setProfiles(data.profiles);
@@ -248,6 +246,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
   const [viewingProfileMode, setViewingProfileMode] = useState<'user' | 'project'>('user');
   const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
   const [bumpResult, setBumpResult] = useState<BumpResultData | null>(null);
+  const slotsRef = useRef<SlotItem[]>([]);
 
   const isBackdropActive = Boolean(
     selectedSlot ||
@@ -261,30 +260,109 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
   );
 
   const handleCloseProfile = useCallback(() => {
-    setViewingProfileId(null);
     if (typeof window !== 'undefined') {
-      if (window.history.state?.viewingProfile) {
+      if (window.history.length > 1 && (window.history.state?.modal || window.history.state?.viewingProfile)) {
         window.history.back();
-      } else {
-        window.history.replaceState({}, '', '/');
+        return;
       }
+      window.history.replaceState({}, '', '/');
     }
+    setViewingProfileId(null);
   }, []);
 
-  useEffect(() => {
-    const handlePopState = () => {
-      setViewingProfileId(null);
+  const handlePopState = useCallback((event: PopStateEvent) => {
+    const state = event.state;
+    const currentSlots = slotsRef.current;
+
+    if (state?.modal === 'project') {
       setSelectedSlot(null);
-    };
+      setIsTakeOverOpen(false);
+      setTargetSlotToBump(null);
+      setViewingProfileMode('project');
+      setViewingProfileId(state.profileId);
+      return;
+    }
+
+    if (state?.modal === 'profile' || state?.viewingProfile) {
+      setSelectedSlot(null);
+      setIsTakeOverOpen(false);
+      setTargetSlotToBump(null);
+      setViewingProfileMode('user');
+      setViewingProfileId(state.profileId);
+      return;
+    }
+
+    if (state?.modal === 'bump') {
+      setViewingProfileId(null);
+      const match =
+        currentSlots.find((s) => s.id === state.slotId || s.rank === state.rank) ||
+        (state.slotId ? profiles.find((p) => p.id === state.slotId) : null);
+      if (match) {
+        setTargetSlotToBump('rank' in match ? match : toSlotItem(match, state.rank || 1));
+        setIsTakeOverOpen(true);
+        setSelectedSlot(null);
+      }
+      return;
+    }
+
+    if (state?.modal === 'slot') {
+      setViewingProfileId(null);
+      setIsTakeOverOpen(false);
+      setTargetSlotToBump(null);
+      const match =
+        currentSlots.find((s) => s.rank === state.rank || s.id === state.slotId) ||
+        (state.slotId ? profiles.find((p) => p.id === state.slotId) : null);
+      if (match) {
+        setSelectedSlot('rank' in match ? match : toSlotItem(match, state.rank || 1));
+      }
+      return;
+    }
+
+    // Default / Root: Check if URL still has ?rank=X or ?target=X
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const rankParam = params.get('rank');
+      if (rankParam) {
+        const r = Number(rankParam);
+        const match = currentSlots.find((s) => s.rank === r);
+        if (match) {
+          setViewingProfileId(null);
+          setIsTakeOverOpen(false);
+          setTargetSlotToBump(null);
+          setSelectedSlot(match);
+          return;
+        }
+      }
+
+      const targetParam = params.get('target');
+      if (targetParam) {
+        const match = currentSlots.find((s) => s.id === targetParam);
+        if (match) {
+          setViewingProfileId(null);
+          setSelectedSlot(null);
+          setTargetSlotToBump(match);
+          setIsTakeOverOpen(true);
+          return;
+        }
+      }
+    }
+
+    // Otherwise, close all overlays and return cleanly to grid
+    setViewingProfileId(null);
+    setSelectedSlot(null);
+    setIsTakeOverOpen(false);
+    setTargetSlotToBump(null);
+  }, [profiles]);
+
+  useEffect(() => {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [handlePopState]);
 
   const [highlightedRank, setHighlightedRank] = useState<number | null>(null);
   const [hoveredRank, setHoveredRank] = useState<number | null>(null);
   const [gridOrientation, setGridOrientation] = useState<GridOrientation>('landscape');
   const [latestBumpEvent, setLatestBumpEvent] = useState<BumpEvent | null>(null);
-  const [isAutoSimulate, setIsAutoSimulate] = useState(false);
   const [isWarRoomOpen, setIsWarRoomOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const { user, profile, loading: authLoading, signOut } = useAuth();
@@ -315,6 +393,14 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
       const target = params.get('target');
 
       if (status === 'success' || status === 'paid') {
+        invalidateClientBoardCache();
+        fetchBoardClient({ limit: 120, forceFresh: true })
+          .then((data) => {
+            if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+              setProfiles(data.profiles);
+            }
+          })
+          .catch(() => {});
         setPaymentBanner({
           type: 'success',
           text: 'Payment processed successfully! Your active value has been credited and your slot is live.',
@@ -371,29 +457,58 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     }
   }, [profiles, user]);
 
+  // Load historical War Room battle telemetry and battle comms
+  useEffect(() => {
+    let active = true;
+
+    fetch('/api/war-room/events')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.events && Array.isArray(data.events) && data.events.length > 0) {
+          setBumpHistory(data.events);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/war-room/messages')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages(data.messages);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Live Board Synchronizer: Supabase Realtime event streaming + Edge SWR Polling fallback
   useEffect(() => {
     let isMounted = true;
     let interval: NodeJS.Timeout | null = null;
     let realtimeChannel: any = null;
 
-    const fetchBoard = async (silent = false) => {
+    const fetchBoard = async (silent = false, forceFresh = false) => {
       // Don't poll if the tab is hidden/minimized to save bandwidth and dev CPU
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return;
       }
 
       try {
-        const catParam = filterState.category !== 'All' ? `&category=${encodeURIComponent(filterState.category)}` : '';
-        const sortParam = filterState.timeRange === 'today' ? '&sort=trending' : '';
-        const res = await fetch(`/api/board?limit=120${catParam}${sortParam}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
-            setProfiles(data.profiles);
-            if (!silent) {
-              soundEngine.playShove();
-            }
+        const catParam = filterState.category !== 'All' ? filterState.category : undefined;
+        const sortParam = filterState.timeRange === 'today' ? 'trending' : undefined;
+        const data = await fetchBoardClient({
+          category: catParam,
+          sort: sortParam,
+          limit: 120,
+          forceFresh,
+        });
+        if (isMounted && data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          setProfiles(data.profiles);
+          if (!silent) {
+            soundEngine.playShove();
           }
         }
       } catch {
@@ -404,7 +519,12 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     if (!initialProfiles || initialProfiles.length === 0) {
       fetchBoard(true);
     }
-    interval = setInterval(() => fetchBoard(true), 15000);
+    // Background polling: 30-second heartbeat with ETag check (304 Not Modified)
+    interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchBoard(true);
+      }
+    }, 30000);
 
     // Subscribe to Supabase Realtime after initial hydration has settled
     let rtTimer: NodeJS.Timeout | null = setTimeout(() => {
@@ -416,9 +536,81 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'board_events' },
-            () => {
+            (payload: any) => {
               if (isMounted) {
                 fetchBoard(false);
+                if (payload?.new) {
+                  const row = payload.new;
+                  const newRank = Number(row.new_rank);
+                  const prevRank = row.previous_rank != null ? Number(row.previous_rank) : 101;
+                  const title = row.project_title_snapshot || 'Contender';
+                  const handle = row.project_handle_snapshot || '@unknown';
+                  const amount = Math.floor(Number(row.new_active_value_minor || 0) / 100);
+
+                  const bumpEvt: BumpEvent = {
+                    id: row.id || `bump-${Date.now()}`,
+                    timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+                    promotedItem: {
+                      id: row.project_id || 'unknown',
+                      rank: newRank,
+                      imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80',
+                      linkUrl: 'https://bumpone.lol',
+                      title,
+                      bidderName: handle.startsWith('@') ? handle : `@${handle}`,
+                      amountPaid: amount,
+                      createdAt: Date.now(),
+                    },
+                    droppedItem: {
+                      id: `dropped-${row.id}`,
+                      rank: prevRank,
+                      imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80',
+                      linkUrl: 'https://bumpone.lol',
+                      title: 'Displaced Contender',
+                      bidderName: '@displaced',
+                      amountPaid: Math.floor(Number(row.previous_active_value_minor || 0) / 100),
+                      createdAt: Date.now(),
+                    },
+                    previousRank: prevRank,
+                    newRank: newRank,
+                  };
+
+                  setBumpHistory((prev) => [bumpEvt, ...prev.slice(0, 49)]);
+                  setLatestBumpEvent(bumpEvt);
+                  setHighlightedRank(newRank);
+                  setTimeout(() => setHighlightedRank(null), 3500);
+
+                  if (newRank === 1) {
+                    soundEngine.playCoronation();
+                    handleTriggerReaction('👑');
+                  } else {
+                    soundEngine.playShove();
+                    handleTriggerReaction('🔥');
+                  }
+                }
+              }
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'messages' },
+            (payload: any) => {
+              if (isMounted && payload?.new && !payload.new.is_deleted) {
+                const row = payload.new;
+                const newMsg: Message = {
+                  id: row.id,
+                  sender: row.author_handle
+                    ? (row.author_handle.startsWith('@') ? row.author_handle : `@${row.author_handle}`)
+                    : (row.author_name || '@spectator'),
+                  avatarColor: row.avatar_color || 'bg-indigo-500',
+                  text: String(row.text).slice(0, 200),
+                  slotTag: row.slot_tag ?? undefined,
+                  timestamp: new Date(row.created_at).getTime(),
+                  isOfficial: Boolean(row.is_official),
+                };
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === newMsg.id)) return prev;
+                  return [...prev, newMsg];
+                });
               }
             }
           )
@@ -527,6 +719,13 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
 
   const handleSlotClick = useCallback((slot: SlotItem) => {
     setSelectedSlot(slot);
+    if (typeof window !== 'undefined') {
+      window.history.pushState(
+        { modal: 'slot', rank: slot.rank, slotId: slot.id },
+        '',
+        `/?rank=${slot.rank}`
+      );
+    }
   }, []);
 
   const handleHoverRank = useCallback((rank: number | null) => {
@@ -537,25 +736,39 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     setSelectedSlot(slot);
     setHighlightedRank(slot.rank);
     setTimeout(() => setHighlightedRank(null), 3000);
+    if (typeof window !== 'undefined') {
+      window.history.pushState(
+        { modal: 'slot', rank: slot.rank, slotId: slot.id },
+        '',
+        `/?rank=${slot.rank}`
+      );
+    }
   }, []);
 
   const handleOrientationChange = useCallback((orientation: GridOrientation) => {
     setGridOrientation(orientation);
   }, []);
 
-  const handleSendMessage = (msg: Omit<Message, 'id' | 'timestamp'>) => {
+  const handleSendMessage = (msg: Message | Omit<Message, 'id' | 'timestamp'>) => {
     const newMsg: Message = {
       ...msg,
-      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      timestamp: Date.now(),
+      id: 'id' in msg && msg.id ? msg.id : `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      timestamp: 'timestamp' in msg && msg.timestamp ? msg.timestamp : Date.now(),
     };
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === newMsg.id)) return prev;
+      return [...prev, newMsg];
+    });
   };
 
   // Global top-100 slots derived from canonical ordering.
   const slots: SlotItem[] = useMemo(() => {
     return sortBoard(profiles).slice(0, 100).map((p, i) => toSlotItem(p, i + 1));
   }, [profiles]);
+
+  useEffect(() => {
+    slotsRef.current = slots;
+  }, [slots]);
 
   // Spotlight/dim set for tier + search + category + value-range + time filters.
   const matchingRanks = useMemo<Set<number> | null>(() => {
@@ -711,6 +924,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
   // recompute final position from the amount paid against the live board.
   // Everyone is retained (infinite ranking); the off-board mirror feeds the drawer.
   const handleProcessTopUp = useCallback((order: TopUpOrder) => {
+    invalidateClientBoardCache();
     const prev = profilesRef.current;
     const topUp = Math.max(MIN_TOP_UP, Math.floor(order.topUp));
     let working: Profile[];
@@ -821,80 +1035,6 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
       displacedProfiles: displacedList,
     });
   }, [recordBump]);
-
-  // Live simulation: existing-holder top-ups (carry-forward demo), new entries, off-board reclaims.
-  const handleSimulateRandomBump = useCallback(() => {
-    const ordered = sortBoard(profiles);
-    if (ordered.length === 0) return;
-    const roll = Math.random();
-    if (roll < 0.12 && offboard.length > 0) {
-      // Reclaim: off-board profile tops up past #100.
-      const returning = offboard[0];
-      const target = ordered[Math.min(99, ordered.length - 1)];
-      const topUp = quoteTopUp(returning.active_value, target.active_value);
-      setOffboard((prev) => prev.slice(1));
-      handleProcessTopUp({
-        title: returning.name, handle: returning.handle, linkUrl: returning.linkUrl,
-        imageUrl: returning.imageUrl, category: returning.category,
-        topUp, resultingValue: returning.active_value + topUp, currentValue: returning.active_value,
-      });
-      return;
-    }
-    if (roll < 0.5) {
-      // Existing holder climbs via top-up (carry-forward demo).
-      const idx = 5 + Math.floor(Math.random() * Math.min(55, ordered.length - 6));
-      const p = ordered[idx];
-      const above = ordered[Math.max(0, idx - 1 - Math.floor(Math.random() * 8))];
-      const topUp = quoteTopUp(p.active_value, above.active_value);
-      handleProcessTopUp({
-        title: p.name, handle: p.handle, linkUrl: p.linkUrl, imageUrl: p.imageUrl,
-        category: p.category, topUp, resultingValue: p.active_value + topUp, currentValue: p.active_value,
-      });
-      return;
-    }
-    // Random bump from existing board holders
-    if (ordered.length === 0) return;
-    const pick = ordered[Math.floor(Math.random() * Math.min(20, ordered.length))];
-    const bumpAmount = Math.floor(Math.random() * 25) + 10;
-    handleProcessTopUp({
-      title: pick.name,
-      handle: pick.handle,
-      linkUrl: pick.linkUrl,
-      imageUrl: pick.imageUrl,
-      category: pick.category,
-      topUp: bumpAmount,
-      resultingValue: pick.active_value + bumpAmount,
-      currentValue: pick.active_value,
-    });
-  }, [profiles, offboard, handleProcessTopUp]);
-
-  useEffect(() => {
-    if (!isAutoSimulate) return;
-    const interval = setInterval(() => {
-      handleSimulateRandomBump();
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [isAutoSimulate, handleSimulateRandomBump]);
-
-  const handleResetBoard = async () => {
-    if (typeof window !== 'undefined' && window.confirm('Reset board back to live database state?')) {
-      safeRemove(STORAGE_KEY_PROFILES);
-      safeRemove(STORAGE_KEY_OFFBOARD);
-      try {
-        sessionStorage.removeItem('bumped_board_cache');
-        const res = await fetch('/api/board?limit=120');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.profiles)) {
-            setProfiles(data.profiles);
-          }
-        }
-      } catch (e) {
-        setProfiles([]);
-      }
-      setOffboard([]);
-    }
-  };
 
   // Deep linking (?rank=X and ?bid=true).
   useEffect(() => {
@@ -1090,33 +1230,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
           </Button>
 
-          <Button
-            variant={isAutoSimulate ? 'danger' : 'outline'}
-            size="sm"
-            leftIcon={<Radio className={`w-3 h-3 ${isAutoSimulate ? 'animate-pulse' : ''}`} />}
-            onClick={() => {
-              soundEngine.playClick();
-              setIsAutoSimulate(!isAutoSimulate);
-            }}
-            className="hidden xl:inline-flex text-xs py-1"
-            title="Toggle automated challenger bids"
-          >
-            {isAutoSimulate ? 'Auto-War ON' : 'Auto-War'}
-          </Button>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<Shuffle className="w-3 h-3" />}
-            onClick={() => {
-              soundEngine.playClick();
-              handleSimulateRandomBump();
-            }}
-            className="hidden md:inline-flex text-xs py-1"
-            title="Simulate single bump"
-          >
-            Simulate
-          </Button>
 
           <Button
             variant="outline"
@@ -1349,13 +1463,6 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                 <strong className="font-bold">{offboard.length}</strong>
               )}
             </span>
-            <button
-              onClick={handleResetBoard}
-              className="text-neutral-500 hover:text-rose-300 transition-colors flex items-center gap-1 cursor-pointer font-mono text-[10px]"
-              title="Reset Board"
-            >
-              <RotateCcw className="w-2.5 h-2.5" /> Reset
-            </button>
           </div>
         </div>
       </main>
@@ -1368,10 +1475,17 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           if (isTakeOverOpen) {
             setIsTakeOverOpen(false);
             setTargetSlotToBump(null);
+            if (typeof window !== 'undefined' && window.history.state?.modal === 'bump') {
+              window.history.back();
+            }
           } else if (viewingProfileId) {
             handleCloseProfile();
-          } else {
+          } else if (selectedSlot) {
             setSelectedSlot(null);
+            if (typeof window !== 'undefined' && window.history.state?.modal === 'slot') {
+              window.history.back();
+            }
+          } else {
             setIsLeaderboardOpen(false);
             setIsGraveyardOpen(false);
             setIsRulesOpen(false);
@@ -1387,12 +1501,25 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           onClose={() => {
             setIsTakeOverOpen(false);
             setTargetSlotToBump(null);
+            if (typeof window !== 'undefined') {
+              if (window.history.state?.modal === 'bump') {
+                window.history.back();
+              } else {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('target');
+                window.history.replaceState({}, '', url.pathname + (url.search || ''));
+              }
+            }
           }}
           onBack={targetSlotToBump ? () => {
             const slotToRestore = targetSlotToBump;
             setIsTakeOverOpen(false);
             setTargetSlotToBump(null);
-            setSelectedSlot(slotToRestore);
+            if (typeof window !== 'undefined' && window.history.state?.modal === 'bump') {
+              window.history.back();
+            } else {
+              setSelectedSlot(slotToRestore);
+            }
           } : undefined}
           currentSlots={slots}
           entryFloor={entryFloor}
@@ -1408,6 +1535,9 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             setIsTakeOverOpen(false);
             setTargetSlotToBump(null);
             setSelectedSlot(null);
+            if (typeof window !== 'undefined' && window.history.state?.modal === 'bump') {
+              window.history.replaceState({}, '', '/');
+            }
           }}
         />
       )}
@@ -1437,7 +1567,10 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           onClose={() => setIsLeaderboardOpen(false)}
           slots={slots}
           isLoading={isBoardLoading}
-          onSelectSlot={(slot) => setSelectedSlot(slot)}
+          onSelectSlot={(slot) => {
+            setIsLeaderboardOpen(false);
+            handleSlotClick(slot);
+          }}
         />
       )}
 
@@ -1446,22 +1579,43 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           slot={selectedSlot}
           user={user}
           hasBackdrop={false}
-          onClose={() => setSelectedSlot(null)}
+          onClose={() => {
+            setSelectedSlot(null);
+            if (typeof window !== 'undefined') {
+              if (window.history.state?.modal === 'slot') {
+                window.history.back();
+              } else {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('rank');
+                window.history.replaceState({}, '', url.pathname + (url.search || ''));
+              }
+            }
+          }}
           onRequireAuth={() => setIsAuthOpen(true)}
           onViewProfile={(creatorIdentifier) => {
+            const currentSlot = selectedSlot;
             setSelectedSlot(null);
             setViewingProfileMode('user');
             setViewingProfileId(creatorIdentifier);
             if (typeof window !== 'undefined') {
-              window.history.pushState({ viewingProfile: true, profileId: creatorIdentifier }, '', `/profile/${creatorIdentifier}`);
+              window.history.pushState(
+                { modal: 'profile', mode: 'user', profileId: creatorIdentifier, fromRank: currentSlot?.rank, fromSlotId: currentSlot?.id },
+                '',
+                `/profile/${creatorIdentifier}`
+              );
             }
           }}
           onViewProject={(projectId) => {
+            const currentSlot = selectedSlot;
             setSelectedSlot(null);
             setViewingProfileMode('project');
             setViewingProfileId(projectId);
             if (typeof window !== 'undefined') {
-              window.history.pushState({ viewingProfile: true, profileId: projectId }, '', `/project/${projectId}`);
+              window.history.pushState(
+                { modal: 'project', mode: 'project', profileId: projectId, fromRank: currentSlot?.rank, fromSlotId: currentSlot?.id },
+                '',
+                `/project/${projectId}`
+              );
             }
           }}
           onBumpSlot={(slot) => {
@@ -1472,6 +1626,23 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             }
             setTargetSlotToBump(slot);
             setIsTakeOverOpen(true);
+            if (typeof window !== 'undefined') {
+              window.history.pushState(
+                { modal: 'bump', slotId: slot.id, rank: slot.rank },
+                '',
+                `/?target=${slot.id}`
+              );
+            }
+          }}
+          onUpdateReactions={(slotId, updatedReactions) => {
+            setProfiles((prev) =>
+              prev.map((item) =>
+                item.id === slotId ? { ...item, reactions: updatedReactions } : item
+              )
+            );
+            if (selectedSlot && selectedSlot.id === slotId) {
+              setSelectedSlot((prev) => (prev ? { ...prev, reactions: updatedReactions } : null));
+            }
           }}
         />
       )}
@@ -1482,14 +1653,24 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             profileId={viewingProfileId}
             initialMode={viewingProfileMode}
             onBack={handleCloseProfile}
-            onSelectProfile={(nextId) => {
+            onSelectProfile={(nextId, nextMode) => {
+              const mode = nextMode || (nextId.startsWith('slot-') || !isNaN(Number(nextId)) ? 'project' : 'user');
+              setViewingProfileMode(mode);
               setViewingProfileId(nextId);
               if (typeof window !== 'undefined') {
-                window.history.replaceState({ viewingProfile: true, profileId: nextId }, '', `/profile/${nextId}`);
+                const path = mode === 'project' ? `/project/${nextId}` : `/profile/${nextId}`;
+                window.history.pushState(
+                  { modal: mode, mode, profileId: nextId },
+                  '',
+                  path
+                );
               }
             }}
             onUpdateProfile={(updated) => {
               setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+              if (selectedSlot && selectedSlot.id === updated.id) {
+                setSelectedSlot((prev) => (prev ? { ...prev, reactions: updated.reactions } : null));
+              }
             }}
             onOpenAlerts={() => {
               setIsAlertSettingsOpen(true);
@@ -1509,7 +1690,8 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
               }
               const found = profiles.find((p) => p.id === projId);
               if (found) {
-                setTargetSlotToBump(toSlotItem(found, 1));
+                const rankMatch = slots.findIndex((s) => s.id === projId) + 1;
+                setTargetSlotToBump(toSlotItem(found, rankMatch > 0 ? rankMatch : 1));
               }
               setIsTakeOverOpen(true);
             }}

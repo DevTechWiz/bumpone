@@ -13,6 +13,7 @@ export interface SlotDetailModalProps {
   onViewProject?: (projectId: string) => void;
   onRequireAuth?: () => void;
   hasBackdrop?: boolean;
+  onUpdateReactions?: (slotId: string, reactions: { fire: number; eyes: number; heart: number; laugh: number }) => void;
 }
 
 export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
@@ -24,6 +25,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   onViewProject,
   onRequireAuth,
   hasBackdrop = true,
+  onUpdateReactions,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -32,7 +34,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   const [reportSuccess, setReportSuccess] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
-  const [localReactions, setLocalReactions] = useState<Record<string, number>>(() => ({
+  const [localReactions, setLocalReactions] = useState<{ fire: number; eyes: number; heart: number; laugh: number }>(() => ({
     fire: slot?.reactions?.fire || 0,
     eyes: slot?.reactions?.eyes || 0,
     heart: slot?.reactions?.heart || 0,
@@ -52,18 +54,27 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   }, [slot]);
 
   React.useEffect(() => {
-    if (slot?.id && user) {
+    let isCancelled = false;
+    if (slot?.id) {
       fetch(`/api/reactions?projectId=${slot.id}`)
         .then((res) => res.json())
         .then((data) => {
+          if (isCancelled) return;
           if (Array.isArray(data?.userReactions)) {
             setActiveReactions(new Set(data.userReactions));
+          }
+          if (data?.reactions) {
+            setLocalReactions(data.reactions);
+            onUpdateReactions?.(slot.id, data.reactions);
           }
         })
         .catch(() => {});
     } else {
       setActiveReactions(new Set());
     }
+    return () => {
+      isCancelled = true;
+    };
   }, [slot?.id, user]);
 
   const handleReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh') => {
@@ -77,53 +88,56 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
 
     const isAlreadyActive = activeReactions.has(type);
     const newActive = new Set(activeReactions);
+    const prevCount = localReactions[type] || 0;
+    const newCount = isAlreadyActive ? Math.max(0, prevCount - 1) : prevCount + 1;
 
     if (isAlreadyActive) {
-      // Toggle off / un-react
       newActive.delete(type);
-      setActiveReactions(newActive);
-      setLocalReactions((prev) => ({
-        ...prev,
-        [type]: Math.max(0, (prev[type] || 1) - 1),
-      }));
+    } else {
+      newActive.add(type);
+    }
+    setActiveReactions(newActive);
 
-      try {
-        if (slot?.id) {
+    const updatedReactions = {
+      fire: localReactions.fire || 0,
+      eyes: localReactions.eyes || 0,
+      heart: localReactions.heart || 0,
+      laugh: localReactions.laugh || 0,
+      [type]: newCount,
+    };
+    setLocalReactions(updatedReactions);
+    if (slot?.id) {
+      onUpdateReactions?.(slot.id, updatedReactions);
+    }
+
+    try {
+      if (slot?.id) {
+        if (isAlreadyActive) {
           const res = await fetch(`/api/reactions?projectId=${slot.id}&reaction=${type}`, {
             method: 'DELETE',
           });
           const data = await res.json();
-          if (data?.count != null) {
-            setLocalReactions((prev) => ({ ...prev, [type]: data.count }));
+          const serverReactions = data?.reactions || (data?.count != null ? { ...updatedReactions, [type]: data.count } : null);
+          if (serverReactions) {
+            setLocalReactions(serverReactions);
+            onUpdateReactions?.(slot.id, serverReactions);
           }
-        }
-      } catch {
-        // Keep optimistic state
-      }
-    } else {
-      // Toggle on / add reaction
-      newActive.add(type);
-      setActiveReactions(newActive);
-      setLocalReactions((prev) => ({
-        ...prev,
-        [type]: (prev[type] || 0) + 1,
-      }));
-
-      try {
-        if (slot?.id) {
+        } else {
           const res = await fetch('/api/reactions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ projectId: slot.id, reaction: type }),
           });
           const data = await res.json();
-          if (data?.count != null) {
-            setLocalReactions((prev) => ({ ...prev, [type]: data.count }));
+          const serverReactions = data?.reactions || (data?.count != null ? { ...updatedReactions, [type]: data.count } : null);
+          if (serverReactions) {
+            setLocalReactions(serverReactions);
+            onUpdateReactions?.(slot.id, serverReactions);
           }
         }
-      } catch {
-        // Keep optimistic state
       }
+    } catch {
+      // Keep optimistic state
     }
   };
 
@@ -207,15 +221,15 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
           <div className="absolute top-3 left-3 z-20">
             <Badge variant="rank" rank={slot.rank} />
           </div>
-          <div className="absolute top-3 right-3 flex items-center gap-1.5">
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
             <button
               onClick={handleCopyShare}
-              className="p-1.5 rounded-lg bg-black/70 backdrop-blur-md text-slate-300 hover:text-white border border-white/[0.15] transition-all cursor-pointer"
+              className="p-1.5 rounded-lg bg-black/80 backdrop-blur-md text-slate-300 hover:text-white border border-white/[0.15] transition-all cursor-pointer shadow-lg"
               title="Copy link to this slot"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             </button>
-            <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-black/80 backdrop-blur-md text-white border border-white/[0.15]">
+            <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-black/85 backdrop-blur-md text-amber-300 border border-white/[0.2] shadow-lg">
               ${slot.amountPaid.toLocaleString()}
             </span>
           </div>
@@ -322,7 +336,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
                 >
                   <span className="text-sm">{emoji}</span>
                   <span className={`text-[10px] font-mono font-medium ${isActive ? 'text-amber-300 font-bold' : 'text-neutral-300'}`}>
-                    {localReactions[type] || 0}
+                    {localReactions[type as 'fire' | 'eyes' | 'heart' | 'laugh'] || 0}
                   </span>
                 </button>
               );
@@ -362,12 +376,8 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
                     ? '🛡️ Top 40 Spot'
                     : '⚔️ Active on Grid'}
             </div>
-            <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
-              {isKing
-                ? 'Center of Grid · Most Views'
-                : isElite
-                  ? 'Top 10 · High Views'
-                  : 'Active Grid Spot'}
+            <span className="text-[10px] text-slate-300 mt-0.5 block truncate">
+              Active Value: <strong className="text-white font-mono font-semibold">${slot.amountPaid.toLocaleString()}</strong> &bull; {isKing ? 'Center King' : isElite ? 'Top 10 Spot' : 'Active Spot'}
             </span>
           </div>
         </div>

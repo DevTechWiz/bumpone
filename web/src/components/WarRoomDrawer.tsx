@@ -23,7 +23,7 @@ export interface WarRoomDrawerProps {
   bumpHistory: BumpEvent[];
   slots: SlotItem[];
   messages: Message[];
-  onSendMessage: (msg: Omit<Message, 'id' | 'timestamp'>) => void;
+  onSendMessage: (msg: Message | Omit<Message, 'id' | 'timestamp'>) => void;
   onTriggerReaction: (emoji: string, e?: React.MouseEvent) => void;
   onSelectSlot: (slot: SlotItem) => void;
   isMuted: boolean;
@@ -70,6 +70,8 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
   }, [senderHandle]);
   const [messageInput, setMessageInput] = useState('');
   const [selectedSlotTag, setSelectedSlotTag] = useState<number | undefined>(undefined);
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const realtimeChannelRef = useRef<any>(null);
 
@@ -83,8 +85,17 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
       });
 
       channel.on('broadcast', { event: 'message' }, ({ payload }) => {
-        if (payload && payload.text) {
-          onSendMessage(payload);
+        if (payload && typeof payload.text === 'string' && payload.text.trim()) {
+          // Security: Broadcast payloads can NEVER spoof official announcements
+          onSendMessage({
+            id: payload.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            sender: String(payload.sender || '@spectator').slice(0, 50),
+            avatarColor: payload.avatarColor || 'bg-indigo-500',
+            text: String(payload.text).slice(0, 200),
+            slotTag: typeof payload.slotTag === 'number' ? payload.slotTag : undefined,
+            timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
+            isOfficial: false,
+          });
         }
       });
 
@@ -109,44 +120,59 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() || isSending) return;
 
-    soundEngine.playClick();
-    const handle = senderName.trim().startsWith('@') ? senderName.trim() : `@${senderName.trim()}`;
-    localStorage.setItem('bumped_user_handle', handle);
-
-    const colors = ['bg-indigo-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-    const msgPayload = {
-      sender: handle || '@anonymous',
-      avatarColor: randomColor,
-      text: messageInput.trim(),
-      slotTag: selectedSlotTag,
-    };
-
-    onSendMessage(msgPayload);
-
-    // Broadcast across realtime channel
-    if (realtimeChannelRef.current) {
-      try {
-        realtimeChannelRef.current.send({
-          type: 'broadcast',
-          event: 'message',
-          payload: {
-            ...msgPayload,
-            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            timestamp: Date.now(),
-          },
-        });
-      } catch {
-        // Safe silent fallback
-      }
+    if (!senderHandle && onRequireAuth) {
+      onRequireAuth();
+      return;
     }
 
-    setMessageInput('');
+    soundEngine.playClick();
+    setIsSending(true);
+    setSendError(null);
+
+    try {
+      const res = await fetch('/api/war-room/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: messageInput.trim(),
+          slotTag: selectedSlotTag,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setSendError(data.error || 'Failed to send transmission.');
+        return;
+      }
+
+      if (data.message) {
+        onSendMessage(data.message);
+
+        // Broadcast to other live spectators
+        if (realtimeChannelRef.current) {
+          try {
+            realtimeChannelRef.current.send({
+              type: 'broadcast',
+              event: 'message',
+              payload: data.message,
+            });
+          } catch {
+            // Safe fallback
+          }
+        }
+      }
+
+      setMessageInput('');
+    } catch {
+      setSendError('Transmission failed. Check network connection.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleReactionClick = (emoji: string, e: React.MouseEvent) => {
@@ -268,7 +294,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
                 <Swords className="w-8 h-8 mx-auto opacity-30 text-slate-400" />
                 <p className="font-medium">No bumps recorded yet.</p>
                 <p className="text-[11px] text-slate-600">
-                  Bump any slot or click Auto-Simulate to watch live battles unfold!
+                  Bump any slot to trigger live battles and claim your turf!
                 </p>
               </div>
             ) : (
@@ -487,22 +513,36 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
           </div>
         </div>
 
+        {sendError && (
+          <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[11px] animate-in fade-in duration-150">
+            {sendError}
+          </div>
+        )}
+
         {/* Message Input & Submit */}
         <div className="flex items-center gap-2">
           <input
             type="text"
             value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            placeholder="Shout out to the board..."
+            onChange={(e) => {
+              setMessageInput(e.target.value);
+              if (sendError) setSendError(null);
+            }}
+            placeholder={senderHandle ? "Shout out to the board..." : "Sign in to send a transmission..."}
             maxLength={140}
-            className="flex-1 bg-white/[0.06] hover:bg-white/[0.08] focus:bg-white/[0.1] text-white text-xs px-3 py-2 rounded-xl border border-white/[0.1] focus:border-white/40 focus:outline-none transition-all placeholder-neutral-500"
+            disabled={isSending}
+            className="flex-1 bg-white/[0.06] hover:bg-white/[0.08] focus:bg-white/[0.1] text-white text-xs px-3 py-2 rounded-xl border border-white/[0.1] focus:border-white/40 focus:outline-none transition-all placeholder-neutral-500 disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={!messageInput.trim()}
+            disabled={!messageInput.trim() || isSending}
             className="px-3 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600 border border-zinc-500/30 disabled:opacity-40 disabled:hover:bg-zinc-700 text-white font-semibold text-xs flex items-center gap-1 shadow-md shadow-black/40 transition-all cursor-pointer"
           >
-            <Send className="w-3 h-3" />
+            {isSending ? (
+              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Send className="w-3 h-3" />
+            )}
           </button>
         </div>
       </form>
