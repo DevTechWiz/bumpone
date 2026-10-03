@@ -111,8 +111,17 @@ export const RulesModal: React.FC<RulesModalProps> = ({
           </p>
         </div>
 
-        {/* Action Button */}
-        <div className="pt-2 flex items-center justify-end">
+        {/* Action Button & Legal Links */}
+        <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-[11px] text-neutral-400 font-mono">
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors underline-offset-2 hover:underline">
+              Terms of Service
+            </a>
+            <span>•</span>
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors underline-offset-2 hover:underline">
+              Privacy Policy
+            </a>
+          </div>
           <Button
             variant="primary"
             size="md"

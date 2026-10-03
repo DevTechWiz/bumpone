@@ -1463,6 +1463,15 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                 <strong className="font-bold">{offboard.length}</strong>
               )}
             </span>
+            <div className="hidden xl:flex items-center gap-2 border-l border-white/[0.1] pl-2 text-[9px] text-neutral-400 font-mono">
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
+                Terms
+              </a>
+              <span>•</span>
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
+                Privacy
+              </a>
+            </div>
           </div>
         </div>
       </main>
