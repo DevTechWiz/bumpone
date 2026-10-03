@@ -890,6 +890,7 @@ export function ProfileView({
 
       const formData = new FormData();
       formData.append("file", uploadFile);
+      formData.append("type", "profiles");
       const res = await fetch("/api/uploads/image", {
         method: "POST",
         body: formData,

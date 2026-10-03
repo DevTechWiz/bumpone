@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    const rawType = ((formData.get('type') || formData.get('folder') || '') as string).toLowerCase();
+    const targetFolder = rawType === 'profile' || rawType === 'profiles' ? 'profiles' : 'projects';
 
     if (!file) {
       return NextResponse.json({ error: 'No image file provided' }, { status: 400 });
@@ -94,7 +96,7 @@ export async function POST(request: NextRequest) {
     const cleanFilename = `${safeId}.${format}`;
     const contentType = format === 'webp' ? 'image/webp' : format === 'png' ? 'image/png' : 'image/jpeg';
 
-    const imageUrl = await uploadImageToR2(processedBuffer, cleanFilename, contentType);
+    const imageUrl = await uploadImageToR2(processedBuffer, cleanFilename, contentType, targetFolder);
 
     return NextResponse.json({
       url: imageUrl,

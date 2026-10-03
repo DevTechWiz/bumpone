@@ -19,14 +19,18 @@ function getR2Client(): S3Client | null {
   });
 }
 
+export type StorageFolder = 'projects' | 'profiles';
+
 export async function uploadImageToR2(
   buffer: Buffer,
   filename: string,
-  contentType: string = 'image/webp'
+  contentType: string = 'image/webp',
+  folder: StorageFolder = 'projects'
 ): Promise<string> {
   const bucketName = process.env.R2_BUCKET_NAME || 'bumpone-assets';
   const publicBaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://assets.bumpone.lol';
-  const key = `profiles/${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+  const targetFolder: StorageFolder = folder === 'profiles' ? 'profiles' : 'projects';
+  const key = `${targetFolder}/${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
   // 1. Primary: Native Cloudflare R2 bucket binding via OpenNext
   try {

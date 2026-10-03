@@ -43,4 +43,18 @@ describe('Image Upload Security & Sanitization', () => {
     const isJpeg = fakeScript[0] === 0xff && fakeScript[1] === 0xd8 && fakeScript[2] === 0xff;
     expect(isJpeg).toBe(false);
   });
+
+  it('enforces separate storage prefix folders for projects and profiles', () => {
+    const sanitizeFolder = (type?: string) => {
+      const lower = (type || '').toLowerCase();
+      return lower === 'profile' || lower === 'profiles' ? 'profiles' : 'projects';
+    };
+
+    expect(sanitizeFolder('projects')).toBe('projects');
+    expect(sanitizeFolder('project')).toBe('projects');
+    expect(sanitizeFolder(undefined)).toBe('projects');
+    expect(sanitizeFolder('')).toBe('projects');
+    expect(sanitizeFolder('profiles')).toBe('profiles');
+    expect(sanitizeFolder('profile')).toBe('profiles');
+  });
 });

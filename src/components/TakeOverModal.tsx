@@ -140,6 +140,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
       const formData = new FormData();
       formData.append('file', uploadFile);
+      formData.append('type', 'projects');
       const res = await fetch('/api/uploads/image', {
         method: 'POST',
         body: formData,
