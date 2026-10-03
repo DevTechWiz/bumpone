@@ -25,22 +25,30 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
 
   const filteredSlots = slots.filter((slot) => {
     const rawSearch = search.toLowerCase().trim();
-    const cleanSearch = rawSearch.replace(/^@/, '');
-    const slotHandle = (slot.handle || '').toLowerCase().replace(/^@/, '');
-    const ownerHandle = (slot.owner_handle || '').toLowerCase().replace(/^@/, '');
-    const ownerName = (slot.owner_name || '').toLowerCase();
+    const cleanSearch = rawSearch.replace(/^@/, '').trim();
+    const slotHandle = (slot.handle || '').toLowerCase().trim().replace(/^@/, '');
+    const ownerHandle = (slot.owner_handle || '').toLowerCase().trim().replace(/^@/, '');
+    const ownerName = (slot.owner_name || '').toLowerCase().trim();
 
-    const matchesSearch =
-      !rawSearch ||
-      slot.title.toLowerCase().includes(rawSearch) ||
-      slot.title.toLowerCase().includes(cleanSearch) ||
-      slot.bidderName.toLowerCase().includes(rawSearch) ||
-      slot.bidderName.toLowerCase().includes(cleanSearch) ||
-      (slotHandle && (slotHandle.includes(cleanSearch) || `@${slotHandle}`.includes(rawSearch))) ||
-      (ownerHandle && (ownerHandle.includes(cleanSearch) || `@${ownerHandle}`.includes(rawSearch))) ||
-      (ownerName && (ownerName.includes(rawSearch) || ownerName.includes(cleanSearch))) ||
-      String(slot.rank) === cleanSearch ||
-      `#${slot.rank}` === rawSearch;
+    let matchesSearch = false;
+    if (!rawSearch) {
+      matchesSearch = true;
+    } else if (rawSearch.startsWith('@')) {
+      // Strict handle search: letters must match from start
+      matchesSearch =
+        cleanSearch.length > 0 &&
+        (slotHandle.startsWith(cleanSearch) || ownerHandle.startsWith(cleanSearch));
+    } else if (rawSearch.startsWith('#')) {
+      matchesSearch = String(slot.rank) === rawSearch.slice(1);
+    } else {
+      matchesSearch =
+        slot.title.toLowerCase().includes(rawSearch) ||
+        slot.bidderName.toLowerCase().includes(rawSearch) ||
+        ownerName.includes(rawSearch) ||
+        slotHandle.startsWith(rawSearch) ||
+        ownerHandle.startsWith(rawSearch) ||
+        String(slot.rank) === rawSearch;
+    }
 
     if (!matchesSearch) return false;
 

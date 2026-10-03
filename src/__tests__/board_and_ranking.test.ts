@@ -214,31 +214,50 @@ describe('BumpOne Board & Ranking Engine', () => {
 
     const isMatch = (slot: typeof testSlot, query: string) => {
       const rawQuery = query.toLowerCase().trim();
-      const cleanQuery = rawQuery.replace(/^@/, '');
-      const slotHandle = (slot.handle || '').toLowerCase().replace(/^@/, '');
-      const ownerHandle = (slot.owner_handle || '').toLowerCase().replace(/^@/, '');
-      const ownerName = (slot.owner_name || '').toLowerCase();
+      const cleanQuery = rawQuery.replace(/^@/, '').trim();
+      const slotHandle = (slot.handle || '').toLowerCase().trim().replace(/^@/, '');
+      const ownerHandle = (slot.owner_handle || '').toLowerCase().trim().replace(/^@/, '');
+      const ownerName = (slot.owner_name || '').toLowerCase().trim();
 
+      if (!rawQuery) return true;
+      if (rawQuery.startsWith('@')) {
+        // Strict handle search: letters must match from start
+        return cleanQuery.length > 0 && (slotHandle.startsWith(cleanQuery) || ownerHandle.startsWith(cleanQuery));
+      }
+      if (rawQuery.startsWith('#')) {
+        return String(slot.rank) === rawQuery.slice(1);
+      }
       return (
         slot.title.toLowerCase().includes(rawQuery) ||
-        slot.title.toLowerCase().includes(cleanQuery) ||
         slot.bidderName.toLowerCase().includes(rawQuery) ||
-        slot.bidderName.toLowerCase().includes(cleanQuery) ||
-        (slotHandle && (slotHandle.includes(cleanQuery) || `@${slotHandle}`.includes(rawQuery))) ||
-        (ownerHandle && (ownerHandle.includes(cleanQuery) || `@${ownerHandle}`.includes(rawQuery))) ||
-        (ownerName && (ownerName.includes(rawQuery) || ownerName.includes(cleanQuery))) ||
-        `#${slot.rank}` === rawQuery ||
-        String(slot.rank) === cleanQuery
+        ownerName.includes(rawQuery) ||
+        slotHandle.startsWith(rawQuery) ||
+        ownerHandle.startsWith(rawQuery) ||
+        String(slot.rank) === rawQuery
       );
     };
 
     // User searches with @ prefix (e.g. from clicking "My project on wall")
     expect(isMatch(testSlot, '@devendratampula')).toBe(true);
+    expect(isMatch(testSlot, '@devendra')).toBe(true);
+    expect(isMatch(testSlot, '@dev')).toBe(true);
+
+    // Strict letter order from start: searching middle substring must NOT match
+    expect(isMatch(testSlot, '@tampula')).toBe(false);
+    expect(isMatch(testSlot, '@end')).toBe(false);
+
+    // Query with @ must NOT match project title or bidder name
+    expect(isMatch(testSlot, '@cupid')).toBe(false);
+    expect(isMatch(testSlot, '@cupidwave')).toBe(false);
+
+    // Bare @ with no username should not match
+    expect(isMatch(testSlot, '@')).toBe(false);
 
     // User searches without @ prefix
     expect(isMatch(testSlot, 'devendratampula')).toBe(true);
+    expect(isMatch(testSlot, 'dev')).toBe(true);
 
-    // User searches by project title
+    // User searches by project title (without @)
     expect(isMatch(testSlot, 'CupidWave')).toBe(true);
     expect(isMatch(testSlot, 'cupid')).toBe(true);
 

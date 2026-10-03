@@ -786,23 +786,32 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     slots.forEach((slot) => {
       if (rawQuery) {
         const prof = byId.get(slot.id);
-        const matchName = slot.title.toLowerCase().includes(rawQuery) || slot.title.toLowerCase().includes(cleanQuery);
-        const matchBidder = slot.bidderName?.toLowerCase().includes(rawQuery) || slot.bidderName?.toLowerCase().includes(cleanQuery);
-        const slotHandle = (slot.handle || prof?.handle || '').toLowerCase().replace(/^@/, '');
-        const ownerHandle = (slot.owner_handle || prof?.owner_handle || '').toLowerCase().replace(/^@/, '');
-        const ownerName = (slot.owner_name || prof?.owner_name || '').toLowerCase();
+        const slotHandle = (slot.handle || prof?.handle || '').toLowerCase().trim().replace(/^@/, '');
+        const ownerHandle = (slot.owner_handle || prof?.owner_handle || '').toLowerCase().trim().replace(/^@/, '');
+        const ownerName = (slot.owner_name || prof?.owner_name || '').toLowerCase().trim();
 
-        const matchHandle =
-          (slotHandle && (slotHandle.includes(cleanQuery) || `@${slotHandle}`.includes(rawQuery))) ||
-          (ownerHandle && (ownerHandle.includes(cleanQuery) || `@${ownerHandle}`.includes(rawQuery))) ||
-          (ownerName && (ownerName.includes(rawQuery) || ownerName.includes(cleanQuery)));
+        let matchesSearch = false;
 
-        const matchRank =
-          `#${slot.rank}` === rawQuery ||
-          String(slot.rank) === cleanQuery ||
-          `#${slot.rank}` === `#${cleanQuery}`;
+        if (rawQuery.startsWith('@')) {
+          // Strict handle search: only match handles starting with cleanQuery (exact letter order from start)
+          matchesSearch =
+            cleanQuery.length > 0 &&
+            (slotHandle.startsWith(cleanQuery) || ownerHandle.startsWith(cleanQuery));
+        } else if (rawQuery.startsWith('#')) {
+          const rankNum = rawQuery.slice(1);
+          matchesSearch = String(slot.rank) === rankNum;
+        } else {
+          // General search: matches title, bidderName, ownerName, handle prefix, or rank number
+          matchesSearch =
+            slot.title.toLowerCase().includes(rawQuery) ||
+            Boolean(slot.bidderName?.toLowerCase().includes(rawQuery)) ||
+            ownerName.includes(rawQuery) ||
+            slotHandle.startsWith(rawQuery) ||
+            ownerHandle.startsWith(rawQuery) ||
+            String(slot.rank) === rawQuery;
+        }
 
-        if (!matchName && !matchBidder && !matchHandle && !matchRank) return;
+        if (!matchesSearch) return;
       }
       if (isTierActive) {
         if (filterState.tier === 'king' && slot.rank !== 1) return;
