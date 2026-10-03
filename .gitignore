@@ -29,3 +29,6 @@ Thumbs.db
 
 # Supabase CLI temp
 supabase/.temp/
+
+# Deprecated nested directory
+/web/
