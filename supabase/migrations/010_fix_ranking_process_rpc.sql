@@ -1,5 +1,5 @@
 -- 010_fix_ranking_process_rpc.sql
--- Fixes unique rank constraint violation (idx_projects_active_rank) and sequence naming in process_dodo_purchase
+-- Fixes unique rank constraint violation (idx_projects_active_rank), sequence naming, and payments schema in process_dodo_purchase
 
 create sequence if not exists global_event_sequence_seq start 1000;
 create sequence if not exists board_events_event_sequence_seq start 1000;
@@ -108,7 +108,7 @@ begin
   from projects
   where is_active = true and moderation_status = 'approved' and current_rank is not null;
 
-  -- 5. Update buyer's project record (do NOT assign current_rank yet to avoid unique constraint collision on idx_projects_active_rank)
+  -- 5. Update buyer's project record (do NOT set rank yet to avoid unique constraint collisions)
   update projects
   set
     current_active_value_minor = v_new_value_minor,
@@ -161,12 +161,15 @@ begin
   insert into payments (
     project_id, user_id, quote_id, provider,
     provider_payment_id, amount_minor, currency,
-    status, payload
+    previous_active_value_minor, new_active_value_minor,
+    previous_rank, new_rank, status
   ) values (
     v_project_id, v_user_id, case when v_quote_id is not null then v_quote_id::uuid else null end,
     coalesce(p_payload->>'gateway', 'razorpay'),
     p_payment_id, p_amount_minor, 'USD',
-    'paid', p_payload
+    v_old_value_minor, v_new_value_minor,
+    v_old_rank, least(v_new_rank, 100),
+    'paid'::payment_status
   ) returning id into v_payment_id;
 
   -- 8. Insert board displacement event journal
