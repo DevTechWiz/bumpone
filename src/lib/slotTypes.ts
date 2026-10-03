@@ -14,6 +14,7 @@ export interface SlotItem {
   imageUrl: string;
   linkUrl: string;
   title: string;
+  handle?: string;
   bidderName: string;
   amountPaid: number;
   createdAt: number;

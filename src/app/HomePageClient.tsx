@@ -778,16 +778,31 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     const isValueActive = filterState.minPrice !== null || filterState.maxPrice !== null;
     const isTodayActive = filterState.timeRange === 'today';
     if (!isQueryActive && !isTierActive && !isCategoryActive && !isValueActive && !isTodayActive) return null;
-    const query = filterState.searchQuery.toLowerCase().trim();
+    const rawQuery = filterState.searchQuery.toLowerCase().trim();
+    const cleanQuery = rawQuery.replace(/^@/, '');
     const dayAgo = Date.now() - 24 * 3600000;
     const byId = new Map(profiles.map((p) => [p.id, p]));
     const set = new Set<number>();
     slots.forEach((slot) => {
-      if (query) {
-        const matchName = slot.title.toLowerCase().includes(query);
-        const matchHandle = slot.bidderName.toLowerCase().includes(query);
-        const matchRank = `#${slot.rank}` === query || String(slot.rank) === query;
-        if (!matchName && !matchHandle && !matchRank) return;
+      if (rawQuery) {
+        const prof = byId.get(slot.id);
+        const matchName = slot.title.toLowerCase().includes(rawQuery) || slot.title.toLowerCase().includes(cleanQuery);
+        const matchBidder = slot.bidderName?.toLowerCase().includes(rawQuery) || slot.bidderName?.toLowerCase().includes(cleanQuery);
+        const slotHandle = (slot.handle || prof?.handle || '').toLowerCase().replace(/^@/, '');
+        const ownerHandle = (slot.owner_handle || prof?.owner_handle || '').toLowerCase().replace(/^@/, '');
+        const ownerName = (slot.owner_name || prof?.owner_name || '').toLowerCase();
+
+        const matchHandle =
+          (slotHandle && (slotHandle.includes(cleanQuery) || `@${slotHandle}`.includes(rawQuery))) ||
+          (ownerHandle && (ownerHandle.includes(cleanQuery) || `@${ownerHandle}`.includes(rawQuery))) ||
+          (ownerName && (ownerName.includes(rawQuery) || ownerName.includes(cleanQuery)));
+
+        const matchRank =
+          `#${slot.rank}` === rawQuery ||
+          String(slot.rank) === cleanQuery ||
+          `#${slot.rank}` === `#${cleanQuery}`;
+
+        if (!matchName && !matchBidder && !matchHandle && !matchRank) return;
       }
       if (isTierActive) {
         if (filterState.tier === 'king' && slot.rank !== 1) return;

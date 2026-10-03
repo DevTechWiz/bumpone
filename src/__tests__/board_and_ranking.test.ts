@@ -200,4 +200,53 @@ describe('BumpOne Board & Ranking Engine', () => {
     expect(newSorted.findIndex((x) => x.id === newLive100.id) + 1).toBe(100);
     expect(newLive100.id).not.toBe('p-100');
   });
+
+  it('correctly matches handle with or without @ prefix in search query', () => {
+    const testSlot = {
+      id: 'cupid-1',
+      rank: 1,
+      title: 'CupidWave',
+      handle: 'devendratampula',
+      owner_handle: 'devendratampula',
+      owner_name: 'Devendra Dev',
+      bidderName: 'Devendra Dev',
+    };
+
+    const isMatch = (slot: typeof testSlot, query: string) => {
+      const rawQuery = query.toLowerCase().trim();
+      const cleanQuery = rawQuery.replace(/^@/, '');
+      const slotHandle = (slot.handle || '').toLowerCase().replace(/^@/, '');
+      const ownerHandle = (slot.owner_handle || '').toLowerCase().replace(/^@/, '');
+      const ownerName = (slot.owner_name || '').toLowerCase();
+
+      return (
+        slot.title.toLowerCase().includes(rawQuery) ||
+        slot.title.toLowerCase().includes(cleanQuery) ||
+        slot.bidderName.toLowerCase().includes(rawQuery) ||
+        slot.bidderName.toLowerCase().includes(cleanQuery) ||
+        (slotHandle && (slotHandle.includes(cleanQuery) || `@${slotHandle}`.includes(rawQuery))) ||
+        (ownerHandle && (ownerHandle.includes(cleanQuery) || `@${ownerHandle}`.includes(rawQuery))) ||
+        (ownerName && (ownerName.includes(rawQuery) || ownerName.includes(cleanQuery))) ||
+        `#${slot.rank}` === rawQuery ||
+        String(slot.rank) === cleanQuery
+      );
+    };
+
+    // User searches with @ prefix (e.g. from clicking "My project on wall")
+    expect(isMatch(testSlot, '@devendratampula')).toBe(true);
+
+    // User searches without @ prefix
+    expect(isMatch(testSlot, 'devendratampula')).toBe(true);
+
+    // User searches by project title
+    expect(isMatch(testSlot, 'CupidWave')).toBe(true);
+    expect(isMatch(testSlot, 'cupid')).toBe(true);
+
+    // User searches by rank
+    expect(isMatch(testSlot, '#1')).toBe(true);
+    expect(isMatch(testSlot, '1')).toBe(true);
+
+    // Unrelated query should not match
+    expect(isMatch(testSlot, '@otheruser')).toBe(false);
+  });
 });

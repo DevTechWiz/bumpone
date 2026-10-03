@@ -257,6 +257,7 @@ export function toSlotItem(p: Profile, rank: number, isNew = false): SlotItem {
     imageUrl,
     linkUrl: p.linkUrl,
     title: p.name,
+    handle: p.handle,
     bidderName: p.owner_name || p.handle,
     amountPaid: p.active_value,
     createdAt: Date.now() - p.joined_days_ago * 86400000,

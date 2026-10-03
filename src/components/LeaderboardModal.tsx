@@ -24,10 +24,23 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   const [filterTier, setFilterTier] = useState<'all' | 'king' | 'elite' | 'lord' | 'contender' | 'bubble'>('all');
 
   const filteredSlots = slots.filter((slot) => {
+    const rawSearch = search.toLowerCase().trim();
+    const cleanSearch = rawSearch.replace(/^@/, '');
+    const slotHandle = (slot.handle || '').toLowerCase().replace(/^@/, '');
+    const ownerHandle = (slot.owner_handle || '').toLowerCase().replace(/^@/, '');
+    const ownerName = (slot.owner_name || '').toLowerCase();
+
     const matchesSearch =
-      slot.title.toLowerCase().includes(search.toLowerCase()) ||
-      slot.bidderName.toLowerCase().includes(search.toLowerCase()) ||
-      String(slot.rank) === search.trim();
+      !rawSearch ||
+      slot.title.toLowerCase().includes(rawSearch) ||
+      slot.title.toLowerCase().includes(cleanSearch) ||
+      slot.bidderName.toLowerCase().includes(rawSearch) ||
+      slot.bidderName.toLowerCase().includes(cleanSearch) ||
+      (slotHandle && (slotHandle.includes(cleanSearch) || `@${slotHandle}`.includes(rawSearch))) ||
+      (ownerHandle && (ownerHandle.includes(cleanSearch) || `@${ownerHandle}`.includes(rawSearch))) ||
+      (ownerName && (ownerName.includes(rawSearch) || ownerName.includes(cleanSearch))) ||
+      String(slot.rank) === cleanSearch ||
+      `#${slot.rank}` === rawSearch;
 
     if (!matchesSearch) return false;
 
