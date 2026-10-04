@@ -58,7 +58,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
               <div className="flex items-center justify-between mt-1 font-mono text-[11px]">
                 <Badge variant="rank" rank={event.newRank} />
                 <span className="text-slate-200 font-semibold">
-                  ${event.promotedItem.amountPaid}
+                  ${event.promotedItem.activeValue}
                 </span>
               </div>
             </div>
@@ -76,7 +76,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
                   Rank #101
                 </span>
                 <span className="text-slate-400">
-                  ${event.droppedItem.amountPaid}
+                  ${event.droppedItem.activeValue}
                 </span>
               </div>
             </div>
@@ -85,7 +85,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
           {/* Description */}
           <p className="text-[11px] text-slate-300 leading-snug">
             <strong>{event.promotedItem.bidderName}</strong> placed{' '}
-            <strong className="text-white font-mono">${event.promotedItem.amountPaid}</strong>, reaching <strong>Rank #{event.newRank}</strong>.{' '}
+            <strong className="text-white font-mono">${event.promotedItem.activeValue}</strong>, reaching <strong>Rank #{event.newRank}</strong>.{' '}
             {event.droppedItem && event.droppedItem.id !== event.promotedItem.id ? (
               <span>
                 <strong>{event.droppedItem.title}</strong> was moved to Rank #101 in the Billboard Archive. All top 100 spots remain live on the billboard.

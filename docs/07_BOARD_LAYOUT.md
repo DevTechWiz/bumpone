@@ -61,29 +61,29 @@ When someone bumps into a higher position, the wall visibly rearranges and tiles
 
 The wall uses a concentric grid: the #1 citadel at center, elites ringing it, remaining ranks radiating outward by distance from center. All tiles keep natural square proportions (no stretched dominoes).
 
-## Rank #1 — Supreme King
+## Rank #1 — Supreme King (Hero Citadel)
 
-4×4 central citadel (16 units). Dramatically larger than all other tiles, with gold accent treatment.
+Central sovereign anchor (3×3 units in mobile/desktop mosaic). Dramatically larger than all other tiles, with gold accent treatment and coronation spotlight.
 
-## Ranks #2–#13 — Inner Orbit Elites
+## Ranks #2–#5 — Champions
 
-Twelve 2×2 tiles (4 units each) directly adjacent to the citadel, silver/platinum treatment.
+Four cardinal 2×2 anchor tiles (North, South, East, West) framing the King, purple accent treatment.
 
-## Ranks #14–#50 — Mid-Orbit Vanguard
+## Ranks #6–#15 — Elite Council
 
-1×1 tiles ordered radially by distance from center, ash/grey treatment.
+Ten inner-ring display cards with glowing sky-blue accents.
 
-## Ranks #55–#99 — Perimeter Contenders
+## Ranks #16–#40 — Vanguard
 
-1×1 outer-ring tiles, same geometry, quieter treatment.
+Twenty-five mid-tier cards with emerald borders.
 
-## Rank #100 — Drop Brink
+## Ranks #41–#100 — Perimeter Contenders
 
-1×1 tile with crimson beacon treatment: the next climb pushes #100 off the wall (profile kept off-board, never deleted).
+Sixty single-cell outer cards with subtle border treatment, ending at the #100 Drop Brink.
 
-## Rank #101+ — The Graveyard (Off-Board Archive)
+## Rank #101+ — The Graveyard (Billboard Archive)
 
-Profiles displaced past rank #100 are archived in the **Graveyard Drawer**. Their profiles, metrics, and active values are preserved permanently. A 1-click **"Reclaim Turf"** button allows them to calculate the top-up needed to re-enter the live Top 100.
+Profiles displaced past rank #100 are archived in the **Billboard Archive**. Their profiles, metrics, and active values are preserved permanently. A 1-click **"Reclaim Turf"** button allows them to calculate the top-up needed to re-enter the live Top 100.
 
 ## Layout Geometry
 

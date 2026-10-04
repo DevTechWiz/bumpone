@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { MIN_TOP_UP } from '@/lib/board';
 import { allowRequest } from '@/lib/rateLimit';
+import { normalizeUrl } from '@/lib/urls';
 
 const schema = z.object({
   mode: z.enum(['new', 'top_up']),
@@ -14,7 +15,19 @@ const schema = z.object({
   targetRank: z.number().int().min(1).max(100),
   title: z.string().trim().min(1).max(100),
   handle: z.string().trim().min(1).max(50),
-  linkUrl: z.string().url().refine((v) => new URL(v).protocol === 'https:', 'URL must use HTTPS'),
+  linkUrl: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((val) => normalizeUrl(val))
+    .refine((val) => {
+      try {
+        const u = new URL(val);
+        return u.protocol === 'https:' && Boolean(u.hostname && u.hostname.includes('.'));
+      } catch {
+        return false;
+      }
+    }, 'Valid website destination URL is required (must use HTTPS)'),
   imageUrl: z.string().url().max(2048),
   category: z.string().trim().min(1).max(50),
 });
@@ -72,8 +85,11 @@ export async function POST(request: NextRequest) {
       projectId = project.id;
     }
     const { data: target } = await supabaseAdmin.from('projects').select('current_active_value_minor').eq('current_rank', input.targetRank).eq('is_active', true).eq('moderation_status', 'approved').maybeSingle();
-    const targetValueMinor = target ? Number(target.current_active_value_minor) : (101 - input.targetRank) * 100;
-    const requiredMinor = Math.max(MIN_TOP_UP * 100, targetValueMinor - currentValueMinor + MIN_TOP_UP * 100);
+    const rawTargetValueMinor = target ? Number(target.current_active_value_minor) : 0;
+    const targetValueMinor = target ? Math.max(MIN_TOP_UP * 100, rawTargetValueMinor) : 0;
+    const requiredMinor = target
+      ? Math.max(MIN_TOP_UP * 100, targetValueMinor - currentValueMinor + (MIN_TOP_UP * 100))
+      : MIN_TOP_UP * 100;
     const suppliedMinor = input.topUpAmount * 100;
     if (suppliedMinor < requiredMinor) return NextResponse.json({ error: `Minimum required top-up is $${requiredMinor / 100}` }, { status: 409 });
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
@@ -99,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     const session = await createDodoCheckoutSession({
       amountMinor: suppliedMinor,
-      returnUrl: `${appUrl}/arena?status=pending_payment&quote_id=${quote.id}`,
+      returnUrl: `${appUrl}/?status=pending_payment&quote_id=${quote.id}`,
       metadata: {
         quote_id: quote.id,
         project_id: projectId,

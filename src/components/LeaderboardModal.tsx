@@ -21,7 +21,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   hasBackdrop = true,
 }) => {
   const [search, setSearch] = useState('');
-  const [filterTier, setFilterTier] = useState<'all' | 'king' | 'elite' | 'lord' | 'contender' | 'bubble'>('all');
+  const [filterTier, setFilterTier] = useState<'all' | 'king' | 'champion' | 'elite' | 'vanguard' | 'contender' | 'bubble'>('all');
 
   const filteredSlots = slots.filter((slot) => {
     const rawSearch = search.toLowerCase().trim();
@@ -53,9 +53,10 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
     if (!matchesSearch) return false;
 
     if (filterTier === 'king') return slot.rank === 1;
-    if (filterTier === 'elite') return slot.rank >= 2 && slot.rank <= 13;
-    if (filterTier === 'lord') return slot.rank >= 14 && slot.rank <= 54;
-    if (filterTier === 'contender') return slot.rank >= 55 && slot.rank <= 99;
+    if (filterTier === 'champion') return slot.rank >= 2 && slot.rank <= 5;
+    if (filterTier === 'elite') return slot.rank >= 6 && slot.rank <= 15;
+    if (filterTier === 'vanguard') return slot.rank >= 16 && slot.rank <= 40;
+    if (filterTier === 'contender') return slot.rank >= 41 && slot.rank <= 100;
     if (filterTier === 'bubble') return slot.rank === 100;
     return true;
   });
@@ -99,22 +100,31 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
               <Crown className="w-3 h-3 text-amber-400" /> King (#1)
             </button>
             <button
-              onClick={() => setFilterTier('elite')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'elite'
-                  ? 'bg-white/[0.1] text-white border border-white/[0.2]'
+              onClick={() => setFilterTier('champion')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'champion'
+                  ? 'bg-purple-950/40 text-purple-200 border border-purple-400/50'
                   : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
                 }`}
             >
-              <Sparkles className="w-3 h-3 text-slate-300" /> Top 10 (#2–10)
+              Champions (#2–5)
             </button>
             <button
-              onClick={() => setFilterTier('lord')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'lord'
-                  ? 'bg-zinc-800 text-zinc-100 border border-zinc-500/50'
+              onClick={() => setFilterTier('elite')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'elite'
+                  ? 'bg-sky-950/40 text-sky-200 border border-sky-400/50'
+                  : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
+                }`}
+            >
+              <Sparkles className="w-3 h-3 text-sky-300" /> Elites (#6–15)
+            </button>
+            <button
+              onClick={() => setFilterTier('vanguard')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${filterTier === 'vanguard'
+                  ? 'bg-emerald-950/40 text-emerald-200 border border-emerald-400/50'
                   : 'bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
                 }`}
             >
-              Top 50 (#11–50)
+              Vanguard (#16–40)
             </button>
             <button
               onClick={() => setFilterTier('contender')}
@@ -123,7 +133,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   : 'bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
                 }`}
             >
-              Contenders (#51–100)
+              Contenders (#41–100)
             </button>
             <button
               onClick={() => setFilterTier('bubble')}
@@ -189,7 +199,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
 
                 <div className="text-right shrink-0">
                   <span className="font-mono text-xs font-semibold text-white block">
-                    ${slot.amountPaid.toLocaleString()}
+                    ${slot.activeValue.toLocaleString()}
                   </span>
                   <span className="text-[10px] text-slate-400">
                     {slot.rank === 1

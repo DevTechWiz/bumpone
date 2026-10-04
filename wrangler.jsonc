@@ -36,7 +36,6 @@
     "NEXT_PUBLIC_R2_PUBLIC_URL": "https://assets.bumpone.lol",
     "DODO_PAYMENTS_ENVIRONMENT": "test_mode",
     "DODO_PRODUCT_ID": "pdt_0NowwCBxH2gSEio45FSUM",
-    "NEXT_PUBLIC_RAZORPAY_KEY_ID": "rzp_test_TjXD20nQtDERoB",
     "R2_BUCKET_NAME": "bumpone-assets"
   }
 }

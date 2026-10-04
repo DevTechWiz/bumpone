@@ -124,7 +124,7 @@ export default function PrivacyPage() {
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                 <div className="font-bold text-white mb-1">C. Financial Transaction Identifiers</div>
                 <div className="text-sm text-neutral-400 mb-2">
-                  <strong>Data Items:</strong> Dodo Payments / Razorpay / Stripe transaction IDs, customer email, transaction timestamp, payment status, and order currency amounts (USD / INR).
+                  <strong>Data Items:</strong> Dodo Payments transaction IDs, customer email, transaction timestamp, payment status, and order currency amounts (USD).
                 </div>
                 <div className="text-xs font-mono text-amber-300">
                   Purpose: Crediting active slot values, triggering real-time bump displacement events, and anti-fraud verification.
@@ -221,10 +221,10 @@ export default function PrivacyPage() {
                     <td className="p-3">OpenID Connect, Token Verification</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-bold text-white">Dodo Payments / Razorpay</td>
-                    <td className="p-3">Payment Processing &amp; MoR</td>
+                    <td className="p-3 font-bold text-white">Dodo Payments Inc.</td>
+                    <td className="p-3">Merchant of Record &amp; Billing</td>
                     <td className="p-3">PCI-DSS Compliant Tier</td>
-                    <td className="p-3">PCI Level 1, Svix / HMAC Signature Verification</td>
+                    <td className="p-3">PCI Level 1, Svix Webhook Signature Verification</td>
                   </tr>
                 </tbody>
               </table>

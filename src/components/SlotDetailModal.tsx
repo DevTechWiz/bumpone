@@ -28,22 +28,11 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   onUpdateReactions,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [showBadge, setShowBadge] = useState(false);
-  const [badgeCopied, setBadgeCopied] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState<'scam' | 'spam' | 'offensive' | 'broken_link' | 'other'>('spam');
   const [reportDetails, setReportDetails] = useState('');
   const [reportSuccess, setReportSuccess] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-
-  const badgeMarkdown = slot ? `[![Featured on BumpOne](https://bumpone.lol/api/badge/${slot.id})](https://bumpone.lol/project/${slot.id})` : '';
-  const handleCopyBadge = () => {
-    if (!badgeMarkdown) return;
-    navigator.clipboard.writeText(badgeMarkdown);
-    setBadgeCopied(true);
-    soundEngine.playSuccess();
-    setTimeout(() => setBadgeCopied(false), 2000);
-  };
 
   const [localReactions, setLocalReactions] = useState<{ fire: number; eyes: number; heart: number; laugh: number }>(() => ({
     fire: slot?.reactions?.fire || 0,
@@ -156,7 +145,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
 
   const handleCopyShare = () => {
     soundEngine.playClick();
-    const shareText = `Check out #${slot.rank} "${slot.title}" on BumpOne.lol ($${slot.amountPaid} active value)!`;
+    const shareText = `Check out #${slot.rank} "${slot.title}" on BumpOne.lol ($${slot.activeValue} active value)!`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?rank=${slot.rank}`);
       setCopied(true);
@@ -241,7 +230,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             </button>
             <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-black/85 backdrop-blur-md text-amber-300 border border-white/[0.2] shadow-lg">
-              ${slot.amountPaid.toLocaleString()}
+              ${slot.activeValue.toLocaleString()}
             </span>
           </div>
         </div>
@@ -365,7 +354,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
             <div className="font-mono font-bold text-white text-base mt-1">
               +$10{' '}
               <span className="text-[11px] font-normal text-slate-400">
-                (${slot.amountPaid + 10} total)
+                (${slot.activeValue + 10} total)
               </span>
             </div>
             <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
@@ -388,27 +377,17 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
                     : '🌟 Active on Grid'}
             </div>
             <span className="text-[10px] text-slate-300 mt-0.5 block truncate">
-              Active Value: <strong className="text-white font-mono font-semibold">${slot.amountPaid.toLocaleString()}</strong> &bull; {isKing ? 'Center King' : isElite ? 'Top 10 Spot' : 'Active Spot'}
+              Active Value: <strong className="text-white font-mono font-semibold">${slot.activeValue.toLocaleString()}</strong> &bull; {isKing ? 'Center King' : isElite ? 'Top 10 Spot' : 'Active Spot'}
             </span>
           </div>
         </div>
 
-        {/* Destination link with Outbound Click Tracking */}
+        {/* Destination link */}
         {slot.linkUrl && (
           <a
             href={slot.linkUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => {
-              try {
-                fetch('/api/track/click', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ projectId: slot.id }),
-                  keepalive: true,
-                }).catch(() => {});
-              } catch {}
-            }}
             className="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-between text-xs text-slate-200 hover:text-white hover:border-white/[0.2] transition-all group"
           >
             <div className="truncate">
@@ -422,48 +401,6 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
             <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-white shrink-0" />
           </a>
         )}
-
-        {/* Live Embed Badge Generator */}
-        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] font-semibold text-white truncate">Live Billboard Rank Badge</span>
-              <img
-                src={`/api/badge/${slot.id}`}
-                alt="Live Billboard Rank Badge"
-                className="h-5 shrink-0"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowBadge(!showBadge)}
-              className="text-[10px] text-amber-400 hover:text-amber-300 font-medium shrink-0 cursor-pointer"
-            >
-              {showBadge ? 'Hide Code' : 'Embed Badge'}
-            </button>
-          </div>
-
-          {showBadge && (
-            <div className="pt-1.5 space-y-2 border-t border-white/[0.06]">
-              <p className="text-[10px] text-slate-400 leading-normal">
-                Embed this live SVG badge on your GitHub README, documentation, or landing page to show off your real-time ranking on BumpOne:
-              </p>
-              <div className="relative">
-                <pre className="p-2 rounded-lg bg-black/60 border border-white/[0.1] text-[10px] font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap select-all">
-                  {badgeMarkdown}
-                </pre>
-                <button
-                  type="button"
-                  onClick={handleCopyBadge}
-                  className="mt-1.5 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  {badgeCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  {badgeCopied ? 'Copied Markdown Snippet!' : 'Copy Markdown Snippet'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Reporting Section */}
         {showReport && (
@@ -575,7 +512,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
               onBumpSlot(slot);
             }}
           >
-            Book Billboard Spot for ${slot.amountPaid + 10}
+            Bump Slot #{slot.rank} for ${Math.max(10, slot.activeValue) + 10}
           </Button>
         </div>
       </div>

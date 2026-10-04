@@ -521,7 +521,7 @@ export function ProfileView({
       linkUrl: item.linkUrl,
       title: item.name,
       bidderName: item.handle,
-      amountPaid: item.active_value,
+      activeValue: item.active_value,
       createdAt: item.last_bump_at,
       imagePosX: item.imagePosX,
       imagePosY: item.imagePosY,
@@ -543,7 +543,6 @@ export function ProfileView({
 
   const [isBiddingOpen, setIsBiddingOpen] = useState(false);
   const [targetSlotToBump, setTargetSlotToBump] = useState<SlotItem | null>(null);
-  const [projectBadgeCopied, setProjectBadgeCopied] = useState(false);
 
   const handleClaim = () => {
     soundEngine.playClick();
@@ -579,7 +578,7 @@ export function ProfileView({
         linkUrl: proj.linkUrl,
         title: proj.name,
         bidderName: proj.handle,
-        amountPaid: proj.active_value,
+        activeValue: proj.active_value,
         createdAt: proj.last_bump_at || Date.now(),
         category: proj.category,
         owner_id: proj.owner_id,
@@ -1143,9 +1142,6 @@ export function ProfileView({
               title: updated.name,
               destination_url: updated.linkUrl,
               image_path: updated.imageUrl,
-              image_pos_x: updated.imagePosX ?? 50,
-              image_pos_y: updated.imagePosY ?? 50,
-              image_zoom: updated.imageZoom ?? 1,
               updated_at: new Date().toISOString(),
             })
             .eq("id", updated.id);
@@ -1662,17 +1658,21 @@ export function ProfileView({
                         {/* Cover Tile Thumbnail with custom framing applied */}
                         <div className="relative h-44 w-full rounded-xl overflow-hidden bg-[#0d0e12] border border-white/[0.1] flex items-center justify-center">
                           {proj.imageUrl ? (
-                            <img
-                              src={proj.imageUrl}
-                              alt={proj.name || "Project"}
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                              style={{
-                                objectPosition: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
-                                transform: proj.imageZoom && proj.imageZoom > 1 ? `scale(${proj.imageZoom})` : undefined,
-                                transformOrigin: `${proj.imagePosX ?? 50}% ${proj.imagePosY ?? 50}%`,
-                              }}
-                              referrerPolicy="no-referrer"
-                            />
+                            <>
+                              <img
+                                src={proj.imageUrl}
+                                alt=""
+                                aria-hidden="true"
+                                className="absolute inset-0 h-full w-full object-cover filter blur-lg opacity-40 scale-125 pointer-events-none"
+                                referrerPolicy="no-referrer"
+                              />
+                              <img
+                                src={proj.imageUrl}
+                                alt={proj.name || "Project"}
+                                className="relative z-10 max-h-full max-w-full object-contain p-1.5 transition-transform duration-300 group-hover:scale-105"
+                                referrerPolicy="no-referrer"
+                              />
+                            </>
                           ) : (
                             <div className="flex flex-col items-center justify-center gap-1 text-slate-500">
                               <ImageIcon className="w-8 h-8 stroke-1" />
@@ -1885,20 +1885,24 @@ export function ProfileView({
               {/* Visual Cover Banner with user's custom pan & zoom applied */}
               <div className="relative h-56 sm:h-72 bg-[#0d0e12] overflow-hidden flex items-center justify-center">
                 {p.imageUrl ? (
-                  <img
-                    src={p.imageUrl.includes("images.unsplash.com") && p.imageUrl.includes("w=") ? p.imageUrl.replace(/w=\d+/, "w=600") : p.imageUrl}
-                    alt={p.name || "Project"}
-                    loading="eager"
-                    fetchPriority="high"
-                    decoding="async"
-                    className="h-full w-full select-none object-cover"
-                    style={{
-                      objectPosition: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
-                      transform: p.imageZoom && p.imageZoom > 1 ? `scale(${p.imageZoom})` : undefined,
-                      transformOrigin: `${p.imagePosX ?? 50}% ${p.imagePosY ?? 50}%`,
-                    }}
-                    referrerPolicy="no-referrer"
-                  />
+                  <>
+                    <img
+                      src={p.imageUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 h-full w-full object-cover filter blur-xl opacity-40 scale-125 pointer-events-none"
+                      referrerPolicy="no-referrer"
+                    />
+                    <img
+                      src={p.imageUrl.includes("images.unsplash.com") && p.imageUrl.includes("w=") ? p.imageUrl.replace(/w=\d+/, "w=600") : p.imageUrl}
+                      alt={p.name || "Project"}
+                      loading="eager"
+                      fetchPriority="high"
+                      decoding="async"
+                      className="relative z-10 max-h-full max-w-full select-none object-contain p-2"
+                      referrerPolicy="no-referrer"
+                    />
+                  </>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                     <ImageIcon className="w-10 h-10 stroke-1" />
@@ -1983,16 +1987,6 @@ export function ProfileView({
                       href={p.linkUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={() => {
-                        try {
-                          fetch('/api/track/click', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ projectId: p.id }),
-                            keepalive: true,
-                          }).catch(() => {});
-                        } catch {}
-                      }}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] px-4 py-2 text-xs font-semibold text-white border border-white/[0.1] transition-colors shrink-0"
                     >
                       <span>Visit Site</span>
@@ -2203,39 +2197,6 @@ export function ProfileView({
               >
                 {isOwnerOfP ? "Top Up Active Value" : "Book Billboard Spot"}
               </Button>
-            </div>
-
-            {/* Live Embed Badge Card */}
-            <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-4 shadow-xl space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  Live Billboard Rank Badge
-                </span>
-                <img
-                  src={`/api/badge/${p.id}`}
-                  alt="Live Rank Badge"
-                  className="h-5 shrink-0"
-                />
-              </div>
-              <p className="text-[11px] text-slate-400 leading-normal">
-                Embed this live SVG badge on your GitHub README, documentation, or landing page:
-              </p>
-              <div className="p-2 rounded-lg bg-black/60 border border-white/[0.1] text-[10px] font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap select-all">
-                {`[![Featured on BumpOne](https://bumpone.lol/api/badge/${p.id})](https://bumpone.lol/project/${p.id})`}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`[![Featured on BumpOne](https://bumpone.lol/api/badge/${p.id})](https://bumpone.lol/project/${p.id})`);
-                  setProjectBadgeCopied(true);
-                  soundEngine.playSuccess();
-                  setTimeout(() => setProjectBadgeCopied(false), 2000);
-                }}
-                className="w-full py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-amber-300 border border-white/[0.1] text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-              >
-                {projectBadgeCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {projectBadgeCopied ? "Copied Markdown Snippet!" : "Copy Embed Markdown"}
-              </button>
             </div>
           </div>
         </div>

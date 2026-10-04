@@ -72,17 +72,6 @@ export const Badge: React.FC<BadgeProps> = ({
       );
     }
 
-    if (tier === 'lord') {
-      return (
-        <span
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium tracking-tight bg-zinc-700/30 text-zinc-200 border border-zinc-500/30 backdrop-blur-md select-none ${className}`}
-        >
-          <Shield className="w-2.5 h-2.5 text-zinc-300" />
-          <span>#{rank}</span>
-        </span>
-      );
-    }
-
 
     return (
       <span

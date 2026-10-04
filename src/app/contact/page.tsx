@@ -52,7 +52,7 @@ export default function ContactPage() {
 
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
-              href="/arena"
+              href="/"
               className="hidden sm:inline-flex text-xs font-mono text-neutral-400 hover:text-amber-400 transition-colors"
             >
               Live Grid
@@ -79,7 +79,7 @@ export default function ContactPage() {
               MERCHANT &amp; CUSTOMER SUPPORT
             </span>
             <span className="inline-block rounded-full bg-blue-500/10 px-3 py-1 font-mono text-xs font-semibold text-blue-400 border border-blue-500/20">
-              DODO PAYMENTS &amp; RAZORPAY VERIFIED
+              DODO PAYMENTS VERIFIED
             </span>
           </div>
           <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">
@@ -97,7 +97,7 @@ export default function ContactPage() {
               <Mail className="h-5 w-5" />
             </div>
             <h3 className="font-semibold text-white text-sm mb-1">Official Email</h3>
-            <p className="text-xs text-neutral-400 mb-2">For inquiries, billboard support &amp; refunds</p>
+            <p className="text-xs text-neutral-400 mb-2">For inquiries, billboard support &amp; billing</p>
             <a
               href="mailto:support@bumpone.lol"
               className="text-sm font-mono text-amber-400 hover:underline font-medium break-all"

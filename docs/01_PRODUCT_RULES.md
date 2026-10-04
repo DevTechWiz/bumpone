@@ -382,13 +382,14 @@ The result feels like a victory event, not a generic payment receipt.
 
 ## Rule 27 — The Concentric Board Tiers & Graveyard
 
-The board physically represents status across 4 visual tiers:
+The board physically represents status across 5 visual tiers:
 
-1. **#1 The King Throne**: A colossal 4×4 center citadel dominating the board.
-2. **#2–#13 Inner Orbit Elites**: 2×2 prominent display tiles surrounding the King.
-3. **#14–#40 Mid-Orbit Vanguard**: Enhanced 1×1 tiles.
-4. **#41–#100 Outer Perimeter Contenders**: Standard 1×1 tiles.
-5. **#101+ The Graveyard**: Profiles pushed beyond #100 drop into the Graveyard Drawer. Their active value is preserved permanently, and they can top up at any time to reclaim a spot on the live board.
+1. **#1 The King Throne**: A colossal center sovereign anchor dominating the board.
+2. **#2–#5 Champions**: Four cardinal 2×2 anchor tiles (North, South, East, West) framing the King.
+3. **#6–#15 Elite Council**: 10 inner-ring display cards with glowing sky-blue accents.
+4. **#16–#40 Vanguard**: 25 mid-tier cards with emerald borders.
+5. **#41–#100 Perimeter Contenders**: 60 single-cell cards extending to the #100 drop brink.
+6. **#101+ The Graveyard (Billboard Archive)**: Profiles pushed beyond #100 drop into the Billboard Archive. Their active value is preserved permanently, and they can top up at any time to reclaim a spot on the live board.
 
 ---
 

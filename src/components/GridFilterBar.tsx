@@ -21,7 +21,6 @@ export type FilterTierOption =
   | 'champion'
   | 'elite'
   | 'vanguard'
-  | 'lord'
   | 'contender';
 
 export type TimeRangeOption = 'all' | 'today';

@@ -417,7 +417,8 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
       if (target) {
         const found = profiles.find((p) => p.id === target);
         if (found) {
-          setTargetSlotToBump(toSlotItem(found, 1));
+          const rankMatch = slots.findIndex((s) => s.id === target) + 1;
+          setTargetSlotToBump(toSlotItem(found, rankMatch > 0 ? rankMatch : (found.peak_rank || 100)));
           if (!user) {
             setIsAuthOpen(true);
           } else {
@@ -557,7 +558,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                       linkUrl: 'https://bumpone.lol',
                       title,
                       bidderName: handle.startsWith('@') ? handle : `@${handle}`,
-                      amountPaid: amount,
+                      activeValue: amount,
                       createdAt: Date.now(),
                     },
                     droppedItem: {
@@ -567,7 +568,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                       linkUrl: 'https://bumpone.lol',
                       title: 'Displaced Contender',
                       bidderName: '@displaced',
-                      amountPaid: Math.floor(Number(row.previous_active_value_minor || 0) / 100),
+                      activeValue: Math.floor(Number(row.previous_active_value_minor || 0) / 100),
                       createdAt: Date.now(),
                     },
                     previousRank: prevRank,
@@ -818,15 +819,14 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
         if (filterState.tier === 'champion' && (slot.rank < 2 || slot.rank > 5)) return;
         if (filterState.tier === 'elite' && (slot.rank < 6 || slot.rank > 15)) return;
         if (filterState.tier === 'vanguard' && (slot.rank < 16 || slot.rank > 40)) return;
-        if (filterState.tier === 'lord' && (slot.rank < 16 || slot.rank > 40)) return;
         if (filterState.tier === 'contender' && (slot.rank < 41 || slot.rank > 100)) return;
       }
       if (isCategoryActive) {
         const prof = byId.get(slot.id);
         if (!prof || prof.category !== filterState.category) return;
       }
-      if (filterState.minPrice !== null && slot.amountPaid < filterState.minPrice) return;
-      if (filterState.maxPrice !== null && slot.amountPaid > filterState.maxPrice) return;
+      if (filterState.minPrice !== null && slot.activeValue < filterState.minPrice) return;
+      if (filterState.maxPrice !== null && slot.activeValue > filterState.maxPrice) return;
       if (isTodayActive) {
         const prof = byId.get(slot.id);
         if (!prof || prof.last_bump_at < dayAgo) return;
@@ -874,16 +874,16 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
   }, [offboard]);
 
   // Entry floor: active value of #100 (informational; minimum top-up is $10).
-  const entryFloor = slots.length >= 100 ? slots[99].amountPaid : 0;
+  const entryFloor = slots.length >= 100 ? Math.max(10, slots[99].activeValue) : 0;
 
   const stats = useMemo(() => {
-    const totalValue = slots.reduce((acc, s) => acc + s.amountPaid, 0);
+    const totalValue = slots.reduce((acc, s) => acc + s.activeValue, 0);
     return {
       totalSlots: 100,
       activeSlotsCount: Math.min(100, slots.length),
       priceFloor: entryFloor,
-      rank1Bid: slots[0]?.amountPaid || 0,
-      rank10Bid: slots[9]?.amountPaid || 0,
+      rank1Bid: slots[0]?.activeValue || 0,
+      rank10Bid: slots[9]?.activeValue || 0,
       totalBidsVolume: totalValue,
       totalBumpsCount: offboard.length,
     };
@@ -1369,6 +1369,9 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             leftIcon={<Zap className="w-3.5 h-3.5" />}
             onClick={() => {
               soundEngine.playClick();
+              if (slots[0]) {
+                setTargetSlotToBump(slots[0]);
+              }
               if (!user) {
                 setIsAuthOpen(true);
                 return;
@@ -1382,7 +1385,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                 BUMP #1 (<Skeleton variant="text" width={28} height={12} className="inline-block" />)
               </span>
             ) : (
-              `BUMP #1 ($${Math.max(MIN_TOP_UP, entryFloor + 10)})`
+              `BUMP #1 ($${(slots[0]?.activeValue ?? 100) + 10})`
             )}
           </Button>
         </div>
@@ -1427,7 +1430,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                 Rank #{hoveredSlot.rank} {hoveredSlot.title}
               </span>
               <span className="text-neutral-400 hidden md:inline">
-                Held by <strong className="text-neutral-200">{hoveredSlot.bidderName}</strong> at <strong className="text-emerald-400 font-mono">${hoveredSlot.amountPaid}</strong> active value
+                Held by <strong className="text-neutral-200">{hoveredSlot.bidderName}</strong> at <strong className="text-emerald-400 font-mono">${hoveredSlot.activeValue}</strong> active value
               </span>
             </div>
           ) : (
@@ -1439,15 +1442,6 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             </div>
           )}
           <div className="shrink-0 pl-2 flex items-center gap-2.5">
-            <div className="hidden xl:flex items-center gap-1.5 text-[9px] text-neutral-400 font-mono">
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">B</span> Book Spot
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">W</span> Activity
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">L</span> Leaderboard
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">G</span> Archive
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">?</span> Rules
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">M</span> Mute
-            </div>
-            <div className="hidden xl:block h-2.5 w-px bg-white/[0.1]" />
             <span className="hidden lg:inline text-neutral-400 font-mono text-[10px]">
               Total Active Value:{' '}
               {!hasMounted || isBoardLoading ? (
@@ -1488,13 +1482,21 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
                 <strong className="font-bold">{offboard.length}</strong>
               )}
             </span>
-            <div className="hidden xl:flex items-center gap-2 border-l border-white/[0.1] pl-2 text-[9px] text-neutral-400 font-mono">
+            <div className="hidden lg:flex items-center gap-2 border-l border-white/[0.1] pl-2.5 text-[9px] text-neutral-400 font-mono">
               <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Terms
               </a>
               <span>•</span>
               <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Privacy
+              </a>
+              <span>•</span>
+              <a href="/refund" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
+                Refunds
+              </a>
+              <span>•</span>
+              <a href="/contact" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
+                Contact
               </a>
             </div>
           </div>

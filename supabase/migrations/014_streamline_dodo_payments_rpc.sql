@@ -1,10 +1,7 @@
--- 011_update_process_dodo_purchase.sql
--- Updates process_dodo_purchase with accurate payments table schema and collision-free ranking recalculation
+-- 014_streamline_dodo_payments_rpc.sql
+-- Solidifies Dodo Payments as the sole payment processor for BumpOne.
 
-create sequence if not exists global_event_sequence_seq start 1000;
-create sequence if not exists board_events_event_sequence_seq start 1000;
-
-create or replace function process_dodo_purchase(
+create or replace function public.process_dodo_purchase(
   p_event_id text,
   p_payment_id text,
   p_amount_minor bigint,
@@ -165,7 +162,7 @@ begin
     previous_rank, new_rank, status
   ) values (
     v_project_id, v_user_id, case when v_quote_id is not null then v_quote_id::uuid else null end,
-    coalesce(p_payload->>'gateway', 'dodo'),
+    'dodo',
     p_payment_id, p_amount_minor, 'USD',
     v_old_value_minor, v_new_value_minor,
     v_old_rank, least(v_new_rank, 100),
@@ -216,7 +213,7 @@ begin
   insert into payment_events (
     provider, provider_event_id, payment_id, event_type, payload
   ) values (
-    coalesce(p_payload->>'gateway', 'dodo'), p_event_id, p_payment_id, 'payment.succeeded', p_payload
+    'dodo', p_event_id, p_payment_id, 'payment.succeeded', p_payload
   );
 
   return jsonb_build_object(
@@ -231,5 +228,5 @@ begin
 end;
 $$;
 
-revoke execute on function process_dodo_purchase from public, anon, authenticated;
-grant execute on function process_dodo_purchase to service_role;
+revoke execute on function public.process_dodo_purchase from public, anon, authenticated;
+grant execute on function public.process_dodo_purchase to service_role;

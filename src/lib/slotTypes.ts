@@ -1,4 +1,4 @@
-export type RankTier = 'king' | 'champion' | 'elite' | 'vanguard' | 'lord' | 'contender';
+export type RankTier = 'king' | 'champion' | 'elite' | 'vanguard' | 'contender';
 
 export const getRankTier = (rank: number): RankTier => {
   if (rank === 1) return 'king';
@@ -16,7 +16,7 @@ export interface SlotItem {
   title: string;
   handle?: string;
   bidderName: string;
-  amountPaid: number;
+  activeValue: number;
   createdAt: number;
   isNew?: boolean;
   aspectRatio?: number;

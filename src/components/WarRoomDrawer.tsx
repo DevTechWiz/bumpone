@@ -328,7 +328,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
 
                   <p className="text-slate-200 leading-relaxed">
                     <strong className="text-white font-semibold">{event.promotedItem.bidderName}</strong> paid{' '}
-                    <span className="font-mono text-emerald-400 font-bold">${event.promotedItem.amountPaid}</span> to
+                    <span className="font-mono text-emerald-400 font-bold">${event.promotedItem.activeValue}</span> to
                     claim <strong className="text-sky-300">Rank #{event.newRank}</strong> ({event.promotedItem.title}
                     ).
                   </p>
@@ -400,11 +400,17 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
           kingSlot ? (
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-black border border-amber-400/40 text-center relative overflow-hidden">
-                <div className="w-16 h-16 rounded-2xl mx-auto overflow-hidden border-2 border-amber-400 shadow-xl mb-3">
+                <div className="w-16 h-16 rounded-2xl mx-auto overflow-hidden border-2 border-amber-400 shadow-xl mb-3 relative flex items-center justify-center bg-black/40">
+                  <img
+                    src={kingSlot.imageUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover filter blur-md opacity-40 scale-125 pointer-events-none"
+                  />
                   <img
                     src={kingSlot.imageUrl}
                     alt={kingSlot.title}
-                    className="w-full h-full object-cover"
+                    className="relative z-10 max-h-full max-w-full object-contain p-1"
                   />
                 </div>
 
@@ -421,7 +427,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
                 <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs font-mono">
                   <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08]">
                     <span className="text-[10px] text-slate-400 block uppercase">Current Bounty</span>
-                    <span className="text-sm font-bold text-emerald-400">${kingSlot.amountPaid}</span>
+                    <span className="text-sm font-bold text-emerald-400">${kingSlot.activeValue}</span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08]">
                     <span className="text-[10px] text-slate-400 block uppercase">Center Footprint</span>
@@ -435,7 +441,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
                     className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all"
                   >
                     <Crown className="w-3.5 h-3.5" />
-                    Bump the King (${kingSlot.amountPaid + 10})
+                    Bump the King (${kingSlot.activeValue + 10})
                   </button>
                 </div>
               </div>

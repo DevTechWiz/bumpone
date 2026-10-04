@@ -94,21 +94,18 @@ export default function TermsPage() {
               <span className="text-amber-400 font-mono text-sm">03.</span> Pricing, Payment &amp; Billing
             </h2>
             <p className="mb-3">
-              All promotional packages are priced transparently as one-time digital service fees in Indian Rupees (INR) and US Dollars (USD):
+              All billboard spot bids, top-ups, and promotional placements are priced transparently as one-time digital visibility service fees in US Dollars (USD):
             </p>
             <ul className="list-disc pl-6 space-y-2 text-neutral-300">
               <li>
-                <strong>Starter Showcase (₹199 / $2.99):</strong> Standard digital directory listing with verified do-follow project link and category classification.
+                <strong>Spot Top-Ups &amp; Bumps:</strong> Dynamic bidding starting from $10 USD. Every dollar paid is permanently credited to your project&apos;s lifetime and active ranking value.
               </li>
               <li>
-                <strong>Featured Billboard (₹499 / $5.99):</strong> Highlighted showcase placement, priority category spotlight, and verified project badge.
-              </li>
-              <li>
-                <strong>Hero Billboard (₹999 / $11.99):</strong> Premier top-tier homepage billboard spotlight placement with high visibility.
+                <strong>Digital Directory Placements:</strong> Instant do-follow backlink, responsive billboard tile rendering, and real-time live grid ranking.
               </li>
             </ul>
             <p className="mt-3">
-              All payments are processed securely through our authorized payment processing and Merchant of Record (MoR) partners, including <strong>Dodo Payments</strong> and <strong>Razorpay Software Private Limited</strong>. Depending on your region, checkout will be billed in USD or INR. We do not store or process sensitive debit/credit card credentials on our servers.
+              All payments are processed securely through our authorized Merchant of Record (MoR) partner, <strong>Dodo Payments</strong>. Checkout is billed in USD. Because billboard slot assignment, rank recalculation, and do-follow backlinks are rendered instantaneously upon payment confirmation, all purchases are final and strictly non-refundable as detailed in our <Link href="/refund" className="text-amber-400 hover:underline">Refund &amp; Cancellation Policy</Link>. We do not store or process sensitive debit/credit card credentials on our servers.
             </p>
           </section>
 
@@ -125,7 +122,7 @@ export default function TermsPage() {
               <li>Defamatory, hateful, infringing, or adult content.</li>
             </ul>
             <p className="mt-3">
-              BumpOne reserves the right to reject, unpublish, or request modifications to any billboard listing that violates these standards. In the event of moderation rejection, a full refund will be provided.
+              BumpOne reserves the right to reject, unpublish, or permanently remove any billboard listing that violates these Acceptable Use standards at any time without notice and without refund. Submitting malicious, deceptive, fraudulent, or unlawful content constitutes a material breach of these Terms, resulting in immediate delisting and complete forfeiture of all fees paid.
             </p>
           </section>
 

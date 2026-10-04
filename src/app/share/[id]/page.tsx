@@ -70,13 +70,6 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
         <h1 className="m-0 font-mono text-[44px] font-extrabold text-amber-200">#{rank}</h1>
         <div className="my-3 text-xl font-bold text-white">{project.title} just bumped to #{rank}</div>
         <p className="text-sm text-slate-300">{money(activeValue)} active value.</p>
-        <div className="my-4 flex justify-center">
-          <img
-            src={`/api/badge/${project.id}`}
-            alt={`${project.title} live badge`}
-            className="h-6"
-          />
-        </div>
         <div className="mt-5 flex justify-center gap-2.5">
           <Link
             href={`/project/${project.id}`}

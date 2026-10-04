@@ -220,7 +220,7 @@ const RadarMiniMapComponent: React.FC<RadarMiniMapProps> = ({
                           setActiveTooltip({
                             rank,
                             title: slot?.title || `Slot #${rank}`,
-                            amount: slot?.amountPaid || 0,
+                            amount: slot?.activeValue || 0,
                             tier: coord.tier,
                             x: rect.left + rect.width / 2,
                             y: rect.top,
@@ -252,7 +252,7 @@ const RadarMiniMapComponent: React.FC<RadarMiniMapProps> = ({
               const tip = activeTooltip ?? {
                 rank: 1,
                 title: king?.title ?? 'Slot #1',
-                amount: king?.amountPaid ?? 0,
+                amount: king?.activeValue ?? 0,
               };
               return (
                 <div className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.1] flex items-center justify-between text-[10px] font-mono">

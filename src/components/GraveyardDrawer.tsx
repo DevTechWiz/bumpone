@@ -64,7 +64,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {item.owner_name || item.bidderName} &bull; Active Value: ${item.amountPaid}
+                      {item.owner_name || item.bidderName} &bull; Active Value: ${item.activeValue}
                     </p>
                   </div>
                 </div>

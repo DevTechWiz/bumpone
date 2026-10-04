@@ -9,7 +9,7 @@ export interface GridSlotData {
   imageUrl: string;
   title: string;
   linkUrl?: string;
-  amountPaid: number;
+  activeValue: number;
   bidderName?: string;
   timestamp?: string;
   isNew?: boolean;
@@ -53,7 +53,6 @@ const GridCellComponent: React.FC<GridCellProps> = ({
     champion: 'border-2 border-purple-400/90 shadow-xl shadow-purple-500/30 ring-1 ring-purple-400/40',
     elite: 'border-[1.5px] border-sky-400/70 shadow-lg shadow-sky-500/25',
     vanguard: 'border border-emerald-400/40 shadow-sm shadow-emerald-500/15',
-    lord: 'border border-zinc-500/35 shadow-md shadow-black/40 hover:border-zinc-400/60',
     contender: 'border border-white/[0.08] hover:border-white/[0.25]',
   };
   const activeBorder = borderClassMap[tier] || borderClassMap.contender;
@@ -114,25 +113,29 @@ const GridCellComponent: React.FC<GridCellProps> = ({
     >
       {/* Background Image / Fallback */}
       {!imageError && slot.imageUrl ? (
-        <img
-          src={optimizedSrc}
-          alt={slot.title || `Slot #${slot.rank}`}
-          onError={() => setImageError(true)}
-          loading={isHero ? "eager" : "lazy"}
-          fetchPriority={isHero ? "high" : "low"}
-          decoding="async"
-          className={`w-full h-full transition-transform duration-300 group-hover:scale-105 ${
-            slot.imageFit === "contain" ? "object-contain bg-black/90" : "object-cover"
-          }`}
-          style={{
-            objectPosition: `${slot.imagePosX ?? 50}% ${slot.imagePosY ?? 50}%`,
-            transform: `${slot.imageZoom && slot.imageZoom > 1 ? `scale(${slot.imageZoom})` : ""} ${
-              slot.imageRotation ? `rotate(${slot.imageRotation}deg)` : ""
-            }`.trim() || undefined,
-            transformOrigin: `${slot.imagePosX ?? 50}% ${slot.imagePosY ?? 50}%`,
-          }}
-          referrerPolicy="no-referrer"
-        />
+        <div className="absolute inset-0 w-full h-full overflow-hidden bg-[#0a0a0c]">
+          {/* Blurred backdrop image to seamlessly fill letterbox/pillarbox space */}
+          <img
+            src={optimizedSrc}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover filter blur-md opacity-45 scale-125 pointer-events-none transform-gpu"
+            referrerPolicy="no-referrer"
+          />
+          {/* Foreground fit-mode uncropped crisp image */}
+          <img
+            src={optimizedSrc}
+            alt={slot.title || `Slot #${slot.rank}`}
+            onError={() => setImageError(true)}
+            loading={isHero ? "eager" : "lazy"}
+            fetchPriority={isHero ? "high" : "low"}
+            decoding="async"
+            className="relative z-[1] w-full h-full object-contain transition-transform duration-300 group-hover:scale-105 p-0.5"
+            referrerPolicy="no-referrer"
+          />
+        </div>
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#222328] to-[#121316] p-1.5 text-center">
           {tier === 'king' && <Crown className="w-8 h-8 text-amber-400 mb-1" />}
@@ -144,7 +147,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
           </span>
           {tier !== 'contender' && (
             <span className="text-[10px] font-mono text-zinc-200 font-semibold">
-              ${formatNumber(slot.amountPaid)}
+              ${formatNumber(slot.activeValue)}
             </span>
           )}
         </div>
@@ -166,7 +169,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
       {/* Top right: Price Badge in refined dark glass */}
       <div className="absolute top-1 right-1 z-10 pointer-events-none">
         <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/80 text-slate-100 border border-white/[0.14] shadow-sm">
-          ${slot.amountPaid >= 1000 ? `${(slot.amountPaid / 1000).toFixed(1)}k` : slot.amountPaid}
+          ${slot.activeValue >= 1000 ? `${(slot.activeValue / 1000).toFixed(1)}k` : slot.activeValue}
         </span>
       </div>
 
@@ -179,7 +182,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
                 <Crown className="w-3 h-3 text-amber-400" /> CENTER KING #1
               </span>
               <span className="text-xs font-mono font-bold text-amber-200">
-                ${formatNumber(slot.amountPaid)}
+                ${formatNumber(slot.activeValue)}
               </span>
             </div>
             <h3 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-sm">
@@ -203,7 +206,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
                 💎 #{slot.rank} CHAMPION
               </span>
               <span className="text-[11px] font-mono font-bold text-purple-200">
-                ${formatNumber(slot.amountPaid)}
+                ${formatNumber(slot.activeValue)}
               </span>
             </div>
             <h3 className="text-xs font-bold text-white truncate drop-shadow-sm">
@@ -237,7 +240,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
               </h4>
             </div>
             <span className="text-[10px] sm:text-xs font-mono font-bold text-neutral-200">
-              ${formatNumber(slot.amountPaid)}
+              ${formatNumber(slot.activeValue)}
             </span>
           </div>
 
@@ -268,7 +271,7 @@ export const GridCell = React.memo(GridCellComponent, (prev, next) => {
     prev.className === next.className &&
     prev.slot.id === next.slot.id &&
     prev.slot.rank === next.slot.rank &&
-    prev.slot.amountPaid === next.slot.amountPaid &&
+    prev.slot.activeValue === next.slot.activeValue &&
     prev.slot.title === next.slot.title &&
     prev.slot.imageUrl === next.slot.imageUrl &&
     prev.slot.isNew === next.slot.isNew &&

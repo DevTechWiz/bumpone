@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
       const proj = row.projects || {};
       const title = row.project_title_snapshot || proj.title || 'Contender';
       const handle = row.project_handle_snapshot || proj.handle || '@unknown';
-      const amountPaid = Math.floor(Number(row.new_active_value_minor || 0) / 100);
-      const prevAmount = Math.floor(Number(row.previous_active_value_minor || 0) / 100);
+      const activeValue = Math.floor(Number(row.new_active_value_minor || 0) / 100);
+      const prevActiveValue = Math.floor(Number(row.previous_active_value_minor || 0) / 100);
       const imageUrl = proj.image_path || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80';
       const linkUrl = proj.destination_url || 'https://bumpone.lol';
       const timestamp = new Date(row.created_at).getTime();
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         linkUrl,
         title,
         bidderName: handle.startsWith('@') ? handle : `@${handle}`,
-        amountPaid,
+        activeValue,
         createdAt: timestamp,
       };
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
         linkUrl,
         title: 'Displaced Contender',
         bidderName: '@displaced',
-        amountPaid: prevAmount,
+        activeValue: prevActiveValue,
         createdAt: timestamp,
       };
 

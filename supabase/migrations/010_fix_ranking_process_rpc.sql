@@ -37,7 +37,7 @@ begin
   -- 1. Webhook Idempotency Check: Don't re-process duplicate events
   if exists (
     select 1 from payment_events 
-    where provider in ('dodo', 'razorpay') and provider_event_id = p_event_id
+    where provider = 'dodo' and provider_event_id = p_event_id
   ) then
     return jsonb_build_object('status', 'already_processed');
   end if;
@@ -165,7 +165,7 @@ begin
     previous_rank, new_rank, status
   ) values (
     v_project_id, v_user_id, case when v_quote_id is not null then v_quote_id::uuid else null end,
-    coalesce(p_payload->>'gateway', 'razorpay'),
+    coalesce(p_payload->>'gateway', 'dodo'),
     p_payment_id, p_amount_minor, 'USD',
     v_old_value_minor, v_new_value_minor,
     v_old_rank, least(v_new_rank, 100),
@@ -216,7 +216,7 @@ begin
   insert into payment_events (
     provider, provider_event_id, payment_id, event_type, payload
   ) values (
-    coalesce(p_payload->>'gateway', 'razorpay'), p_event_id, p_payment_id, 'payment.succeeded', p_payload
+    coalesce(p_payload->>'gateway', 'dodo'), p_event_id, p_payment_id, 'payment.succeeded', p_payload
   );
 
   return jsonb_build_object(

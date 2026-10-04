@@ -33,9 +33,6 @@ export async function getProject(id: string): Promise<Profile | null> {
         reactions_eyes,
         reactions_heart,
         reactions_laugh,
-        image_pos_x,
-        image_pos_y,
-        image_zoom,
         views_count,
         created_at,
         updated_at,
@@ -98,9 +95,6 @@ export async function getProject(id: string): Promise<Profile | null> {
       last_bump_at: lastBumpAt,
       journey: [],
       reactions,
-      imagePosX: (project as any).image_pos_x,
-      imagePosY: (project as any).image_pos_y,
-      imageZoom: (project as any).image_zoom,
     };
   } catch (e) {
     console.warn('Could not load project on server:', e);

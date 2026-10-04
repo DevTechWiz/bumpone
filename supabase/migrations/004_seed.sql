@@ -73,7 +73,7 @@ begin
   -- Only seed if projects table is empty
   if not exists (select 1 from projects limit 1) then
     for i in 1..100 loop
-      v_val_minor := (101 - i) * 100; -- in USD cents ($100 = 10000 cents, $1 = 100 cents)
+      v_val_minor := (110 - i) * 100; -- in USD cents ($109 at #1 down to $10 at #100)
       
       -- Assign varied categories & brands
       case (i % 7)
@@ -125,12 +125,12 @@ begin
         title, handle, image_path, destination_url,
         category_id, current_rank, current_active_value_minor,
         total_paid_minor, ranking_sequence, is_active,
-        image_pos_x, image_pos_y, image_zoom, frame, views_count
+        views_count
       ) values (
         v_title, v_handle, v_img, v_url,
         v_cat, i, v_val_minor,
         v_val_minor, 1000 + i, true,
-        50, 50, 1.0, 'default', (101 - i) * 37
+        (101 - i) * 37
       ) returning id into v_project_id;
 
       -- Initial seed board displacement event

@@ -35,9 +35,7 @@ export default async function ProjectShowcasePage({
   return (
     <>
       {preloadImgUrl && (
-        <head>
-          <link rel="preload" as="image" href={preloadImgUrl} fetchPriority="high" />
-        </head>
+        <link rel="preload" as="image" href={preloadImgUrl} fetchPriority="high" />
       )}
       <ProjectShowcaseClient id={id} initialProject={project} />
     </>
