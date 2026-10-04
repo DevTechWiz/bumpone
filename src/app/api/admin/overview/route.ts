@@ -15,7 +15,6 @@ export async function GET() {
     { count: activeProfiles },
     { count: openReports },
     { data: payments },
-    stateResult,
   ] = await Promise.all([
     supabaseAdmin
       .from('projects')
@@ -30,11 +29,6 @@ export async function GET() {
       .from('payments')
       .select('amount_minor')
       .eq('status', 'paid'),
-    supabaseAdmin
-      .from('system_state')
-      .select('purchases_paused')
-      .eq('id', 'global')
-      .maybeSingle(),
   ]);
 
   const totalRevenue = Math.round(
@@ -48,6 +42,6 @@ export async function GET() {
     totalRevenue,
     activeProfiles: activeProfiles || 0,
     openReports: openReports || 0,
-    purchasesPaused: Boolean(stateResult?.data?.purchases_paused),
+    purchasesPaused: process.env.PURCHASES_PAUSED === 'true',
   });
 }

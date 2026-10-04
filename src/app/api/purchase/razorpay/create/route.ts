@@ -41,14 +41,6 @@ export async function POST(request: NextRequest) {
     if (process.env.PURCHASES_PAUSED === 'true') {
       return NextResponse.json({ error: 'Purchases are temporarily paused.' }, { status: 503 });
     }
-    try {
-      const { data: state } = await supabaseAdmin.from('system_state').select('purchases_paused').eq('id', 'global').maybeSingle();
-      if (state?.purchases_paused) {
-        return NextResponse.json({ error: 'Purchases are temporarily paused.' }, { status: 503 });
-      }
-    } catch {
-      // Gracefully ignore if system_state table is consolidated or removed
-    }
 
     const { data: existingUser, error: existingUserError } = await supabaseAdmin.from('users').select('id, handle').eq('id', user.id).maybeSingle();
     if (existingUserError) throw new Error('Unable to verify user account');
