@@ -34,7 +34,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
                 <Zap className="w-3.5 h-3.5 animate-pulse" />
               </div>
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                Live Bump Event
+                Live Billboard Bump
               </span>
             </div>
             <button
@@ -50,7 +50,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
             {/* Promoted Challenger */}
             <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08]">
               <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
-                Slotted In
+                Promoted To
               </span>
               <p className="font-semibold text-white truncate mt-0.5">
                 {event.promotedItem.title}
@@ -66,7 +66,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
             {/* Dropped Casualty */}
             <div className="p-2.5 rounded-xl bg-rose-950/30 border border-rose-500/25">
               <span className="text-[10px] font-mono text-rose-300 uppercase tracking-wider block">
-                Off-Board (#101)
+                Archived (#101)
               </span>
               <p className="font-medium text-slate-300 truncate mt-0.5">
                 {event.droppedItem.title}
@@ -84,11 +84,11 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
 
           {/* Description */}
           <p className="text-[11px] text-slate-300 leading-snug">
-            <strong>{event.promotedItem.bidderName}</strong> sponsored{' '}
+            <strong>{event.promotedItem.bidderName}</strong> placed{' '}
             <strong className="text-white font-mono">${event.promotedItem.amountPaid}</strong>, reaching <strong>Rank #{event.newRank}</strong>.{' '}
             {event.droppedItem && event.droppedItem.id !== event.promotedItem.id ? (
               <span>
-                <strong>{event.droppedItem.title}</strong> was moved to Rank #101 in the Directory Archive. Slot #100 remains live on the billboard.
+                <strong>{event.droppedItem.title}</strong> was moved to Rank #101 in the Billboard Archive. All top 100 spots remain live on the billboard.
               </span>
             ) : null}
           </p>

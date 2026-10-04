@@ -188,7 +188,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
               className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2 font-bold text-neutral-950 text-xs sm:text-sm hover:bg-amber-300 transition-all shadow-lg shadow-amber-400/20 active:scale-95"
             >
               <Sparkles className="h-4 w-4" />
-              <span>Sponsor a Slot — ₹199 / $2.99</span>
+              <span>Book Billboard Spot — ₹199 / $2.99</span>
             </button>
           </div>
         </div>
@@ -202,18 +202,18 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
         <div className="relative mx-auto max-w-5xl px-4 sm:px-6 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/[0.08] px-3.5 py-1 text-xs font-mono font-medium text-amber-300 mb-6">
             <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
-            <span>Curated Digital Showcase &amp; Developer Billboard</span>
+            <span>Digital Billboard for Developers &amp; Creators</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white tracking-tight leading-[1.15]">
-            Featured Digital Billboard Space for <br className="hidden sm:inline" />
+            Digital Billboard Space for <br className="hidden sm:inline" />
             <span className="bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
               Modern Tech &amp; Software Projects
             </span>
           </h1>
 
           <p className="mt-5 max-w-2xl mx-auto text-base sm:text-lg text-neutral-300 leading-relaxed">
-            Discover high-performance apps, AI utilities, developer tools, and tech products. Sponsor a featured digital billboard slot to showcase your project to developers, creators, and early adopters.
+            Discover high-performance apps, AI utilities, developer tools, and tech products. Book your billboard spot to get your project in front of developers, creators, and early adopters.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -221,14 +221,14 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
               onClick={() => handleOpenSponsorModal("featured")}
               className="inline-flex items-center gap-2.5 rounded-xl bg-amber-400 px-6 py-3 font-bold text-neutral-950 text-sm hover:bg-amber-300 transition-all shadow-xl shadow-amber-400/25 active:scale-95"
             >
-              <span>Reserve Sponsored Space</span>
+              <span>Book Billboard Spot</span>
               <ArrowRight className="h-4 w-4" />
             </button>
             <a
               href="#showcase"
               className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-5 py-3 font-medium text-neutral-300 text-sm hover:bg-white/[0.08] hover:text-white transition-all"
             >
-              <span>Explore Directory</span>
+              <span>Explore Billboard</span>
             </a>
           </div>
 
@@ -259,13 +259,13 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
             <span className="text-xs font-mono font-semibold tracking-wider text-amber-400 uppercase">
-              Transparent Sponsorship Plans
+              Transparent Billboard Plans
             </span>
             <h2 className="mt-2 text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-              Promote Your Software to our Audience
+              Promote Your Software on the Billboard
             </h2>
             <p className="mt-3 text-sm text-neutral-400">
-              Clear, one-time sponsorship packages with zero recurring surprises. Choose your placement tier and go live instantly.
+              Clear, one-time billboard packages with zero recurring surprises. Choose your placement tier and go live instantly.
             </p>
           </div>
 
@@ -274,7 +274,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
             <div className="rounded-2xl border border-white/10 bg-[#12141a] p-6 flex flex-col justify-between hover:border-white/20 transition-all">
               <div>
                 <div className="text-xs font-mono font-bold text-neutral-400 uppercase tracking-wider mb-2">
-                  Starter Directory
+                  Starter Billboard
                 </div>
                 <div className="flex items-baseline gap-1.5 mb-4">
                   <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono">₹199</span>
@@ -288,7 +288,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                 <ul className="space-y-3 text-xs text-neutral-300">
                   <li className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-                    <span>30-Day Curated Directory Listing</span>
+                    <span>30-Day Curated Billboard Spot</span>
                   </li>
                   <li className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
@@ -309,7 +309,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                 onClick={() => handleOpenSponsorModal("starter")}
                 className="mt-8 w-full rounded-xl border border-white/15 bg-white/[0.04] py-2.5 font-bold text-white text-xs hover:bg-white/[0.08] transition-colors"
               >
-                Sponsor Starter Slot — ₹199 / $2.99
+                Book Starter Spot — ₹199 / $2.99
               </button>
             </div>
 
@@ -339,7 +339,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                   </li>
                   <li className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
-                    <span>Priority Category Showcase Placement</span>
+                    <span>Priority Category Billboard Placement</span>
                   </li>
                   <li className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
@@ -360,7 +360,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                 onClick={() => handleOpenSponsorModal("featured")}
                 className="mt-8 w-full rounded-xl bg-amber-400 py-3 font-bold text-neutral-950 text-xs sm:text-sm hover:bg-amber-300 transition-colors shadow-lg shadow-amber-400/20"
               >
-                Sponsor Featured Billboard — ₹499 / $5.99
+                Book Featured Billboard — ₹499 / $5.99
               </button>
             </div>
 
@@ -376,7 +376,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                   <span className="text-xs text-neutral-400 font-mono">/ one-time</span>
                 </div>
                 <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                  Maximum impact placement positioned in the primary showcase banner section.
+                  Maximum impact placement positioned in the primary billboard banner section.
                 </p>
 
                 <ul className="space-y-3 text-xs text-neutral-300">
@@ -386,7 +386,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                   </li>
                   <li className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-purple-400 flex-shrink-0" />
-                    <span>Full-Width Hero Showcase Banner</span>
+                    <span>Full-Width Hero Billboard Banner</span>
                   </li>
                   <li className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-purple-400 flex-shrink-0" />
@@ -403,7 +403,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                 onClick={() => handleOpenSponsorModal("hero")}
                 className="mt-8 w-full rounded-xl border border-purple-500/30 bg-purple-500/10 py-2.5 font-bold text-purple-300 text-xs hover:bg-purple-500/20 transition-colors"
               >
-                Sponsor Hero Spotlight — ₹999 / $11.99
+                Book Hero Spotlight — ₹999 / $11.99
               </button>
             </div>
           </div>
@@ -538,15 +538,15 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                 <div className="h-14 w-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
                   <CheckCircle2 className="h-8 w-8" />
                 </div>
-                <h3 className="text-xl font-bold text-white">Sponsorship Order Confirmed!</h3>
+                <h3 className="text-xl font-bold text-white">Billboard Spot Confirmed!</h3>
                 <p className="text-sm text-neutral-300 max-w-md mx-auto">
-                  Thank you for your digital showcase reservation. Our team has verified your details and your slot is now active in the directory.
+                  Thank you for booking your billboard spot. Your project is now active on the billboard.
                 </p>
                 <button
                   onClick={() => setIsModalOpen(false)}
                   className="mt-4 rounded-xl bg-amber-400 px-6 py-2.5 font-bold text-neutral-950 text-xs hover:bg-amber-300"
                 >
-                  Return to Showcase
+                  Return to Billboard
                 </button>
               </div>
             ) : (
@@ -555,7 +555,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                   <span className="text-xs font-mono font-semibold text-amber-400 uppercase">
                     Secure Global Checkout &bull; Instant Placement
                   </span>
-                  <h3 className="text-xl font-black text-white mt-1">Sponsor a Digital Showcase Slot</h3>
+                  <h3 className="text-xl font-black text-white mt-1">Book a Digital Billboard Spot</h3>
                   <p className="text-xs text-neutral-400 mt-1">
                     Fill in your project details. Payments are processed securely via authorized partners (Cards, UPI, Net Banking).
                   </p>
@@ -679,7 +679,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-neutral-300 mb-1">Sponsor Contact Email *</label>
+                  <label className="block text-xs font-mono text-neutral-300 mb-1">Contact Email *</label>
                   <input
                     type="email"
                     required
@@ -811,7 +811,7 @@ export function ShowcaseBillboardPage({ initialProfiles = [] }: ShowcaseBillboar
           <div className="pt-8 border-t border-white/[0.08] flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-500 gap-3">
             <div>&copy; 2026 BumpOne.lol • All Rights Reserved.</div>
             <div className="text-[11px] text-neutral-600">
-              Curated Web Directory &amp; Digital Billboard Advertising Services.
+              Curated Web Directory &amp; Digital Billboard Services.
             </div>
           </div>
         </div>

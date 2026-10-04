@@ -86,7 +86,7 @@ export default function ContactPage() {
             Contact &amp; Merchant Information
           </h1>
           <p className="mt-3 text-sm md:text-base leading-relaxed text-neutral-400 max-w-3xl">
-            Have questions regarding digital billboard sponsorships, directory listings, or payment verification? Reach our dedicated operations desk. For global orders, billing and compliance are handled via our authorized Merchant of Record, <strong>Dodo Payments</strong>.
+            Have questions regarding digital billboard bookings, directory listings, or payment verification? Reach our dedicated operations desk. For global orders, billing and compliance are handled via our authorized Merchant of Record, <strong>Dodo Payments</strong>.
           </p>
         </div>
 
@@ -97,7 +97,7 @@ export default function ContactPage() {
               <Mail className="h-5 w-5" />
             </div>
             <h3 className="font-semibold text-white text-sm mb-1">Official Email</h3>
-            <p className="text-xs text-neutral-400 mb-2">For inquiries, sponsorship support &amp; refunds</p>
+            <p className="text-xs text-neutral-400 mb-2">For inquiries, billboard support &amp; refunds</p>
             <a
               href="mailto:support@bumpone.lol"
               className="text-sm font-mono text-amber-400 hover:underline font-medium break-all"
@@ -135,13 +135,13 @@ export default function ContactPage() {
         <section className="mb-12 rounded-2xl border border-white/[0.08] bg-[#14151b] p-6 md:p-8">
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck className="h-5 w-5 text-amber-400" />
-            <h2 className="text-xl font-bold text-white">About BumpOne Digital Showcase</h2>
+            <h2 className="text-xl font-bold text-white">About BumpOne Digital Billboard</h2>
           </div>
           <p className="text-sm leading-relaxed text-neutral-300 mb-4">
-            BumpOne (&quot;BumpOne.lol&quot;) is a modern, curated digital showcase and tech promotional billboard designed specifically for software developers, indie makers, SaaS founders, and creative projects.
+            BumpOne (&quot;BumpOne.lol&quot;) is a modern tech promotional digital billboard designed specifically for software developers, indie makers, SaaS founders, and creative projects.
           </p>
           <p className="text-sm leading-relaxed text-neutral-400 mb-6">
-            Our mission is to help remarkable tools, AI applications, open-source utilities, and developer projects achieve meaningful visibility. Through transparent, fixed-price promotional slots, creators can sponsor listings on our high-traffic digital directory, reaching our engaged tech community and early adopters.
+            Our mission is to help remarkable tools, AI applications, open-source utilities, and developer projects achieve meaningful visibility. Through transparent, fixed-price spots, creators can book listings on our digital billboard, reaching our engaged tech community and early adopters.
           </p>
 
           {/* Dodo Payments & MoR Disclosure Box */}
@@ -222,7 +222,7 @@ export default function ContactPage() {
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Directory Sponsorship Query / Payment Assistance"
+                  placeholder="e.g. Billboard Listing Query / Payment Assistance"
                   className="w-full rounded-lg border border-white/10 bg-[#0d0e12] px-3.5 py-2.5 text-sm text-white placeholder-neutral-600 focus:border-amber-400 focus:outline-none"
                 />
               </div>

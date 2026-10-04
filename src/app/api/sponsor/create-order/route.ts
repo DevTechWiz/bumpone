@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Invalid sponsorship details', details: parsed.error.flatten() },
+        { error: 'Invalid billboard spot details', details: parsed.error.flatten() },
         { status: 400 }
       );
     }
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error creating sponsor checkout order:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to initiate digital showcase sponsorship.' },
+      { error: error.message || 'Failed to initiate digital billboard spot booking.' },
       { status: 500 }
     );
   }

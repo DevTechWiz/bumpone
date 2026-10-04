@@ -189,11 +189,11 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
       headerIcon={<Radio className="w-4 h-4 animate-pulse text-neutral-300" />}
       title={
         <span className="flex items-center gap-1.5">
-          <span>LIVE SHOWCASE DISPATCH</span>
+          <span>LIVE BILLBOARD DISPATCH</span>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         </span>
       }
-      subtitle="Live showcase activity & placement stream"
+      subtitle="Live billboard activity & placement stream"
       headerExtra={
         <button
           type="button"
@@ -292,9 +292,9 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
             {bumpHistory.length === 0 ? (
               <div className="text-center py-12 text-slate-500 space-y-2">
                 <Swords className="w-8 h-8 mx-auto opacity-30 text-slate-400" />
-                <p className="font-medium">No bumps recorded yet.</p>
+                <p className="font-medium">No activity recorded yet.</p>
                 <p className="text-[11px] text-slate-600">
-                  Bump any slot to feature your project and elevate your rank!
+                  Book any billboard spot to feature your project and elevate your rank!
                 </p>
               </div>
             ) : (
@@ -319,7 +319,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
                       ) : (
                         <>
                           <Swords className="w-3 h-3 text-rose-400 inline" />
-                          <span>DISPLACEMENT EVENT</span>
+                          <span>BILLBOARD BUMP</span>
                         </>
                       )}
                     </span>

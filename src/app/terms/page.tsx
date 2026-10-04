@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 export const metadata: Metadata = {
   title: "Terms & Conditions - BumpOne.lol",
   description:
-    "Official Terms and Conditions for digital billboard advertising, sponsored listings, and directory showcase services on BumpOne.lol.",
+    "Official Terms and Conditions for digital billboard services, project listings, and directory placements on BumpOne.lol.",
 };
 
 export default function TermsPage() {
@@ -20,7 +20,7 @@ export default function TermsPage() {
               className="inline-flex items-center gap-2 text-xs font-mono font-medium text-neutral-400 hover:text-white transition-colors bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] px-3 py-1.5 rounded-lg"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Showcase</span>
+              <span>Billboard</span>
             </Link>
 
             <Link href="/" className="flex items-center gap-2.5 group">
@@ -56,11 +56,11 @@ export default function TermsPage() {
       <main className="mx-auto max-w-4xl px-6 py-12 md:py-16">
         <div className="border-b border-white/[0.08] pb-8 mb-10">
           <span className="inline-block rounded-full bg-amber-400/10 px-3 py-1 font-mono text-xs font-semibold text-amber-400 border border-amber-400/20 mb-3">
-            DIGITAL ADVERTISING AGREEMENT
+            DIGITAL BILLBOARD AGREEMENT
           </span>
           <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">Terms &amp; Conditions</h1>
           <p className="mt-3 text-sm font-mono text-neutral-400">
-            Last Updated: October 4, 2026 • Governing all Directory Showcase and Digital Billboard Services
+            Last Updated: October 4, 2026 • Governing all Digital Billboard and Directory Services
           </p>
         </div>
 
@@ -70,7 +70,7 @@ export default function TermsPage() {
               <span className="text-amber-400 font-mono text-sm">01.</span> Agreement &amp; Acceptance
             </h2>
             <p className="mb-3">
-              By accessing, browsing, registering on, or purchasing digital advertising or promotional space on BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;), you acknowledge and agree to be bound by these Terms &amp; Conditions and our Privacy Policy.
+              By accessing, browsing, registering on, or purchasing digital billboard or promotional space on BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;), you acknowledge and agree to be bound by these Terms &amp; Conditions and our Privacy Policy.
             </p>
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-sm text-neutral-300">
               <strong className="block mb-1 text-white">Eligibility:</strong> You represent and warrant that you are at least 18 years of age (or the age of legal majority in your country) and possess the lawful authority to enter into commercial transactions for promotional services.
@@ -82,7 +82,7 @@ export default function TermsPage() {
               <span className="text-amber-400 font-mono text-sm">02.</span> Scope of Services
             </h2>
             <p className="mb-3">
-              BumpOne provides an online digital showcase, web directory, and tech promotional billboard platform. Developers, entrepreneurs, and product creators can purchase fixed-price sponsorship packages to list, feature, and showcase their applications, websites, software tools, and digital products.
+              BumpOne provides an online web directory and digital billboard platform. Developers, entrepreneurs, and product creators can purchase fixed-price billboard packages to list and feature their applications, websites, software tools, and digital products.
             </p>
             <p>
               Services provided include public listing in our digital directory, rendering of promotional banners/logos, outbound hyperlink routing to the sponsor&apos;s specified website, and inclusion in our curated project database.
@@ -125,7 +125,7 @@ export default function TermsPage() {
               <li>Defamatory, hateful, infringing, or adult content.</li>
             </ul>
             <p className="mt-3">
-              BumpOne reserves the right to reject, unpublish, or request modifications to any sponsored listing that violates these standards. In the event of moderation rejection, a full refund will be provided.
+              BumpOne reserves the right to reject, unpublish, or request modifications to any billboard listing that violates these standards. In the event of moderation rejection, a full refund will be provided.
             </p>
           </section>
 
@@ -134,7 +134,7 @@ export default function TermsPage() {
               <span className="text-amber-400 font-mono text-sm">05.</span> Intellectual Property &amp; License
             </h2>
             <p className="mb-3">
-              Sponsors retain all intellectual property rights to their trademarks, logos, brand names, and digital assets. By submitting a project for showcase listing, you grant BumpOne a non-exclusive, worldwide, royalty-free license to display your project title, logo, and description solely for directory showcase and promotional purposes.
+              Project creators retain all intellectual property rights to their trademarks, logos, brand names, and digital assets. By submitting a project for billboard listing, you grant BumpOne a non-exclusive, worldwide, royalty-free license to display your project title, logo, and description solely for billboard display and promotional purposes.
             </p>
           </section>
 
@@ -143,7 +143,7 @@ export default function TermsPage() {
               <span className="text-amber-400 font-mono text-sm">06.</span> Service Availability &amp; Disclaimer
             </h2>
             <p className="mb-3">
-              While we strive for 99.9% platform availability, digital directory services are provided on an &quot;as is&quot; and &quot;as available&quot; basis. BumpOne makes no representation regarding specific traffic numbers, click-through volumes, or revenue generation resulting from any sponsored listing.
+              While we strive for 99.9% platform availability, digital directory services are provided on an &quot;as is&quot; and &quot;as available&quot; basis. BumpOne makes no representation regarding specific traffic numbers, click-through volumes, or revenue generation resulting from any billboard listing.
             </p>
           </section>
 

@@ -32,8 +32,8 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Displacement & Rank Alerts"
-      subtitle="Control how BumpOne notifies you when your ranking or slot placement changes"
+      title="Billboard Rank Alerts"
+      subtitle="Control how BumpOne notifies you when your billboard rank changes"
       maxWidth="md"
     >
       <div className="space-y-4 text-xs">
@@ -50,9 +50,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
               <Mail className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-semibold text-white">Email Rank Change Notifications</div>
+              <div className="font-semibold text-white">Email Rank Drop Notifications</div>
               <div className="text-[11px] text-slate-400">
-                Receive an immediate email to <span className="text-slate-200">{userEmail}</span> if another sponsor bumps your rank.
+                Receive an immediate email to <span className="text-slate-200">{userEmail}</span> if another project bumps your billboard rank.
               </div>
             </div>
           </div>
@@ -72,7 +72,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
             <div>
               <div className="font-semibold text-white">Browser Push Alerts</div>
               <div className="text-[11px] text-slate-400">
-                Show real-time desktop popups while you have the board open in your browser.
+                Show real-time desktop popups while you have the billboard open in your browser.
               </div>
             </div>
           </div>
@@ -90,9 +90,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
               <ShieldAlert className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-semibold text-white">Archive Alert (#101+ Displacement)</div>
+              <div className="font-semibold text-white">Archive Alert (#101+ Drop)</div>
               <div className="text-[11px] text-slate-400">
-                High-priority alert if a higher sponsorship displaces your slot past Rank #100 into the Directory Archive.
+                High-priority alert if a higher placement moves your project past Rank #100 into the Billboard Archive.
               </div>
             </div>
           </div>

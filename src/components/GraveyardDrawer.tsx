@@ -25,8 +25,8 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       hasBackdrop={hasBackdrop}
-      title="Directory Archive (Off the Grid)"
-      subtitle="Listings displaced beyond the top 100 (#101+) are kept here. Top up anytime to restore active billboard placement."
+      title="Billboard Archive (#101+)"
+      subtitle="Listings ranked beyond the top 100 (#101+) are preserved here. Top up anytime to restore active billboard placement."
       maxWidth="lg"
     >
       <div className="space-y-4">
@@ -35,7 +35,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] mx-auto flex items-center justify-center text-slate-400">
               <Archive className="w-6 h-6" />
             </div>
-            <h4 className="text-sm font-semibold text-white">No Off-Board Profiles Yet</h4>
+            <h4 className="text-sm font-semibold text-white">No Archived Billboard Spots Yet</h4>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
               All 100 spots on the billboard are live and active. When rank changes move a listing beyond Rank #100, it lands here (#101+) — preserved, ready to restore anytime.
             </p>
@@ -64,7 +64,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {item.owner_name || item.bidderName} &bull; Sponsoring ${item.amountPaid}
+                      {item.owner_name || item.bidderName} &bull; Active Value: ${item.amountPaid}
                     </p>
                   </div>
                 </div>
@@ -79,7 +79,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
                       onReclaimTurf(item);
                     }}
                   >
-                    Restore
+                    Re-list on Billboard
                   </Button>
                 </div>
               </div>

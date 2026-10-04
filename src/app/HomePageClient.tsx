@@ -122,7 +122,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-1',
     sender: '@grid_sentinel',
     avatarColor: 'bg-indigo-500',
-    text: 'LIVE SHOWCASE STREAM ACTIVE. Sponsorship rank decides billboard placement.',
+    text: 'LIVE BILLBOARD FEED ACTIVE. Placement value decides billboard rank.',
     timestamp: Date.now() - 7200000,
     isOfficial: true,
   },
@@ -130,7 +130,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-2',
     sender: '@solana_surfer',
     avatarColor: 'bg-sky-500',
-    text: 'Watching the Center King #1 throne. Who is going to sponsor past the sovereign?',
+    text: 'Watching the Center King #1 throne. Who is going to outbid past the sovereign?',
     slotTag: 1,
     timestamp: Date.now() - 3600000,
   },
@@ -138,7 +138,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-3',
     sender: '@neon_hunter',
     avatarColor: 'bg-rose-500',
-    text: 'Rank #100 is holding the active floor! Incoming sponsorships move slots to the Directory Archive!',
+    text: 'Rank #100 is holding the active floor! Incoming placements move spots to the Billboard Archive!',
     slotTag: 100,
     timestamp: Date.now() - 1200000,
   },
@@ -1434,13 +1434,13 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             <div className="flex items-center gap-2 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               <span className="truncate">
-                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. Spots #1–#100 are live on the billboard; listings displaced beyond #100 enter the Directory Archive.
+                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. Spots #1–#100 are live on the billboard; listings displaced beyond #100 enter the Billboard Archive.
               </span>
             </div>
           )}
           <div className="shrink-0 pl-2 flex items-center gap-2.5">
             <div className="hidden xl:flex items-center gap-1.5 text-[9px] text-neutral-400 font-mono">
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">B</span> Sponsor
+              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">B</span> Book Spot
               <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">W</span> Activity
               <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">L</span> Leaderboard
               <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">G</span> Archive

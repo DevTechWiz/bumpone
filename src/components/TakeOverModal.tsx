@@ -563,15 +563,15 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
     : mode === 'existing' && holder
     ? `Bump "${holder.title}"`
-    : 'Feature Your Project on the Board';
+    : 'Book Billboard Spot';
 
   const modalSubtitle = isTargetMine
-    ? `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the board. Minimum top-up $${MIN_TOP_UP}.`
+    ? `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
     : preselectedTargetSlot
-    ? `Sponsor higher than $${preselectedTargetSlot.amountPaid} to claim Rank #${preselectedTargetSlot.rank}. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`
+    ? `Place higher than $${preselectedTargetSlot.amountPaid} to claim Billboard Rank #${preselectedTargetSlot.rank}. Minimum top-up $${MIN_TOP_UP}. Billboard floor: $${entryFloor}.`
     : mode === 'existing' && holder
-    ? `Top up active value to propel "${holder.title}" higher on the grid. Minimum top-up $${MIN_TOP_UP}.`
-    : `Rank is determined by Active Value. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`;
+    ? `Top up active value to propel "${holder.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
+    : `Rank is determined by Active Value. Minimum top-up $${MIN_TOP_UP}. Billboard floor: $${entryFloor}.`;
 
   return (
     <Modal
@@ -591,10 +591,10 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           </div>
           <div className="space-y-2 max-w-md mx-auto">
             <h3 className="text-lg font-bold text-white tracking-tight">
-              Sign In Required to Sponsor or Bump
+              Sign In to Book or Boost Billboard Spot
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              You must be signed in with your account to sponsor billboard slots, lock in your creator handle, and carry forward active value.
+              You must be signed in with your account to book billboard spots, lock in your creator handle, and carry forward active value.
             </p>
           </div>
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -618,7 +618,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               onClick={onClose}
               className="w-full sm:w-auto text-xs text-slate-400 hover:text-white"
             >
-              Browse Wall
+              Browse Billboard
             </Button>
           </div>
         </div>
@@ -651,7 +651,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               mode === 'new' ? 'bg-white text-zinc-950 shadow-sm' : 'text-neutral-400 hover:text-white'
             }`}
           >
-            Sponsor New Project
+            Add New Project
           </button>
           <button
             type="button"

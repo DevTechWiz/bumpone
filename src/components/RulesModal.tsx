@@ -23,8 +23,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       hasBackdrop={hasBackdrop}
-      title="How BumpOne Works: Dynamic Showcase Rules"
-      subtitle="Feature your project, elevate your rank, and gain global visibility across the 100-slot attention grid."
+      title="How the Billboard Works"
+      subtitle="Book your billboard spot, elevate your rank, and gain global visibility across the 100-spot billboard."
       maxWidth="lg"
     >
       <div className="space-y-4 text-xs text-slate-300">
@@ -33,7 +33,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400" />
             <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-              1. The 3 Steps to Feature Your Product
+              1. 3 Steps to Book Your Billboard Spot
             </h4>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -41,9 +41,9 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               <span className="font-mono text-[10px] font-bold text-amber-400 flex items-center gap-1">
                 STEP 1 <ArrowRight className="w-2.5 h-2.5 text-neutral-500" />
               </span>
-              <strong className="block text-white text-[11px]">Pick a Slot or Target Rank</strong>
+              <strong className="block text-white text-[11px]">Pick a Billboard Spot</strong>
               <p className="text-[10px] text-neutral-400 leading-normal">
-                Click any slot on the grid to elevate its rank, or hit &ldquo;Bump onto the Grid&rdquo; to launch your project.
+                Click any spot on the billboard to elevate its rank, or hit &ldquo;Book Billboard Spot&rdquo; to launch your project.
               </p>
             </div>
 
@@ -53,7 +53,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               </span>
               <strong className="block text-white text-[11px]">Pay Only the Difference</strong>
               <p className="text-[10px] text-neutral-400 leading-normal">
-                Your past ad spending carries forward as active value. You only pay the delta + at least ${MIN_TOP_UP} to leap ahead.
+                Your past spending carries forward as active value. You only pay the delta + at least ${MIN_TOP_UP} to leap ahead.
               </p>
             </div>
 
@@ -63,7 +63,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               </span>
               <strong className="block text-white text-[11px]">Live Global Visibility</strong>
               <p className="text-[10px] text-neutral-400 leading-normal">
-                Your project updates instantly worldwide with live ranking displacement and real-time activity telemetry.
+                Your project updates instantly worldwide with live ranking changes and real-time activity telemetry.
               </p>
             </div>
           </div>
@@ -87,19 +87,19 @@ export const RulesModal: React.FC<RulesModalProps> = ({
           </div>
         </div>
 
-        {/* Section 3: The 4 Grid Tiers */}
+        {/* Section 3: The 4 Billboard Tiers */}
         <div className="space-y-2">
           <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
-            3. The 4 Grid Tiers
+            3. The 4 Billboard Tiers
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {/* King */}
             <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-400/30 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-amber-200 flex items-center gap-1.5 text-xs">
-                  <Crown className="w-3.5 h-3.5 text-amber-400" /> #1 King of the Grid
+                  <Crown className="w-3.5 h-3.5 text-amber-400" /> #1 King of the Billboard
                 </span>
-                <span className="font-mono text-[9px] text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">Throne</span>
+                <span className="font-mono text-[9px] text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">Center Stage</span>
               </div>
               <p className="text-[10px] text-slate-300 leading-normal">
                 The massive hero card in the exact center. Commands maximum views, clicks, and prestige across the entire internet.
@@ -123,12 +123,12 @@ export const RulesModal: React.FC<RulesModalProps> = ({
             <div className="p-3 rounded-xl bg-zinc-800/30 border border-zinc-500/30 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-zinc-200 flex items-center gap-1.5 text-xs">
-                  <Shield className="w-3.5 h-3.5 text-zinc-400" /> Top 50 Mid-Grid (#11–#50)
+                  <Shield className="w-3.5 h-3.5 text-zinc-400" /> Top 50 Mid-Ranks (#11–#50)
                 </span>
                 <span className="font-mono text-[9px] text-zinc-400 bg-white/[0.04] px-1.5 py-0.5 rounded">Core Arena</span>
               </div>
               <p className="text-[10px] text-neutral-300 leading-normal">
-                Solid organic discovery from browsing visitors exploring products and builders on the board.
+                Solid organic discovery from browsing visitors exploring products and builders on the billboard.
               </p>
             </div>
 
@@ -136,31 +136,31 @@ export const RulesModal: React.FC<RulesModalProps> = ({
             <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-rose-200 flex items-center gap-1.5 text-xs">
-                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Grid Floor (#51–#100)
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Billboard Floor (#51–#100)
                 </span>
                 <span className="font-mono text-[9px] text-rose-300 bg-rose-500/10 px-1.5 py-0.5 rounded">Floor Zone</span>
               </div>
               <p className="text-[10px] text-slate-300 leading-normal">
-                All 100 spots on the billboard are active. If an incoming higher sponsorship shifts your card beyond #100, it moves into the Directory Archive.
+                All 100 spots on the billboard are active. If an incoming higher placement shifts your card beyond #100, it moves into the Billboard Archive.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Section 4: Live Activity & Directory Archive */}
+        {/* Section 4: Live Activity & Billboard Archive */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1">
             <div className="flex items-center gap-1.5 text-white font-bold text-xs">
-              <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> Live Activity Feed
+              <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> Live Billboard Activity
             </div>
             <p className="text-[10px] text-neutral-400 leading-normal">
-              Spectate live rank upgrades, top-tier sponsorships, and visibility updates as they happen with real-time audio and community stream.
+              Spectate live rank upgrades, top-tier placements, and visibility updates as they happen with real-time audio and community stream.
             </p>
           </div>
 
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1">
             <div className="flex items-center gap-1.5 text-white font-bold text-xs">
-              <Archive className="w-3.5 h-3.5 text-neutral-400" /> Directory Archive
+              <Archive className="w-3.5 h-3.5 text-neutral-400" /> Billboard Archive
             </div>
             <p className="text-[10px] text-neutral-400 leading-normal">
               Displaced past #100? Your card is never deleted. Your active value stays saved—top up at least ${MIN_TOP_UP} to restore active billboard placement.
@@ -171,7 +171,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
         {/* Immediate Delivery & Non-Refundable Disclosure */}
         <div className="px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[10px] text-neutral-400 font-mono flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
-          <span>All bumps take effect instantaneously on the live global board and are strictly non-refundable digital advertising placements.</span>
+          <span>All bumps take effect instantaneously on the live global billboard and are strictly non-refundable digital billboard placements.</span>
         </div>
 
         {/* Action Button & Legal Links */}
@@ -194,7 +194,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               onOpenTakeover();
             }}
           >
-            Bump onto the Grid
+            Book Billboard Spot
           </Button>
         </div>
       </div>

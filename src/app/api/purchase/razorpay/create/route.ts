@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       amount_inr: amountINR,
       key_id: creds.keyId,
       name: 'BumpOne',
-      description: `Sponsored Billboard Placement (#${input.targetRank})`,
+      description: `Billboard Spot Placement (#${input.targetRank})`,
       expires_at: expiresAt,
     });
   } catch (error) {

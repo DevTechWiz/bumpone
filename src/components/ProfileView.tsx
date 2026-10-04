@@ -1597,8 +1597,8 @@ export function ProfileView({
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {isSelf
-                    ? "Manage your active products on the 100-slot wall. Update titles, framing, and links anytime."
-                    : `Active sponsorships and showcase slots owned by @${activeUser.handle}.`}
+                    ? "Manage your active products on the 100-spot billboard. Update titles, framing, and links anytime."
+                    : `Active billboard spots owned by @${activeUser.handle}.`}
                 </p>
               </div>
 
@@ -1627,11 +1627,11 @@ export function ProfileView({
                   <Layers className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">No projects on the wall yet</h3>
+                  <h3 className="text-sm font-bold text-white">No projects on the billboard yet</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
                     {isSelf
-                      ? "You haven't featured any projects on the 100-slot showcase. Sponsor your first product to claim your live spot and boost visibility!"
-                      : "This creator currently has no active projects on the board."}
+                      ? "You haven't placed any projects on the 100-spot billboard yet. Book your first billboard spot to boost visibility!"
+                      : "This creator currently has no active projects on the billboard."}
                   </p>
                 </div>
                 {isSelf && (
@@ -1642,7 +1642,7 @@ export function ProfileView({
                     onClick={handleClaim}
                     className="font-bold shadow-lg shadow-amber-500/20"
                   >
-                    Sponsor Your First Project
+                    Place Your First Billboard Spot
                   </Button>
                 )}
               </div>
@@ -2179,7 +2179,7 @@ export function ProfileView({
             <div className="rounded-2xl border border-amber-400/30 bg-gradient-to-b from-amber-500/10 via-[#18191d]/90 to-[#18191d]/90 p-5 shadow-2xl backdrop-blur-xl space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <Zap className="w-4 h-4" /> {isOwnerOfP ? "Protect / Top-Up Project" : "Take Over / Bump Slot"}
+                  <Zap className="w-4 h-4" /> {isOwnerOfP ? "Boost Billboard Rank" : "Book Billboard Spot"}
                 </span>
                 <span className="font-mono text-sm font-bold text-white">
                   {p.active_value != null && p.active_value > 0 ? `$${p.active_value}` : "$0"}
@@ -2188,10 +2188,10 @@ export function ProfileView({
 
               <p className="text-xs text-slate-300 leading-relaxed">
                 {isOwnerOfP
-                  ? "Top up your active value to climb higher on the 100-slot wall. Your existing paid value always carries forward."
+                  ? "Top up your active value to climb higher on the 100-spot billboard. Your existing paid value always carries forward."
                   : p.name && p.name !== "N/A"
-                  ? `Sponsor higher than "${p.name}" to claim their spot on the billboard and elevate your ranking.`
-                  : "Sponsor this slot to claim a spot on the billboard and elevate your ranking."}
+                  ? `Place higher value than "${p.name}" to claim their spot on the billboard and elevate your ranking.`
+                  : "Place your project to claim a spot on the billboard and elevate your ranking."}
               </p>
 
               <Button
@@ -2201,7 +2201,7 @@ export function ProfileView({
                 onClick={() => handleBump(p)}
                 className="w-full justify-center text-sm font-bold shadow-lg shadow-amber-500/20"
               >
-                {isOwnerOfP ? "Top Up Active Value" : "Sponsor & Bump Slot"}
+                {isOwnerOfP ? "Top Up Active Value" : "Book Billboard Spot"}
               </Button>
             </div>
 
@@ -2209,7 +2209,7 @@ export function ProfileView({
             <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-4 shadow-xl space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  Live Showcase Badge
+                  Live Billboard Rank Badge
                 </span>
                 <img
                   src={`/api/badge/${p.id}`}

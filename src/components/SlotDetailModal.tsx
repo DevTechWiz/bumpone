@@ -427,10 +427,10 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
         <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] font-semibold text-white truncate">Live Showcase Badge</span>
+              <span className="text-[11px] font-semibold text-white truncate">Live Billboard Rank Badge</span>
               <img
                 src={`/api/badge/${slot.id}`}
-                alt="Live Rank Badge"
+                alt="Live Billboard Rank Badge"
                 className="h-5 shrink-0"
               />
             </div>
@@ -575,7 +575,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
               onBumpSlot(slot);
             }}
           >
-            Sponsor & Bump Slot for ${slot.amountPaid + 10}
+            Book Billboard Spot for ${slot.amountPaid + 10}
           </Button>
         </div>
       </div>

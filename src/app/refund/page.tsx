@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy - BumpOne.lol",
   description:
-    "Official Cancellation and Refund Policy for digital advertising slots and curated directory listings on BumpOne.lol.",
+    "Official Cancellation and Refund Policy for digital billboard spots and curated directory listings on BumpOne.lol.",
 };
 
 export default function RefundPolicyPage() {
@@ -20,7 +20,7 @@ export default function RefundPolicyPage() {
               className="inline-flex items-center gap-2 text-xs font-mono font-medium text-neutral-400 hover:text-white transition-colors bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] px-3 py-1.5 rounded-lg"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Showcase</span>
+              <span>Billboard</span>
             </Link>
 
             <Link href="/" className="flex items-center gap-2.5 group">
@@ -62,7 +62,7 @@ export default function RefundPolicyPage() {
             Refund &amp; Cancellation Policy
           </h1>
           <p className="mt-3 text-sm font-mono text-neutral-400">
-            Last Updated: October 4, 2026 • Applicable to all Digital Billboard &amp; Directory Showcase Purchases
+            Last Updated: October 4, 2026 • Applicable to all Digital Billboard &amp; Directory Purchases
           </p>
         </div>
 
@@ -72,10 +72,10 @@ export default function RefundPolicyPage() {
               <span className="text-amber-400 font-mono text-sm">01.</span> Nature of Services
             </h2>
             <p className="mb-3">
-              BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;) provides non-tangible, irrevocable digital advertising space, sponsored project placements, and curated web directory showcase listings for developers, creators, and startups.
+              BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;) provides digital billboard space, project placements, and curated web directory listings for developers, creators, and startups.
             </p>
             <p>
-              Upon successful completion of payment through our secure payment partners (Dodo Payments / Razorpay), your sponsored slot or directory listing is scheduled and digitally rendered on the live showcase.
+              Upon successful completion of payment through our secure payment partners (Dodo Payments / Razorpay), your billboard spot or directory listing is scheduled and digitally rendered on the live billboard.
             </p>
           </section>
 
@@ -87,13 +87,13 @@ export default function RefundPolicyPage() {
               <div>
                 <h3 className="font-semibold text-white mb-1">Pre-Publication Cancellations (Within 24 Hours)</h3>
                 <p className="text-sm text-neutral-400">
-                  If you purchase a digital showcase listing and request cancellation before your listing has gone live or within twenty-four (24) hours of order confirmation, you are eligible for a 100% full refund with no cancellation penalties.
+                  If you book a digital billboard spot and request cancellation before your listing has gone live or within twenty-four (24) hours of order confirmation, you are eligible for a 100% full refund with no cancellation penalties.
                 </p>
               </div>
               <div className="border-t border-white/[0.06] pt-3">
                 <h3 className="font-semibold text-white mb-1">Post-Publication Policy</h3>
                 <p className="text-sm text-neutral-400">
-                  Because digital advertising space, immediate search indexing, backlinks, and promotional visibility are rendered instantaneously upon live publication, fees for active and published billboard listings are generally non-refundable once the showcase spot has been activated.
+                  Because digital billboard space, immediate search indexing, backlinks, and promotional visibility are rendered instantaneously upon live publication, fees for active and published billboard listings are generally non-refundable once the billboard spot has been activated.
                 </p>
               </div>
             </div>
@@ -108,10 +108,10 @@ export default function RefundPolicyPage() {
             </p>
             <ul className="list-disc pl-6 space-y-2 text-neutral-300">
               <li>
-                <strong>Duplicate Charges:</strong> In the event that your payment method was debited more than once for a single sponsorship order due to a network glitch or gateway timeout.
+                <strong>Duplicate Charges:</strong> In the event that your payment method was debited more than once for a single billboard booking due to a network glitch or gateway timeout.
               </li>
               <li>
-                <strong>Technical Non-Delivery:</strong> If our automated servers or platform fail to render or display your approved sponsored showcase slot within 48 hours of payment confirmation.
+                <strong>Technical Non-Delivery:</strong> If our automated servers or platform fail to render or display your approved billboard spot within 48 hours of payment confirmation.
               </li>
               <li>
                 <strong>Moderation Rejection:</strong> If a submitted project does not meet our content quality standards (e.g. prohibited or malicious links), your submission will be rejected and 100% of the payment will be automatically refunded.

@@ -87,11 +87,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 <p className="text-xs font-semibold text-white truncate">{displayName}</p>
                 <p className="text-[11px] text-amber-300 font-mono truncate">@{userHandle}</p>
               </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
-                userSlotsCount > 0 
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${userSlotsCount > 0
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   : 'bg-white/[0.06] text-neutral-400 border border-white/[0.08]'
-              }`}>
+                }`}>
                 {userSlotsCount > 0 ? `${userSlotsCount} projects` : '0 projects'}
               </span>
             </div>
@@ -130,8 +129,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                     <Layers className="w-3.5 h-3.5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium text-white leading-tight">My Projects on Wall</div>
-                    <div className="text-[10px] text-neutral-400 truncate">Highlight your products on the board</div>
+                    <div className="font-medium text-white leading-tight">My Billboard Spots</div>
+                    <div className="text-[10px] text-neutral-400 truncate">View your projects on the billboard</div>
                   </div>
                 </div>
                 {userSlotsCount > 0 && (
@@ -154,8 +153,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                   <Zap className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-white leading-tight">Sponsor Billboard Slot</div>
-                  <div className="text-[10px] text-neutral-400 truncate">Feature project or elevate rank</div>
+                  <div className="font-medium text-white leading-tight">Book Billboard Spot</div>
+                  <div className="text-[10px] text-neutral-400 truncate">Place project or boost rank</div>
                 </div>
               </button>
             )}
@@ -175,8 +174,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                   <Bell className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-white leading-tight">Displacement Alerts</div>
-                  <div className="text-[10px] text-neutral-400 truncate">Email &amp; push when rank changes</div>
+                  <div className="font-medium text-white leading-tight">Billboard Alerts</div>
+                  <div className="text-[10px] text-neutral-400 truncate">Email &amp; push notifications when rank drops</div>
                 </div>
               </button>
             )}
