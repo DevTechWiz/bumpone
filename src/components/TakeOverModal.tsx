@@ -521,14 +521,16 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               }),
             });
             const verifyData = await verifyRes.json().catch(() => ({}));
+            const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/arena';
             if (verifyRes.ok && verifyData.success) {
-              window.location.href = `/?status=success&quote_id=${data.quote_id}`;
+              window.location.href = `${returnPath}?status=success&quote_id=${data.quote_id}`;
               return;
             }
           } catch (e) {
             console.error('Immediate verification error, fallback to pending redirect:', e);
           }
-          window.location.href = `/?status=pending_payment&quote_id=${data.quote_id}&payment_id=${response.razorpay_payment_id}`;
+          const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/arena';
+          window.location.href = `${returnPath}?status=pending_payment&quote_id=${data.quote_id}&payment_id=${response.razorpay_payment_id}`;
         },
       });
 
@@ -561,12 +563,12 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
     : mode === 'existing' && holder
     ? `Bump "${holder.title}"`
-    : 'Claim Your Turf on the Board';
+    : 'Feature Your Project on the Board';
 
   const modalSubtitle = isTargetMine
     ? `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the board. Minimum top-up $${MIN_TOP_UP}.`
     : preselectedTargetSlot
-    ? `Outbid $${preselectedTargetSlot.amountPaid} to claim Rank #${preselectedTargetSlot.rank}. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`
+    ? `Sponsor higher than $${preselectedTargetSlot.amountPaid} to claim Rank #${preselectedTargetSlot.rank}. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`
     : mode === 'existing' && holder
     ? `Top up active value to propel "${holder.title}" higher on the grid. Minimum top-up $${MIN_TOP_UP}.`
     : `Rank is determined by Active Value. Minimum top-up $${MIN_TOP_UP}. Board floor: $${entryFloor}.`;
@@ -589,10 +591,10 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           </div>
           <div className="space-y-2 max-w-md mx-auto">
             <h3 className="text-lg font-bold text-white tracking-tight">
-              Sign In Required to Bid or Bump
+              Sign In Required to Sponsor or Bump
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              You must be signed in with your account to bid on slots, lock in your creator handle, and carry forward active value.
+              You must be signed in with your account to sponsor billboard slots, lock in your creator handle, and carry forward active value.
             </p>
           </div>
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -649,7 +651,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               mode === 'new' ? 'bg-white text-zinc-950 shadow-sm' : 'text-neutral-400 hover:text-white'
             }`}
           >
-            Bid New Project
+            Sponsor New Project
           </button>
           <button
             type="button"
@@ -823,7 +825,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                   <Badge variant="rank" rank={projectedRank} />
                 ) : (
                   <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-rose-950/40 text-rose-300 border border-rose-500/30">
-                    Rank #{projectedRank} (Graveyard)
+                    Rank #{projectedRank} (Archived)
                   </span>
                 )}
               </div>
@@ -832,7 +834,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                 {tierProjected === 'elite' && '⚡ Top 10 Spot (2x2 grid)'}
                 {tierProjected === 'lord' && '🛡️ Top 40 Spot'}
                 {tierProjected === 'contender' && '🎯 Active Spot (1x1)'}
-                {tierProjected === 'dropped' && 'Rank #101+ (Graveyard) — below live top 100 wall'}
+                {tierProjected === 'dropped' && 'Rank #101+ (Archived) — below live top 100 showcase'}
               </span>
             </div>
 
@@ -846,7 +848,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                 )}
                 {willDisplaceOccupantOf100 && victimSlot100 && (
                   <span className="text-rose-400 font-medium block mt-1">
-                    <strong>{victimSlot100.title}</strong> (currently at #100) will be displaced to Rank #101 in the Graveyard. Slot #100 remains live on the wall.
+                    <strong>{victimSlot100.title}</strong> (currently at #100) will be displaced to Rank #101 in the Directory Archive. Slot #100 remains live on the showcase.
                   </span>
                 )}
               </p>

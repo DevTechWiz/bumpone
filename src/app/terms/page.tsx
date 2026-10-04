@@ -1,26 +1,52 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { ArrowLeft } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Service - BumpOne.lol",
-  description: "Terms of Service, digital auction rules, and legal conditions for BumpOne.lol.",
+  title: "Terms & Conditions - BumpOne.lol",
+  description:
+    "Official Terms and Conditions for digital billboard advertising, sponsored listings, and directory showcase services on BumpOne.lol.",
 };
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-[#0d0e12] text-neutral-300 font-sans selection:bg-amber-500/30 selection:text-amber-200">
+    <div className="min-h-screen bg-[#07080b] text-neutral-300 font-sans selection:bg-amber-500/30 selection:text-amber-200">
       {/* Header bar */}
-      <nav className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#0d0e12]/80 backdrop-blur-md px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <Link
-            href="/"
-            className="flex items-center gap-2 font-mono text-base font-bold tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
-          >
-            <span>◀</span>
-            <span>BUMPONE.LOL</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-amber-400 border border-amber-500/20">
+      <nav className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#07080b]/85 backdrop-blur-xl px-4 sm:px-6 py-3.5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-xs font-mono font-medium text-neutral-400 hover:text-white transition-colors bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] px-3 py-1.5 rounded-lg"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Showcase</span>
+            </Link>
+
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="h-8 w-8 rounded-lg bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 font-mono font-black text-sm group-hover:scale-105 transition-transform">
+                B
+              </div>
+              <span className="font-bold text-white tracking-tight text-sm sm:text-base">
+                BumpOne<span className="text-amber-400">.lol</span>
+              </span>
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="/privacy"
+              className="hidden sm:inline-flex text-xs font-mono text-neutral-400 hover:text-amber-400 transition-colors"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              href="/refund"
+              className="hidden sm:inline-flex text-xs font-mono text-neutral-400 hover:text-amber-400 transition-colors"
+            >
+              Refund Policy
+            </Link>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-amber-400 border border-amber-500/20">
               LEGAL TERMS 2026
             </span>
           </div>
@@ -30,123 +56,134 @@ export default function TermsPage() {
       <main className="mx-auto max-w-4xl px-6 py-12 md:py-16">
         <div className="border-b border-white/[0.08] pb-8 mb-10">
           <span className="inline-block rounded-full bg-amber-400/10 px-3 py-1 font-mono text-xs font-semibold text-amber-400 border border-amber-400/20 mb-3">
-            TERMS & CONDITIONS
+            DIGITAL ADVERTISING AGREEMENT
           </span>
-          <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">Terms of Service</h1>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">Terms &amp; Conditions</h1>
           <p className="mt-3 text-sm font-mono text-neutral-400">
-            Last Updated: October 3, 2026 • Effective for all transactions and users
+            Last Updated: October 4, 2026 • Governing all Directory Showcase and Digital Billboard Services
           </p>
         </div>
 
         <div className="space-y-10 text-[15px] leading-relaxed text-neutral-300">
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">01.</span> Agreement & Age Requirement (18+)
+              <span className="text-amber-400 font-mono text-sm">01.</span> Agreement &amp; Acceptance
             </h2>
             <p className="mb-3">
-              By accessing, browsing, registering an account, or submitting micro-payments on BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;), you agree to be legally bound by these Terms of Service (&quot;Terms&quot;) and our Privacy Policy.
+              By accessing, browsing, registering on, or purchasing digital advertising or promotional space on BumpOne (&quot;BumpOne.lol&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;the Service&quot;), you acknowledge and agree to be bound by these Terms &amp; Conditions and our Privacy Policy.
             </p>
-            <div className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-4 text-sm text-rose-200">
-              <strong className="block mb-1">Age Eligibility:</strong> You represent and warrant that you are at least <strong>18 years of age</strong> (or the age of majority in your jurisdiction) and have the legal capacity to enter into binding contracts. Minors are strictly prohibited from submitting financial bids or paid slot takeovers.
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-sm text-neutral-300">
+              <strong className="block mb-1 text-white">Eligibility:</strong> You represent and warrant that you are at least 18 years of age (or the age of legal majority in your country) and possess the lawful authority to enter into commercial transactions for promotional services.
             </div>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">02.</span> Platform Dynamic & Auction Mechanics
+              <span className="text-amber-400 font-mono text-sm">02.</span> Scope of Services
             </h2>
             <p className="mb-3">
-              BumpOne operates a dynamic, competitive 100-slot attention billboard. Users submit digital project listings (comprising titles, destination URLs, graphics, and descriptions) and pay micro-transaction fees to &quot;bump&quot; slots upwards in rank, competing for the #1 King throne.
+              BumpOne provides an online digital showcase, web directory, and tech promotional billboard platform. Developers, entrepreneurs, and product creators can purchase fixed-price sponsorship packages to list, feature, and showcase their applications, websites, software tools, and digital products.
             </p>
-            <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4 text-sm text-neutral-300">
-              <strong className="text-amber-300 block mb-1">Core Dynamic Notice:</strong>
-              Slot rank is strictly fluid. Any project occupying any slot (including #1) may be outbid, displaced, pushed down the ranking hierarchy, or knocked off the live 100-slot arena into the Graveyard at any second by another participant. BumpOne does not guarantee permanent placement, fixed time duration, or specific impression volumes for any slot.
-            </div>
+            <p>
+              Services provided include public listing in our digital directory, rendering of promotional banners/logos, outbound hyperlink routing to the sponsor&apos;s specified website, and inclusion in our curated project database.
+            </p>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">03.</span> Strict Non-Refundable Purchases & Cancellation Policy
+              <span className="text-amber-400 font-mono text-sm">03.</span> Pricing, Payment &amp; Billing
             </h2>
             <p className="mb-3">
-              Due to the immediate digital nature of promotional billboard attention and real-time displacement mechanics:
+              All promotional packages are priced transparently as one-time digital service fees in Indian Rupees (INR) and US Dollars (USD):
             </p>
             <ul className="list-disc pl-6 space-y-2 text-neutral-300">
               <li>
-                <strong className="text-white">Immediate Delivery:</strong> When you purchase or bump a slot, promotional placement and broadcast to the live grid occur instantaneously upon payment authorization.
+                <strong>Starter Showcase (₹199 / $2.99):</strong> Standard digital directory listing with verified do-follow project link and category classification.
               </li>
               <li>
-                <strong className="text-white">All Sales Are Final:</strong> All payments, including slot acquisitions, takeovers, and bump boosts, are non-refundable. No refunds, credits, or exchanges will be issued under any circumstances, including if your slot is displaced by another user moments after payment.
+                <strong>Featured Billboard (₹499 / $5.99):</strong> Highlighted showcase placement, priority category spotlight, and verified project badge.
               </li>
               <li>
-                <strong className="text-white">Chargeback Prohibition:</strong> By initiating a transaction, you acknowledge that you are purchasing immediate promotional placement and waive any right to dispute or chargeback completed transactions through your payment provider.
+                <strong>Hero Billboard (₹999 / $11.99):</strong> Premier top-tier homepage billboard spotlight placement with high visibility.
               </li>
             </ul>
+            <p className="mt-3">
+              All payments are processed securely through our authorized payment processing and Merchant of Record (MoR) partners, including <strong>Dodo Payments</strong> and <strong>Razorpay Software Private Limited</strong>. Depending on your region, checkout will be billed in USD or INR. We do not store or process sensitive debit/credit card credentials on our servers.
+            </p>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">04.</span> Acceptable Use & Intermediary Guidelines
+              <span className="text-amber-400 font-mono text-sm">04.</span> Content Moderation &amp; Acceptable Use
             </h2>
             <p className="mb-3">
-              In accordance with Section 79 of the Information Technology Act, 2000 and the Intermediary Guidelines Rules 2021, you agree not to submit or link to content that:
+              All submitted URLs, logos, graphics, and text are reviewed to protect our community and maintain showcase quality. We strictly prohibit any submissions containing:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-neutral-300">
-              <li>Belongs to another person and to which you do not have any right.</li>
-              <li>Is defamatory, obscene, pornographic, pedophilic, or invasive of another&apos;s privacy.</li>
-              <li>Infringes upon any patent, trademark, copyright, or other proprietary rights.</li>
-              <li>Deceives or misleads visitors about the origin of messages, or constitutes financial scams/phishing.</li>
-              <li>Contains software viruses or code designed to disrupt, destroy, or limit platform functionality.</li>
-              <li>Threatens the unity, integrity, defense, security, or sovereignty of any state or friendly foreign nation.</li>
+              <li>Malware, viruses, phishing, spyware, or deceptive downloads.</li>
+              <li>Illegal goods, unregulated financial schemes, or predatory services.</li>
+              <li>Defamatory, hateful, infringing, or adult content.</li>
             </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">05.</span> Moderation & Termination Rights
-            </h2>
-            <p>
-              BumpOne administrators maintain unilateral authority to review, flag, redact, or permanently burn any project or slot that violates our Content Standards or poses legal or security risks. In the event a project is removed or burned for violating these Terms, no refunds will be provided.
+            <p className="mt-3">
+              BumpOne reserves the right to reject, unpublish, or request modifications to any sponsored listing that violates these standards. In the event of moderation rejection, a full refund will be provided.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">06.</span> Disclaimers & Limitation of Liability
+              <span className="text-amber-400 font-mono text-sm">05.</span> Intellectual Property &amp; License
             </h2>
             <p className="mb-3">
-              The Service is provided on an &quot;AS IS&quot; and &quot;AS AVAILABLE&quot; basis without warranties of any kind, whether express or implied.
-            </p>
-            <p>
-              To the fullest extent permitted by applicable law, BumpOne, its creators, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, goodwill, or traffic resulting from your use of or inability to access the platform.
+              Sponsors retain all intellectual property rights to their trademarks, logos, brand names, and digital assets. By submitting a project for showcase listing, you grant BumpOne a non-exclusive, worldwide, royalty-free license to display your project title, logo, and description solely for directory showcase and promotional purposes.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-              <span className="text-amber-400 font-mono text-sm">07.</span> Grievance Redressal & Contact
+              <span className="text-amber-400 font-mono text-sm">06.</span> Service Availability &amp; Disclaimer
             </h2>
             <p className="mb-3">
-              For legal inquiries, copyright notices (DMCA/IP takedowns), or grievances regarding content published on the grid:
+              While we strive for 99.9% platform availability, digital directory services are provided on an &quot;as is&quot; and &quot;as available&quot; basis. BumpOne makes no representation regarding specific traffic numbers, click-through volumes, or revenue generation resulting from any sponsored listing.
             </p>
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 font-mono text-sm space-y-1">
-              <p className="text-white font-bold">BumpOne Legal & Grievance Desk</p>
-              <p className="text-neutral-400">Website: https://bumpone.lol</p>
-              <p className="text-amber-400">Grievance Email: grievance@bumpone.lol</p>
-              <p className="text-neutral-400">General Legal: legal@bumpone.lol</p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+              <span className="text-amber-400 font-mono text-sm">07.</span> Governing Law &amp; Dispute Resolution
+            </h2>
+            <p className="mb-3">
+              These Terms shall be governed by and construed in accordance with the laws of <strong>India</strong>, including the Information Technology Act, 2000. Any legal disputes arising in connection with these terms shall be subject to the exclusive jurisdiction of the competent courts in <strong>Bengaluru, Karnataka, India</strong>.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+              <span className="text-amber-400 font-mono text-sm">08.</span> Contact Information
+            </h2>
+            <p className="mb-3">
+              If you have any questions or require legal clarification regarding these Terms, please reach out to our legal and support team:
+            </p>
+            <div className="rounded-xl border border-white/[0.08] bg-[#14151b] p-5 font-mono text-sm">
+              <p className="text-neutral-400">
+                <span className="text-neutral-500">Legal Contact:</span>{" "}
+                <a href="mailto:support@bumpone.lol" className="text-amber-400 hover:underline">
+                  support@bumpone.lol
+                </a>
+              </p>
+              <p className="text-neutral-400 mt-1">
+                <span className="text-neutral-500">Platform:</span> BumpOne Digital Showcase &amp; Billboard
+              </p>
             </div>
           </section>
         </div>
 
-        <div className="mt-16 border-t border-white/[0.08] pt-8 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-500 gap-4">
-          <span>&copy; {new Date().getFullYear()} BumpOne.lol • All Rights Reserved</span>
-          <div className="flex gap-6">
-            <Link href="/privacy" className="hover:text-amber-400 transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="/" className="hover:text-amber-400 transition-colors">
-              Live Grid
-            </Link>
+        {/* Footer links */}
+        <div className="mt-16 pt-8 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-4 text-xs font-mono text-neutral-500">
+          <div>© 2026 BumpOne.lol • Curated Digital Billboard &amp; Directory Showcase</div>
+          <div className="flex gap-4">
+            <Link href="/privacy" className="hover:text-amber-400 transition-colors">Privacy Policy</Link>
+            <Link href="/refund" className="hover:text-amber-400 transition-colors">Refund Policy</Link>
+            <Link href="/contact" className="hover:text-amber-400 transition-colors">Contact Us</Link>
           </div>
         </div>
       </main>

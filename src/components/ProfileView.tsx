@@ -543,6 +543,7 @@ export function ProfileView({
 
   const [isBiddingOpen, setIsBiddingOpen] = useState(false);
   const [targetSlotToBump, setTargetSlotToBump] = useState<SlotItem | null>(null);
+  const [projectBadgeCopied, setProjectBadgeCopied] = useState(false);
 
   const handleClaim = () => {
     soundEngine.playClick();
@@ -1597,7 +1598,7 @@ export function ProfileView({
                 <p className="text-xs text-slate-400 mt-0.5">
                   {isSelf
                     ? "Manage your active products on the 100-slot wall. Update titles, framing, and links anytime."
-                    : `Active bids and slots owned by @${activeUser.handle}.`}
+                    : `Active sponsorships and showcase slots owned by @${activeUser.handle}.`}
                 </p>
               </div>
 
@@ -1629,7 +1630,7 @@ export function ProfileView({
                   <h3 className="text-sm font-bold text-white">No projects on the wall yet</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
                     {isSelf
-                      ? "You haven't bid any projects onto the 100-slot wall. Bid your first product to claim your live spot and boost visibility!"
+                      ? "You haven't featured any projects on the 100-slot showcase. Sponsor your first product to claim your live spot and boost visibility!"
                       : "This creator currently has no active projects on the board."}
                   </p>
                 </div>
@@ -1641,7 +1642,7 @@ export function ProfileView({
                     onClick={handleClaim}
                     className="font-bold shadow-lg shadow-amber-500/20"
                   >
-                    Bid Your First Project
+                    Sponsor Your First Project
                   </Button>
                 )}
               </div>
@@ -1919,7 +1920,7 @@ export function ProfileView({
                     ) : isGraveyard ? (
                       <>
                         <span className="rounded-full bg-rose-500/20 px-3 py-1 font-mono text-xs font-bold text-rose-300 border border-rose-500/30 backdrop-blur-md">
-                          Rank #{globalRank} (Graveyard)
+                          Rank #{globalRank} (Archive)
                         </span>
                         <span className="rounded-full bg-black/80 px-3 py-1 font-mono text-xs font-bold text-white border border-white/[0.2] backdrop-blur-md">
                           {p.active_value != null && p.active_value > 0 ? `${money(p.active_value)} paid` : "$0 paid"}
@@ -1955,7 +1956,7 @@ export function ProfileView({
                       {isGraveyard && (
                         <>
                           <span>·</span>
-                          <span className="text-rose-400">In Graveyard (Rank #{globalRank})</span>
+                          <span className="text-rose-400">In Directory Archive (Rank #{globalRank})</span>
                         </>
                       )}
                     </div>
@@ -1982,6 +1983,16 @@ export function ProfileView({
                       href={p.linkUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => {
+                        try {
+                          fetch('/api/track/click', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ projectId: p.id }),
+                            keepalive: true,
+                          }).catch(() => {});
+                        } catch {}
+                      }}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] px-4 py-2 text-xs font-semibold text-white border border-white/[0.1] transition-colors shrink-0"
                     >
                       <span>Visit Site</span>
@@ -1998,7 +2009,7 @@ export function ProfileView({
                       isLiveOnWall && globalRank > 0
                         ? `#${globalRank}`
                         : isGraveyard
-                        ? `#${globalRank} (Graveyard)`
+                        ? `#${globalRank} (Archive)`
                         : "Unranked"
                     }
                     label="Overall Rank"
@@ -2021,7 +2032,7 @@ export function ProfileView({
                       p.peak_rank > 0 && p.peak_rank <= 100
                         ? `#${p.peak_rank}`
                         : p.peak_rank > 100
-                        ? `#${p.peak_rank} (Graveyard)`
+                        ? `#${p.peak_rank} (Archive)`
                         : "—"
                     }
                     valueClassName="text-amber-300"
@@ -2179,8 +2190,8 @@ export function ProfileView({
                 {isOwnerOfP
                   ? "Top up your active value to climb higher on the 100-slot wall. Your existing paid value always carries forward."
                   : p.name && p.name !== "N/A"
-                  ? `Outbid "${p.name}" to claim their spot on the grid and shove competitors downward.`
-                  : "Outbid this slot to claim a spot on the grid and shove competitors downward."}
+                  ? `Sponsor higher than "${p.name}" to claim their spot on the billboard and elevate your ranking.`
+                  : "Sponsor this slot to claim a spot on the billboard and elevate your ranking."}
               </p>
 
               <Button
@@ -2190,8 +2201,41 @@ export function ProfileView({
                 onClick={() => handleBump(p)}
                 className="w-full justify-center text-sm font-bold shadow-lg shadow-amber-500/20"
               >
-                {isOwnerOfP ? "Top Up Active Value" : "Outbid & Bump Slot"}
+                {isOwnerOfP ? "Top Up Active Value" : "Sponsor & Bump Slot"}
               </Button>
+            </div>
+
+            {/* Live Embed Badge Card */}
+            <div className="rounded-2xl border border-white/[0.08] bg-[#18191d]/90 p-4 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Live Showcase Badge
+                </span>
+                <img
+                  src={`/api/badge/${p.id}`}
+                  alt="Live Rank Badge"
+                  className="h-5 shrink-0"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 leading-normal">
+                Embed this live SVG badge on your GitHub README, documentation, or landing page:
+              </p>
+              <div className="p-2 rounded-lg bg-black/60 border border-white/[0.1] text-[10px] font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap select-all">
+                {`[![Featured on BumpOne](https://bumpone.lol/api/badge/${p.id})](https://bumpone.lol/project/${p.id})`}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`[![Featured on BumpOne](https://bumpone.lol/api/badge/${p.id})](https://bumpone.lol/project/${p.id})`);
+                  setProjectBadgeCopied(true);
+                  soundEngine.playSuccess();
+                  setTimeout(() => setProjectBadgeCopied(false), 2000);
+                }}
+                className="w-full py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-amber-300 border border-white/[0.1] text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                {projectBadgeCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {projectBadgeCopied ? "Copied Markdown Snippet!" : "Copy Embed Markdown"}
+              </button>
             </div>
           </div>
         </div>
@@ -2641,7 +2685,7 @@ export function ProfileView({
       )}
 
       {/* ========================================================================= */}
-      {/* TAKE OVER / BID MODAL (In-Place on Profile Page)                          */}
+      {/* SPONSORSHIP / BILLBOARD MODAL (In-Place on Profile Page)                  */}
       {/* ========================================================================= */}
       {isBiddingOpen && (
         <TakeOverModal

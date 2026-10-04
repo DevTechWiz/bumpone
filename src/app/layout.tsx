@@ -20,9 +20,10 @@ const jetbrains = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "BumpOne.lol - Bump #1 & Rule the Grid",
+  metadataBase: new URL("https://bumpone.lol"),
+  title: "BumpOne.lol - Curated Digital Showcase & Developer Billboard",
   description:
-    "The internet's live attention arena. Bump #1 to seize the King citadel, defend your turf, and rule the shifting grid.",
+    "Curated digital showcase and promotional developer billboard platform. Helping software tools, apps, and creators reach engaged tech audiences.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

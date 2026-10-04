@@ -84,11 +84,11 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
 
           {/* Description */}
           <p className="text-[11px] text-slate-300 leading-snug">
-            <strong>{event.promotedItem.bidderName}</strong> paid{' '}
-            <strong className="text-white font-mono">${event.promotedItem.amountPaid}</strong>, taking <strong>Rank #{event.newRank}</strong>.{' '}
+            <strong>{event.promotedItem.bidderName}</strong> sponsored{' '}
+            <strong className="text-white font-mono">${event.promotedItem.amountPaid}</strong>, reaching <strong>Rank #{event.newRank}</strong>.{' '}
             {event.droppedItem && event.droppedItem.id !== event.promotedItem.id ? (
               <span>
-                <strong>{event.droppedItem.title}</strong> was displaced to Rank #101 in the Graveyard. Slot #100 remains live on the board.
+                <strong>{event.droppedItem.title}</strong> was moved to Rank #101 in the Directory Archive. Slot #100 remains live on the billboard.
               </span>
             ) : null}
           </p>

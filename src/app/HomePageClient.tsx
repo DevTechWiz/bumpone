@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Zap,
   Radio,
-  Skull,
+  Archive,
   Search,
   Compass,
   Volume2,
@@ -122,7 +122,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-1',
     sender: '@grid_sentinel',
     avatarColor: 'bg-indigo-500',
-    text: 'WAR ROOM ACTIVE. Active Value decides everything. King rules the 4x4 center.',
+    text: 'LIVE SHOWCASE STREAM ACTIVE. Sponsorship rank decides billboard placement.',
     timestamp: Date.now() - 7200000,
     isOfficial: true,
   },
@@ -130,7 +130,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-2',
     sender: '@solana_surfer',
     avatarColor: 'bg-sky-500',
-    text: 'Watching the Center King #1 throne. Who is going to top up past the sovereign?',
+    text: 'Watching the Center King #1 throne. Who is going to sponsor past the sovereign?',
     slotTag: 1,
     timestamp: Date.now() - 3600000,
   },
@@ -138,7 +138,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-init-3',
     sender: '@neon_hunter',
     avatarColor: 'bg-rose-500',
-    text: 'Rank #100 is holding the active floor! One more bump and someone drops to #101 Graveyard!',
+    text: 'Rank #100 is holding the active floor! Incoming sponsorships move slots to the Directory Archive!',
     slotTag: 100,
     timestamp: Date.now() - 1200000,
   },
@@ -265,7 +265,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
         window.history.back();
         return;
       }
-      window.history.replaceState({}, '', '/');
+      window.history.replaceState({}, '', window.location.pathname);
     }
     setViewingProfileId(null);
   }, []);
@@ -1248,9 +1248,9 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
               setIsWarRoomOpen(true);
             }}
             className="text-xs py-1 px-2 sm:px-2.5 bg-white/[0.05] border-white/[0.12] text-neutral-200 hover:bg-white/[0.1]"
-            title="Open Live Battle War Room"
+            title="Open Live Activity Stream"
           >
-            <span className="hidden sm:inline">War Room</span>
+            <span className="hidden sm:inline">Activity Feed</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
           </Button>
 
@@ -1286,14 +1286,15 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           <Button
             variant="secondary"
             size="sm"
-            leftIcon={<Skull className="w-3 h-3 text-slate-400" />}
+            leftIcon={<Archive className="w-3 h-3 text-slate-400" />}
             onClick={() => {
               soundEngine.playClick();
               setIsGraveyardOpen(true);
             }}
             className="text-xs py-1 px-2.5"
+            title="Directory Archive"
           >
-            <span className="hidden xs:inline">Graveyard</span>{' '}
+            <span className="hidden xs:inline">Archive</span>{' '}
             {!hasMounted || isBoardLoading ? (
               <Skeleton variant="rounded" width={14} height={12} className="inline-block ml-1 align-middle" />
             ) : (
@@ -1433,16 +1434,16 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             <div className="flex items-center gap-2 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               <span className="truncate">
-                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. Spots #1–#100 are live on the wall; profiles displaced beyond #100 (into #101+) enter the Graveyard.
+                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. Spots #1–#100 are live on the billboard; listings displaced beyond #100 enter the Directory Archive.
               </span>
             </div>
           )}
           <div className="shrink-0 pl-2 flex items-center gap-2.5">
             <div className="hidden xl:flex items-center gap-1.5 text-[9px] text-neutral-400 font-mono">
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">B</span> Bid
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">W</span> War Room
+              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">B</span> Sponsor
+              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">W</span> Activity
               <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">L</span> Leaderboard
-              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">G</span> Graveyard
+              <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">G</span> Archive
               <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">?</span> Rules
               <span className="px-1 py-0.5 rounded bg-white/[0.06] border border-white/[0.1] text-neutral-300">M</span> Mute
             </div>
@@ -1569,7 +1570,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
             setTargetSlotToBump(null);
             setSelectedSlot(null);
             if (typeof window !== 'undefined' && window.history.state?.modal === 'bump') {
-              window.history.replaceState({}, '', '/');
+              window.history.replaceState({}, '', window.location.pathname);
             }
           }}
         />

@@ -33,7 +33,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Displacement & Rank Alerts"
-      subtitle="Control how BumpOne notifies you when you are challenged or outbid"
+      subtitle="Control how BumpOne notifies you when your ranking or slot placement changes"
       maxWidth="md"
     >
       <div className="space-y-4 text-xs">
@@ -50,9 +50,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
               <Mail className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-semibold text-white">Email Outbid Notifications</div>
+              <div className="font-semibold text-white">Email Rank Change Notifications</div>
               <div className="text-[11px] text-slate-400">
-                Receive an immediate email to <span className="text-slate-200">{userEmail}</span> if a rival bumps your slot.
+                Receive an immediate email to <span className="text-slate-200">{userEmail}</span> if another sponsor bumps your rank.
               </div>
             </div>
           </div>
@@ -90,9 +90,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
               <ShieldAlert className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-semibold text-white">Graveyard Alert (#101+ Displacement)</div>
+              <div className="font-semibold text-white">Archive Alert (#101+ Displacement)</div>
               <div className="text-[11px] text-slate-400">
-                High-priority alert if an outbid pushes your slot past Rank #100 into the Graveyard.
+                High-priority alert if a higher sponsorship displaces your slot past Rank #100 into the Directory Archive.
               </div>
             </div>
           </div>

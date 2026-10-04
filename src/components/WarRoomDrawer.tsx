@@ -189,11 +189,11 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
       headerIcon={<Radio className="w-4 h-4 animate-pulse text-neutral-300" />}
       title={
         <span className="flex items-center gap-1.5">
-          <span>WAR ROOM DISPATCH</span>
+          <span>LIVE SHOWCASE DISPATCH</span>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         </span>
       }
-      subtitle="Live battle telemetry & spectator transmissions"
+      subtitle="Live showcase activity & placement stream"
       headerExtra={
         <button
           type="button"
@@ -294,7 +294,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
                 <Swords className="w-8 h-8 mx-auto opacity-30 text-slate-400" />
                 <p className="font-medium">No bumps recorded yet.</p>
                 <p className="text-[11px] text-slate-600">
-                  Bump any slot to trigger live battles and claim your turf!
+                  Bump any slot to feature your project and elevate your rank!
                 </p>
               </div>
             ) : (

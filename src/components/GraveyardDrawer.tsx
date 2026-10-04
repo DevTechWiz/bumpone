@@ -1,5 +1,5 @@
 import React from 'react';
-import { Skull, RefreshCw } from 'lucide-react';
+import { Archive, RefreshCw } from 'lucide-react';
 import { Modal, Button } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 
@@ -25,19 +25,19 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       hasBackdrop={hasBackdrop}
-      title="The Graveyard (Off the Grid)"
-      subtitle="Profiles displaced beyond the top 100 (#101+) are kept here. Top up anytime to reclaim an active spot on the grid."
+      title="Directory Archive (Off the Grid)"
+      subtitle="Listings displaced beyond the top 100 (#101+) are kept here. Top up anytime to restore active billboard placement."
       maxWidth="lg"
     >
       <div className="space-y-4">
         {bumpedHistory.length === 0 ? (
           <div className="text-center py-10 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] mx-auto flex items-center justify-center text-slate-400">
-              <Skull className="w-6 h-6" />
+              <Archive className="w-6 h-6" />
             </div>
             <h4 className="text-sm font-semibold text-white">No Off-Board Profiles Yet</h4>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              All 100 spots on the board are live and active. When a climb displaces a profile beyond Rank #100, it lands here (#101+) — preserved, ready to reclaim.
+              All 100 spots on the billboard are live and active. When rank changes move a listing beyond Rank #100, it lands here (#101+) — preserved, ready to restore anytime.
             </p>
           </div>
         ) : (
@@ -64,7 +64,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {item.bidderName} &bull; Paid ${item.amountPaid}
+                      {item.owner_name || item.bidderName} &bull; Sponsoring ${item.amountPaid}
                     </p>
                   </div>
                 </div>
@@ -79,7 +79,7 @@ export const GraveyardDrawer: React.FC<GraveyardDrawerProps> = ({
                       onReclaimTurf(item);
                     }}
                   >
-                    Reclaim
+                    Restore
                   </Button>
                 </div>
               </div>

@@ -157,6 +157,37 @@ class SoundEngine {
       // Silently fail
     }
   }
+
+  /**
+   * Subtle positive chime for copy/success feedback
+   */
+  public playSuccess() {
+    if (this.isMuted) return;
+    try {
+      this.initContext();
+      if (!this.ctx) return;
+
+      const freqs = [659.25, 880.0]; // E5 -> A5 pleasant chime
+      freqs.forEach((freq, idx) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, this.ctx!.currentTime + idx * 0.07);
+
+        gain.gain.setValueAtTime(0.04, this.ctx!.currentTime + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx!.currentTime + idx * 0.07 + 0.18);
+
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+
+        osc.start(this.ctx!.currentTime + idx * 0.07);
+        osc.stop(this.ctx!.currentTime + idx * 0.07 + 0.18);
+      });
+    } catch {
+      // Silently fail
+    }
+  }
 }
 
 export const soundEngine = new SoundEngine();

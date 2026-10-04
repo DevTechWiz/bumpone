@@ -1,30 +1,15 @@
 import type { Metadata } from 'next';
 import { getBoardProfiles } from '@/lib/getBoard';
-import { sortBoard } from '@/lib/board';
-import { HomePageClient } from './HomePageClient';
+import { ShowcaseBillboardPage } from '@/components/ShowcaseBillboardPage';
 
 export const metadata: Metadata = {
-  title: 'BumpOne.lol - The 100-Slot Attention Grid',
-  description: 'A dynamic 100-slot attention grid where active value rules the wall. Crown conquered at #1 Center King.',
+  title: 'BumpOne.lol - Curated Digital Showcase & Developer Billboard',
+  description:
+    'A curated digital showcase and tech promotional billboard for modern software, developer tools, SaaS applications, and tech projects.',
 };
 
 export default async function HomePage() {
   const initialProfiles = await getBoardProfiles(120);
-  const sorted = sortBoard(initialProfiles);
-  const kingSlot = sorted[0];
 
-  const kingImageUrl = kingSlot?.imageUrl?.includes("images.unsplash.com") && kingSlot.imageUrl.includes("w=")
-    ? kingSlot.imageUrl.replace(/w=\d+/, "w=400")
-    : kingSlot?.imageUrl;
-
-  return (
-    <>
-      {kingImageUrl && (
-        <head>
-          <link rel="preload" as="image" href={kingImageUrl} fetchPriority="high" />
-        </head>
-      )}
-      <HomePageClient initialProfiles={initialProfiles} />
-    </>
-  );
+  return <ShowcaseBillboardPage initialProfiles={initialProfiles} />;
 }

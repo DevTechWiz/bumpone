@@ -28,9 +28,17 @@ export async function POST(request: NextRequest) {
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: 'Invalid purchase parameters', details: parsed.error.flatten() }, { status: 400 });
     const input = parsed.data;
-    const { data: state, error: stateError } = await supabaseAdmin.from('system_state').select('purchases_paused').eq('id', 'global').single();
-    if (stateError) throw new Error('Unable to verify purchase availability');
-    if (state.purchases_paused) return NextResponse.json({ error: 'Purchases are temporarily paused.' }, { status: 503 });
+    if (process.env.PURCHASES_PAUSED === 'true') {
+      return NextResponse.json({ error: 'Purchases are temporarily paused.' }, { status: 503 });
+    }
+    try {
+      const { data: state } = await supabaseAdmin.from('system_state').select('purchases_paused').eq('id', 'global').maybeSingle();
+      if (state?.purchases_paused) {
+        return NextResponse.json({ error: 'Purchases are temporarily paused.' }, { status: 503 });
+      }
+    } catch {
+      // Gracefully ignore if system_state table is consolidated or removed
+    }
     const { data: existingUser, error: existingUserError } = await supabaseAdmin.from('users').select('id, handle').eq('id', user.id).maybeSingle();
     if (existingUserError) throw new Error('Unable to verify user account');
     const cleanInputHandle = input.handle.replace(/^@/, '').trim().toLowerCase();
@@ -99,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     const session = await createDodoCheckoutSession({
       amountMinor: suppliedMinor,
-      returnUrl: `${appUrl}/?status=pending_payment&quote_id=${quote.id}`,
+      returnUrl: `${appUrl}/arena?status=pending_payment&quote_id=${quote.id}`,
       metadata: {
         quote_id: quote.id,
         project_id: projectId,

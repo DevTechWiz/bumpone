@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Sign in to send transmissions in the War Room.' },
+        { error: 'Sign in to send messages in the Live Showcase Feed.' },
         { status: 401 }
       );
     }
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     // Rate limit: 5 messages per 30 seconds per user
     if (!allowRequest(`war_room_msg:${user.id}`, 5, 30_000)) {
       return NextResponse.json(
-        { error: 'Transmission cooldown active. Please wait a few seconds before shouting out again.' },
+        { error: 'Message cooldown active. Please wait a few seconds before posting again.' },
         { status: 429, headers: { 'Retry-After': '10' } }
       );
     }

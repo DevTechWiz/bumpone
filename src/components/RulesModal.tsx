@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Sparkles, Shield, Skull, Zap, Radio, ShieldAlert, ArrowRight, DollarSign } from 'lucide-react';
+import { Crown, Sparkles, Shield, Archive, Zap, Radio, ShieldAlert, ArrowRight, DollarSign } from 'lucide-react';
 import { Modal, Button } from './ui';
 import { MIN_TOP_UP } from '../lib/board';
 
@@ -23,8 +23,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       hasBackdrop={hasBackdrop}
-      title="How BumpOne Works: The Arena Rules"
-      subtitle="Outbid rivals, claim your turf, and rule the 100-slot attention grid."
+      title="How BumpOne Works: Dynamic Showcase Rules"
+      subtitle="Feature your project, elevate your rank, and gain global visibility across the 100-slot attention grid."
       maxWidth="lg"
     >
       <div className="space-y-4 text-xs text-slate-300">
@@ -33,7 +33,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400" />
             <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-              1. The 3 Steps to Play
+              1. The 3 Steps to Feature Your Product
             </h4>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -41,9 +41,9 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               <span className="font-mono text-[10px] font-bold text-amber-400 flex items-center gap-1">
                 STEP 1 <ArrowRight className="w-2.5 h-2.5 text-neutral-500" />
               </span>
-              <strong className="block text-white text-[11px]">Pick a Slot or Rival</strong>
+              <strong className="block text-white text-[11px]">Pick a Slot or Target Rank</strong>
               <p className="text-[10px] text-neutral-400 leading-normal">
-                Click any slot on the grid to challenge its rank, or hit &ldquo;Bump onto the Grid&rdquo; to launch your project.
+                Click any slot on the grid to elevate its rank, or hit &ldquo;Bump onto the Grid&rdquo; to launch your project.
               </p>
             </div>
 
@@ -53,7 +53,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               </span>
               <strong className="block text-white text-[11px]">Pay Only the Difference</strong>
               <p className="text-[10px] text-neutral-400 leading-normal">
-                Your past spending carries forward as equity. You only pay the delta + at least ${MIN_TOP_UP} to leap ahead.
+                Your past ad spending carries forward as active value. You only pay the delta + at least ${MIN_TOP_UP} to leap ahead.
               </p>
             </div>
 
@@ -61,9 +61,9 @@ export const RulesModal: React.FC<RulesModalProps> = ({
               <span className="font-mono text-[10px] font-bold text-purple-400 flex items-center gap-1">
                 STEP 3 <Crown className="w-2.5 h-2.5 text-amber-400" />
               </span>
-              <strong className="block text-white text-[11px]">Rule the Grid Live</strong>
+              <strong className="block text-white text-[11px]">Live Global Visibility</strong>
               <p className="text-[10px] text-neutral-400 leading-normal">
-                Your card displaces rivals instantly worldwide with live audio cues and War Room telemetry.
+                Your project updates instantly worldwide with live ranking displacement and real-time activity telemetry.
               </p>
             </div>
           </div>
@@ -138,32 +138,32 @@ export const RulesModal: React.FC<RulesModalProps> = ({
                 <span className="font-bold text-rose-200 flex items-center gap-1.5 text-xs">
                   <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Grid Floor (#51–#100)
                 </span>
-                <span className="font-mono text-[9px] text-rose-300 bg-rose-500/10 px-1.5 py-0.5 rounded">Danger Zone</span>
+                <span className="font-mono text-[9px] text-rose-300 bg-rose-500/10 px-1.5 py-0.5 rounded">Floor Zone</span>
               </div>
               <p className="text-[10px] text-slate-300 leading-normal">
-                All 100 spots on the board are active. If an incoming higher bid knocks your card beyond #100, it moves to the Graveyard.
+                All 100 spots on the billboard are active. If an incoming higher sponsorship shifts your card beyond #100, it moves into the Directory Archive.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Section 4: War Room & Graveyard */}
+        {/* Section 4: Live Activity & Directory Archive */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1">
             <div className="flex items-center gap-1.5 text-white font-bold text-xs">
-              <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> Live War Room
+              <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> Live Activity Feed
             </div>
             <p className="text-[10px] text-neutral-400 leading-normal">
-              Spectate live coronations, hostile takeovers, and displacements as they happen with real-time audio and community chat.
+              Spectate live rank upgrades, top-tier sponsorships, and visibility updates as they happen with real-time audio and community stream.
             </p>
           </div>
 
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1">
             <div className="flex items-center gap-1.5 text-white font-bold text-xs">
-              <Skull className="w-3.5 h-3.5 text-neutral-400" /> The Graveyard
+              <Archive className="w-3.5 h-3.5 text-neutral-400" /> Directory Archive
             </div>
             <p className="text-[10px] text-neutral-400 leading-normal">
-              Displaced past #100? Your card is never deleted. Your active value stays saved—top up at least ${MIN_TOP_UP} to leap straight back onto the grid.
+              Displaced past #100? Your card is never deleted. Your active value stays saved—top up at least ${MIN_TOP_UP} to restore active billboard placement.
             </p>
           </div>
         </div>
@@ -171,7 +171,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({
         {/* Immediate Delivery & Non-Refundable Disclosure */}
         <div className="px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[10px] text-neutral-400 font-mono flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
-          <span>All bumps take effect instantaneously on the live global board and are strictly non-refundable.</span>
+          <span>All bumps take effect instantaneously on the live global board and are strictly non-refundable digital advertising placements.</span>
         </div>
 
         {/* Action Button & Legal Links */}

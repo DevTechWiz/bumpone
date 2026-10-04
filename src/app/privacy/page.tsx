@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { ArrowLeft } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Privacy Policy & DPDP Act Compliance - BumpOne.lol",
@@ -9,21 +10,45 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-[#0d0e12] text-neutral-300 font-sans selection:bg-amber-500/30 selection:text-amber-200">
+    <div className="min-h-screen bg-[#07080b] text-neutral-300 font-sans selection:bg-amber-500/30 selection:text-amber-200">
       {/* Header Navigation */}
-      <nav className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#0d0e12]/80 backdrop-blur-md px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <Link
-            href="/"
-            className="flex items-center gap-2 font-mono text-base font-bold tracking-wider text-amber-400 hover:text-amber-300 transition-colors"
-          >
-            <span>◀</span>
-            <span>BUMPONE.LOL</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
+      <nav className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#07080b]/85 backdrop-blur-xl px-4 sm:px-6 py-3.5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-xs font-mono font-medium text-neutral-400 hover:text-white transition-colors bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] px-3 py-1.5 rounded-lg"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Showcase</span>
+            </Link>
+
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="h-8 w-8 rounded-lg bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 font-mono font-black text-sm group-hover:scale-105 transition-transform">
+                B
+              </div>
+              <span className="font-bold text-white tracking-tight text-sm sm:text-base">
+                BumpOne<span className="text-amber-400">.lol</span>
+              </span>
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="/terms"
+              className="hidden sm:inline-flex text-xs font-mono text-neutral-400 hover:text-amber-400 transition-colors"
+            >
+              Terms of Service
+            </Link>
+            <Link
+              href="/refund"
+              className="hidden sm:inline-flex text-xs font-mono text-neutral-400 hover:text-amber-400 transition-colors"
+            >
+              Refund Policy
+            </Link>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              DPDP 2026 & GDPR READY
+              DPDP 2026 &amp; GDPR READY
             </span>
           </div>
         </div>
@@ -99,7 +124,7 @@ export default function PrivacyPage() {
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                 <div className="font-bold text-white mb-1">C. Financial Transaction Identifiers</div>
                 <div className="text-sm text-neutral-400 mb-2">
-                  <strong>Data Items:</strong> Dodo Payments / Stripe payment intent IDs, customer email, transaction timestamp, payment status, and minor currency amount ($USD).
+                  <strong>Data Items:</strong> Dodo Payments / Razorpay / Stripe transaction IDs, customer email, transaction timestamp, payment status, and order currency amounts (USD / INR).
                 </div>
                 <div className="text-xs font-mono text-amber-300">
                   Purpose: Crediting active slot values, triggering real-time bump displacement events, and anti-fraud verification.
@@ -112,7 +137,7 @@ export default function PrivacyPage() {
                   <strong>Data Items:</strong> IP address, browser user-agent, request timestamps, and rate-limiting counters.
                 </div>
                 <div className="text-xs font-mono text-amber-300">
-                  Purpose: Enforcing sliding-window rate limits, blocking spoofed War Room transmissions, and DDoS mitigation.
+                  Purpose: Enforcing sliding-window rate limits, blocking spoofed live activity feed messages, and DDoS mitigation.
                 </div>
               </div>
             </div>
@@ -196,10 +221,10 @@ export default function PrivacyPage() {
                     <td className="p-3">OpenID Connect, Token Verification</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-bold text-white">Dodo Payments / Stripe</td>
-                    <td className="p-3">Merchant of Record</td>
+                    <td className="p-3 font-bold text-white">Dodo Payments / Razorpay</td>
+                    <td className="p-3">Payment Processing &amp; MoR</td>
                     <td className="p-3">PCI-DSS Compliant Tier</td>
-                    <td className="p-3">PCI Level 1, Svix Signature Verification</td>
+                    <td className="p-3">PCI Level 1, Svix / HMAC Signature Verification</td>
                   </tr>
                 </tbody>
               </table>
@@ -275,13 +300,19 @@ export default function PrivacyPage() {
 
         {/* Footer */}
         <div className="mt-16 border-t border-white/[0.08] pt-8 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-500 gap-4">
-          <span>&copy; {new Date().getFullYear()} BumpOne.lol • All Rights Reserved</span>
-          <div className="flex gap-6">
+          <span>&copy; {new Date().getFullYear()} BumpOne.lol • Curated Digital Billboard &amp; Directory Showcase</span>
+          <div className="flex flex-wrap gap-4">
             <Link href="/terms" className="hover:text-amber-400 transition-colors">
               Terms of Service
             </Link>
-            <Link href="/" className="hover:text-amber-400 transition-colors">
-              Live Grid
+            <Link href="/privacy" className="hover:text-amber-400 transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/refund" className="hover:text-amber-400 transition-colors">
+              Refund Policy
+            </Link>
+            <Link href="/contact" className="hover:text-amber-400 transition-colors">
+              Contact Us
             </Link>
           </div>
         </div>

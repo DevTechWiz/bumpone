@@ -154,8 +154,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                   <Zap className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-white leading-tight">Bid New Project / Slot</div>
-                  <div className="text-[10px] text-neutral-400 truncate">Bid on slot or outbid rivals</div>
+                  <div className="font-medium text-white leading-tight">Sponsor Billboard Slot</div>
+                  <div className="text-[10px] text-neutral-400 truncate">Feature project or elevate rank</div>
                 </div>
               </button>
             )}
@@ -176,7 +176,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-white leading-tight">Displacement Alerts</div>
-                  <div className="text-[10px] text-neutral-400 truncate">Email & push when outbid</div>
+                  <div className="text-[10px] text-neutral-400 truncate">Email &amp; push when rank changes</div>
                 </div>
               </button>
             )}
