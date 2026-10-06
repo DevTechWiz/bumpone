@@ -3,12 +3,22 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { type Profile, type Category } from '@/lib/board';
 import {
   boardMemoryCache,
+  setBoardCache,
   CACHE_TTL_MS,
   getInFlightFetch,
   setInFlightFetch,
   clearInFlightFetch,
   type BoardCacheEntry,
 } from '@/lib/boardCache';
+import { allowRequest } from '@/lib/rateLimit';
+import { clientIp } from '@/lib/requestGuard';
+import { safeExternalUrl } from '@/lib/urls';
+import { isPurchasesPaused } from '@/lib/pauseState';
+
+const VALID_SORTS = ['power', 'popular', 'trending'] as const;
+// Category names are human labels (letters/digits/space/&/_/-), max 50 chars —
+// bounds both the PostgREST filter and the cache key space (SEC-009).
+const CATEGORY_RE = /^[\p{L}\p{N} &_-]{1,50}$/u;
 
 function computeETag(profiles: Profile[]): string {
   if (!profiles || profiles.length === 0) return 'W/"empty-0"';
@@ -105,31 +115,16 @@ async function fetchAndCacheBoard(
       query = query.order('current_active_value_minor', { ascending: false }).order('ranking_sequence', { ascending: true });
     }
 
-    const { data: projectData, error: projectErr } = await query.limit(limit);
-    let data: any[] | null = projectData as any;
-    let error = projectErr;
+    const [projectResult, purchasesPaused] = await Promise.all([
+      query.limit(limit),
+      isPurchasesPaused(),
+    ]);
+    const { data: projectData, error: projectErr } = projectResult;
+    const data: any[] | null = projectData as any;
+    const error = projectErr;
 
-    // Fallback without relation embeds
-    if (error || !data || data.length === 0) {
-      let legacyQuery = supabaseAdmin
-        .from('projects')
-        .select('*')
-        .eq('is_active', true)
-        .eq('moderation_status', 'approved')
-        .not('current_rank', 'is', null)
-        .lte('current_rank', limit);
-
-      if (sort === 'popular') {
-        legacyQuery = legacyQuery.order('total_reactions', { ascending: false });
-      } else if (sort === 'trending') {
-        legacyQuery = legacyQuery.order('updated_at', { ascending: false });
-      }
-
-      const legacyRes = await legacyQuery.limit(limit);
-      if (!legacyRes.error && legacyRes.data && legacyRes.data.length > 0) {
-        data = legacyRes.data as any;
-        error = null;
-      }
+    if (error) {
+      console.error('Board query failed:', error.message);
     }
 
     if (!error && data && data.length > 0) {
@@ -145,9 +140,7 @@ async function fetchAndCacheBoard(
           ? row.categories[0]?.name
           : row.categories?.name;
 
-        const activeValue = row.current_active_value_minor != null
-          ? Math.floor(Number(row.current_active_value_minor) / 100)
-          : Number(row.current_active_value || 0);
+        const activeValue = Math.floor(Number(row.current_active_value_minor || 0) / 100);
 
         const views = Number(row.views_count || 0);
         const joinedDaysAgo = row.created_at
@@ -158,13 +151,13 @@ async function fetchAndCacheBoard(
 
         return {
           id: row.id,
-          seq: Number(row.ranking_sequence || row.sequence || 0),
+          seq: Number(row.ranking_sequence || 0),
           name: row.title || row.display_name || 'Project',
           handle: row.handle,
           category: (categoryName || 'Tech') as Category,
           active_value: activeValue,
           imageUrl: row.image_path,
-          linkUrl: row.destination_url,
+          linkUrl: safeExternalUrl(row.destination_url),
           owner_id: row.user_id || undefined,
           owner_name: owner.display_name || undefined,
           owner_handle: owner.handle || undefined,
@@ -195,13 +188,13 @@ async function fetchAndCacheBoard(
         total: profiles.length,
         sort,
         category: category || 'All',
-        purchasesPaused: false,
+        purchasesPaused,
       };
 
       const rawJson = JSON.stringify(payload);
       const etag = computeETag(profiles);
       const entry: BoardCacheEntry = { rawJson, data: payload, timestamp: now, etag };
-      boardMemoryCache.set(cacheKey, entry);
+      setBoardCache(cacheKey, entry);
       return entry;
     }
   }
@@ -211,20 +204,39 @@ async function fetchAndCacheBoard(
     total: 0,
     sort,
     category: category || 'All',
-    purchasesPaused: false,
+    purchasesPaused: await isPurchasesPaused(),
   };
   const rawJson = JSON.stringify(fallbackPayload);
   const etag = 'W/"empty-0"';
   const entry: BoardCacheEntry = { rawJson, data: fallbackPayload, timestamp: now, etag };
-  boardMemoryCache.set(cacheKey, entry);
+  setBoardCache(cacheKey, entry);
   return entry;
 }
 
 export async function GET(request: NextRequest) {
+  // Cheap checks first: per-IP budget before any parsing/DB work (SEC-007).
+  if (!allowRequest(`board:${clientIp(request)}`, 240, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': '60' } });
+  }
+
   const { searchParams } = new URL(request.url);
-  const sort = searchParams.get('sort') || 'power';
-  const category = searchParams.get('category');
-  const limit = Math.min(120, Math.max(1, Number(searchParams.get('limit')) || 100));
+  const sortRaw = searchParams.get('sort') || 'power';
+  if (!(VALID_SORTS as readonly string[]).includes(sortRaw)) {
+    return NextResponse.json({ error: 'Invalid sort value' }, { status: 400 });
+  }
+  const sort = sortRaw;
+
+  const categoryRaw = searchParams.get('category');
+  let category: string | null = null;
+  if (categoryRaw && categoryRaw !== 'All') {
+    if (!CATEGORY_RE.test(categoryRaw)) {
+      return NextResponse.json({ error: 'Invalid category value' }, { status: 400 });
+    }
+    category = categoryRaw;
+  }
+
+  const limitRaw = Number(searchParams.get('limit'));
+  const limit = Math.min(120, Math.max(1, Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.floor(limitRaw) : 100));
 
   const cacheKey = `${sort}:${category || 'All'}:${limit}`;
   const now = Date.now();

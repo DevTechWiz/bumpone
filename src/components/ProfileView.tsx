@@ -18,8 +18,6 @@ import {
   UserCheck,
   Image as ImageIcon,
   AlertCircle,
-  Move,
-  RotateCcw,
   Tag,
   Plus,
   Layers,
@@ -55,8 +53,12 @@ const TakeOverModal = dynamic(
   () => import("./TakeOverModal").then((m) => m.TakeOverModal),
   { ssr: false }
 );
+
+const ShareCardModal = dynamic(
+  () => import("./ShareCardModal").then((m) => m.ShareCardModal),
+  { ssr: false }
+);
 import {
-  REACTION_EMOJI,
   CATEGORIES,
   sortBoard,
   money,
@@ -69,7 +71,7 @@ import {
 import { soundEngine } from "../lib/sound";
 import { useAuth } from "../lib/useAuth";
 import { createClient } from "../lib/supabase/client";
-import { sessionGetJSON, safeGetJSON } from "../lib/storage";
+import { sessionGetJSON } from "../lib/storage";
 import { fetchBoardClient, invalidateClientBoardCache } from "../lib/boardClient";
 
 export interface ProfileViewProps {
@@ -93,37 +95,28 @@ export function ProfileView({
   onSelectProfile,
   onUpdateProfile,
   onClaimSlot,
-  onOpenAlerts,
+  onOpenAlerts: _onOpenAlerts,
   onBumpProject,
   onRequireAuth,
 }: ProfileViewProps) {
   const { user, profile: authProfile, loading: authLoading } = useAuth();
 
   // Loading state for board profiles
-  const [isProfilesLoading, setIsProfilesLoading] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const cached = sessionGetJSON<Profile[]>("bumped_board_cache");
-      if (cached && Array.isArray(cached) && cached.length > 0) return false;
-      const saved = safeGetJSON<Profile[]>("bumped_board_profiles");
-      if (saved && Array.isArray(saved) && saved.length > 0) return false;
-    }
-    return true;
-  });
+  const [isProfilesLoading, setIsProfilesLoading] = useState<boolean>(() => !initialProject);
 
   // Real board profiles from database
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     if (initialProject) return [initialProject];
-    if (typeof window !== "undefined") {
-      const cached = sessionGetJSON<Profile[]>("bumped_board_cache");
-      if (cached && Array.isArray(cached) && cached.length > 0) return cached;
-      const saved = safeGetJSON<Profile[]>("bumped_board_profiles");
-      if (saved && Array.isArray(saved) && saved.length > 0) return saved;
-    }
     return [];
   });
 
   // Fetch real board profiles with client-side deduplication & memory cache
   useEffect(() => {
+    const cached = sessionGetJSON<Profile[]>("bumped_board_cache");
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      setProfiles(cached);
+      setIsProfilesLoading(false);
+    }
     fetchBoardClient({ limit: 120 })
       .then((data) => {
         if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
@@ -523,9 +516,6 @@ export function ProfileView({
       bidderName: item.handle,
       activeValue: item.active_value,
       createdAt: item.last_bump_at,
-      imagePosX: item.imagePosX,
-      imagePosY: item.imagePosY,
-      imageZoom: item.imageZoom,
       owner_id: item.owner_id,
       owner_name: item.owner_name,
       owner_handle: item.owner_handle,
@@ -600,7 +590,7 @@ export function ProfileView({
           setProfiles(data.profiles);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const calculatedRank = p.id !== "slot-preview" ? sorted.findIndex((x) => x.id === p.id) + 1 : 0;
@@ -663,7 +653,7 @@ export function ProfileView({
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     } else {
       setActiveProjectReactions(new Set());
     }
@@ -957,37 +947,27 @@ export function ProfileView({
     setSelfProfile(updated);
 
     if (user) {
-      const currentUserId = user.id;
       (async () => {
         try {
-          const supabase = createClient();
-          const updatePayload: Record<string, any> = {
-            display_name: updated.name !== "N/A" ? updated.name : null,
-            handle: updated.handle !== "N/A" ? updated.handle : null,
-            bio: updated.bio || null,
-            avatar_url: updated.avatar_url || null,
-            website: updated.website || null,
-            twitter: updated.twitter || null,
-            github: updated.github || null,
-            updated_at: nowIso,
-          };
-          if (isHandleChanged) {
-            updatePayload.handle_last_changed_at = nowIso;
-          }
-          let { error } = await supabase
-            .from("users")
-            .update(updatePayload)
-            .eq("id", currentUserId);
-
-          if (error && error.message?.includes("handle_last_changed_at")) {
-            delete updatePayload.handle_last_changed_at;
-            await supabase
-              .from("users")
-              .update(updatePayload)
-              .eq("id", currentUserId);
+          const res = await fetch("/api/profile/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              display_name: updated.name !== "N/A" ? updated.name : null,
+              handle: updated.handle !== "N/A" ? updated.handle : null,
+              bio: updated.bio || null,
+              avatar_url: updated.avatar_url || null,
+              website: updated.website || null,
+              twitter: updated.twitter || null,
+              github: updated.github || null,
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            console.warn("Profile update failed:", data?.error || res.status);
           }
         } catch (err) {
-          console.warn("Supabase update error:", err);
+          console.warn("Profile update error:", err);
         }
       })();
     }
@@ -1004,17 +984,13 @@ export function ProfileView({
   const [editLinkUrl, setEditLinkUrl] = useState("");
   const [editCategory, setEditCategory] = useState<Category>("AI");
   const [editImageUrl, setEditImageUrl] = useState("");
-  const [editImagePosX, setEditImagePosX] = useState(50);
-  const [editImagePosY, setEditImagePosY] = useState(50);
-  const [editImageZoom, setEditImageZoom] = useState(1);
-  const [isRepositioning, setIsRepositioning] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Open modal for a specific project
   const handleOpenEditProject = (proj: Profile) => {
@@ -1024,9 +1000,6 @@ export function ProfileView({
     setEditLinkUrl(proj.linkUrl || "");
     setEditCategory(proj.category);
     setEditImageUrl(proj.imageUrl);
-    setEditImagePosX(proj.imagePosX ?? 50);
-    setEditImagePosY(proj.imagePosY ?? 50);
-    setEditImageZoom(proj.imageZoom ?? 1);
     setUploadError(null);
     setSavedSuccess(false);
   };
@@ -1058,52 +1031,6 @@ export function ProfileView({
     reader.readAsDataURL(file);
   };
 
-  // Left click drag to pan
-  const handleMouseDownReposition = (e: React.MouseEvent) => {
-    if (e.button !== 0) return; // Left click only
-    e.preventDefault();
-    setIsRepositioning(true);
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      posX: editImagePosX,
-      posY: editImagePosY,
-    };
-  };
-
-  const handleMouseMoveReposition = (e: React.MouseEvent) => {
-    if (!isRepositioning || !dragStartRef.current) return;
-    const deltaX = e.clientX - dragStartRef.current.x;
-    const deltaY = e.clientY - dragStartRef.current.y;
-    const sensitivity = 0.35 / (editImageZoom || 1);
-    const newPosX = Math.max(0, Math.min(100, Math.round(dragStartRef.current.posX - deltaX * sensitivity)));
-    const newPosY = Math.max(0, Math.min(100, Math.round(dragStartRef.current.posY - deltaY * sensitivity)));
-    setEditImagePosX(newPosX);
-    setEditImagePosY(newPosY);
-  };
-
-  const handleMouseUpReposition = () => {
-    setIsRepositioning(false);
-    dragStartRef.current = null;
-  };
-
-  // Mouse wheel scroll to zoom in/out (no sliders)
-  const handleWheelZoom = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomDelta = e.deltaY < 0 ? 0.1 : -0.1;
-    setEditImageZoom((prev) => {
-      const next = Math.max(1, Math.min(3, Number((prev + zoomDelta).toFixed(2))));
-      return next;
-    });
-  };
-
-  const handleResetPosition = () => {
-    soundEngine.playClick();
-    setEditImagePosX(50);
-    setEditImagePosY(50);
-    setEditImageZoom(1);
-  };
-
   // Save updated project settings
   const handleSaveProject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1117,9 +1044,6 @@ export function ProfileView({
       linkUrl: finalEditLinkUrl || editingProject.linkUrl,
       imageUrl: editImageUrl || editingProject.imageUrl,
       category: editCategory,
-      imagePosX: editImagePosX,
-      imagePosY: editImagePosY,
-      imageZoom: editImageZoom,
     };
 
     const nextProfiles = profiles.map((item) => (item.id === updated.id ? updated : item));
@@ -1131,20 +1055,24 @@ export function ProfileView({
 
     invalidateClientBoardCache();
 
-    // Persist project changes directly to Supabase database
+    // Persist project changes through the ownership-scoped update API (SEC-010)
     if (user) {
       (async () => {
         try {
-          const supabase = createClient();
-          await supabase
-            .from("projects")
-            .update({
+          const res = await fetch("/api/project/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId: updated.id,
               title: updated.name,
               destination_url: updated.linkUrl,
               image_path: updated.imageUrl,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", updated.id);
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            console.warn("Project update failed:", data?.error || res.status);
+          }
         } catch (err) {
           console.warn("Failed to persist project update to database:", err);
         }
@@ -1190,11 +1118,11 @@ export function ProfileView({
   const bestRank =
     creatorProjects.length > 0
       ? Math.min(
-          ...creatorProjects.map((x) => {
-            const r = sorted.findIndex((s) => s.id === x.id);
-            return r === -1 ? 999 : r + 1;
-          })
-        )
+        ...creatorProjects.map((x) => {
+          const r = sorted.findIndex((s) => s.id === x.id);
+          return r === -1 ? 999 : r + 1;
+        })
+      )
       : 0;
   const totalViews = creatorProjects.reduce((acc, x) => acc + (x.views || 0), 0);
 
@@ -1348,22 +1276,35 @@ export function ProfileView({
             </Button>
           )}
 
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] px-3 py-1.5 rounded-lg border border-white/[0.08] transition-colors cursor-pointer"
-          >
-            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedLink ? "Link Copied" : "Copy Link"}</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleFlexOnX}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-[#000] hover:bg-[#111] px-3.5 py-1.5 rounded-lg border border-white/[0.2] transition-all cursor-pointer shadow-sm hover:border-white/[0.4]"
-          >
-            <Share2 className="w-3.5 h-3.5 text-slate-300" />
-            <span>Share on X</span>
-          </button>
+          {isViewingUser ? (
+            <>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] px-3 py-1.5 rounded-lg border border-white/[0.08] transition-colors cursor-pointer"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedLink ? "Link Copied" : "Copy Profile Link"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFlexOnX}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-[#000] hover:bg-[#111] px-3.5 py-1.5 rounded-lg border border-white/[0.2] transition-all cursor-pointer shadow-sm hover:border-white/[0.4]"
+              >
+                <Share2 className="w-3.5 h-3.5 text-slate-300" />
+                <span>Share on X</span>
+              </button>
+            </>
+          ) : p && (
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 px-3.5 py-1.5 rounded-lg border border-amber-400/30 transition-all cursor-pointer shadow-sm hover:border-amber-400/50"
+            >
+              <Share2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Share & Embed</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1679,10 +1620,10 @@ export function ProfileView({
                               <span className="text-[10px] font-mono text-slate-500">No Image</span>
                             </div>
                           )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none z-10" />
 
                           {/* Floating Badges */}
-                          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                          <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5">
                             {isLive ? (
                               <Badge variant="rank" rank={rankOnGrid} />
                             ) : isGraveyardProj ? (
@@ -1699,7 +1640,7 @@ export function ProfileView({
                             </span>
                           </div>
 
-                          <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between">
+                          <div className="absolute bottom-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between">
                             <span className="text-xs font-mono font-bold text-amber-300">
                               {proj.active_value != null && proj.active_value > 0 ? `${money(proj.active_value)} paid` : "$0 paid"}
                             </span>
@@ -1882,7 +1823,7 @@ export function ProfileView({
           <div className="lg:col-span-7 space-y-4">
             {/* Hero Showcase Card */}
             <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#18191d]/90 shadow-2xl backdrop-blur-xl">
-              {/* Visual Cover Banner with user's custom pan & zoom applied */}
+              {/* Visual Cover Banner */}
               <div className="relative h-56 sm:h-72 bg-[#0d0e12] overflow-hidden flex items-center justify-center">
                 {p.imageUrl ? (
                   <>
@@ -1995,6 +1936,7 @@ export function ProfileView({
                   )}
                 </div>
 
+
                 {/* Key Performance Indicators */}
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <StatDisplay
@@ -2003,8 +1945,8 @@ export function ProfileView({
                       isLiveOnWall && globalRank > 0
                         ? `#${globalRank}`
                         : isGraveyard
-                        ? `#${globalRank} (Archive)`
-                        : "Unranked"
+                          ? `#${globalRank} (Archive)`
+                          : "Unranked"
                     }
                     label="Overall Rank"
                   />
@@ -2014,8 +1956,8 @@ export function ProfileView({
                       isLiveOnWall && catRank > 0
                         ? `#${catRank}`
                         : isGraveyard && catRank > 0
-                        ? `#${catRank}`
-                        : "—"
+                          ? `#${catRank}`
+                          : "—"
                     }
                     valueClassName="text-sky-300"
                     label={`${p.category || "Category"} Rank`}
@@ -2026,8 +1968,8 @@ export function ProfileView({
                       p.peak_rank > 0 && p.peak_rank <= 100
                         ? `#${p.peak_rank}`
                         : p.peak_rank > 100
-                        ? `#${p.peak_rank} (Archive)`
-                        : "—"
+                          ? `#${p.peak_rank} (Archive)`
+                          : "—"
                     }
                     valueClassName="text-amber-300"
                     label="Best Rank"
@@ -2057,11 +1999,10 @@ export function ProfileView({
                           key={type}
                           type="button"
                           onClick={() => handleProjectReaction(type as any)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
-                            isActive
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${isActive
                               ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20 scale-105'
                               : 'bg-white/[0.04] hover:bg-white/[0.1] border-white/[0.08] text-neutral-300 hover:scale-105 active:scale-95'
-                          } border`}
+                            } border`}
                           title={user ? (isActive ? `Remove ${label}` : `React with ${label}`) : `Sign in to react with ${label}`}
                         >
                           <span className="text-sm">{emoji}</span>
@@ -2150,13 +2091,12 @@ export function ProfileView({
                     return (
                       <div
                         key={i}
-                        className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-mono shrink-0 border ${
-                          isLast
+                        className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-mono shrink-0 border ${isLast
                             ? "bg-amber-400/20 text-amber-300 border-amber-400/40 font-bold"
                             : isPeak
-                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                            : "bg-white/[0.04] text-slate-400 border-white/[0.06]"
-                        }`}
+                              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                              : "bg-white/[0.04] text-slate-400 border-white/[0.06]"
+                          }`}
                       >
                         <span>#{r}</span>
                         {isPeak && <Crown className="w-2.5 h-2.5 text-emerald-400" />}
@@ -2184,8 +2124,8 @@ export function ProfileView({
                 {isOwnerOfP
                   ? "Top up your active value to climb higher on the 100-spot billboard. Your existing paid value always carries forward."
                   : p.name && p.name !== "N/A"
-                  ? `Place higher value than "${p.name}" to claim their spot on the billboard and elevate your ranking.`
-                  : "Place your project to claim a spot on the billboard and elevate your ranking."}
+                    ? `Place higher value than "${p.name}" to claim their spot on the billboard and elevate your ranking.`
+                    : "Place your project to claim a spot on the billboard and elevate your ranking."}
               </p>
 
               <Button
@@ -2264,15 +2204,14 @@ export function ProfileView({
                     onChange={(e) => setProfileEditHandle(e.target.value.replace(/^@/, ''))}
                     placeholder="username"
                     required
-                    className={`w-full bg-[#141519] text-white rounded-xl text-sm border pl-8 pr-3.5 py-2.5 transition-colors focus:outline-none ${
-                      cooldownDaysRemaining > 0
+                    className={`w-full bg-[#141519] text-white rounded-xl text-sm border pl-8 pr-3.5 py-2.5 transition-colors focus:outline-none ${cooldownDaysRemaining > 0
                         ? "border-white/[0.08] text-slate-400 cursor-not-allowed bg-black/40"
                         : handleCheckError
-                        ? "border-rose-500/50 focus:ring-1 focus:ring-rose-500/40"
-                        : handleCheckSuccess
-                        ? "border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/40"
-                        : "border-white/[0.12] hover:border-white/[0.2] focus:ring-1 focus:ring-amber-400/40"
-                    }`}
+                          ? "border-rose-500/50 focus:ring-1 focus:ring-rose-500/40"
+                          : handleCheckSuccess
+                            ? "border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/40"
+                            : "border-white/[0.12] hover:border-white/[0.2] focus:ring-1 focus:ring-amber-400/40"
+                      }`}
                   />
                   {cooldownDaysRemaining > 0 && (
                     <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -2440,14 +2379,14 @@ export function ProfileView({
       )}
 
       {/* ========================================================================= */}
-      {/* PROJECT EDIT MODAL (Zero Sliders, Left-Click Drag Pan, Wheel Zoom)        */}
+      {/* PROJECT EDIT MODAL                                                       */}
       {/* ========================================================================= */}
       {editingProject && (
         <Modal
           isOpen={Boolean(editingProject)}
           onClose={() => setEditingProject(null)}
           title={`Edit Project: ${editingProject.name}`}
-          subtitle="Update product title, website destination, and cover artwork positioning."
+          subtitle="Update product title, website destination, and cover artwork."
           maxWidth="md"
         >
           <form onSubmit={handleSaveProject} className="space-y-4 pt-1">
@@ -2511,7 +2450,7 @@ export function ProfileView({
               </div>
             </div>
 
-            {/* Artwork Upload & Position Studio (Zero Sliders) */}
+            {/* Artwork Upload */}
             <div className="space-y-2.5">
               <label className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                 <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
@@ -2556,11 +2495,10 @@ export function ProfileView({
                   }
                 }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`relative rounded-xl p-3.5 text-center cursor-pointer transition-all duration-200 group border-2 ${
-                  isDraggingFile
+                className={`relative rounded-xl p-3.5 text-center cursor-pointer transition-all duration-200 group border-2 ${isDraggingFile
                     ? "border-amber-400 bg-amber-500/10"
                     : "border-dashed border-white/[0.16] hover:border-amber-400/60 bg-white/[0.02] hover:bg-white/[0.04]"
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
@@ -2573,55 +2511,23 @@ export function ProfileView({
                 </div>
               </div>
 
-              {/* Interactive Viewport: Wheel to Zoom, Left-Click Drag to Pan */}
+              {/* Cover Preview (static — image positioning columns were removed in migration 016) */}
               {editImageUrl && (
                 <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-white flex items-center gap-1.5">
-                      <Move className="w-3.5 h-3.5 text-amber-400" /> Positioning & Framing
+                      <ImageIcon className="w-3.5 h-3.5 text-amber-400" /> Cover Preview
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleResetPosition}
-                      className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-3 h-3" /> Reset
-                    </button>
                   </div>
 
-                  <div
-                    onWheel={handleWheelZoom}
-                    onMouseDown={handleMouseDownReposition}
-                    onMouseMove={handleMouseMoveReposition}
-                    onMouseUp={handleMouseUpReposition}
-                    onMouseLeave={handleMouseUpReposition}
-                    onDoubleClick={handleResetPosition}
-                    className={`relative h-56 w-full rounded-xl overflow-hidden select-none bg-[#090a0d] border border-white/[0.14] ${
-                      isRepositioning ? "cursor-grabbing" : "cursor-grab"
-                    }`}
-                  >
+                  <div className="relative h-56 w-full rounded-xl overflow-hidden select-none bg-[#090a0d] border border-white/[0.14]">
                     <img
                       src={editImageUrl}
-                      alt="Position preview"
+                      alt="Cover preview"
                       draggable={false}
-                      className="h-full w-full pointer-events-none select-none object-cover"
-                      style={{
-                        objectPosition: `${editImagePosX}% ${editImagePosY}%`,
-                        transform: editImageZoom > 1 ? `scale(${editImageZoom})` : undefined,
-                        transformOrigin: `${editImagePosX}% ${editImagePosY}%`,
-                      }}
+                      className="h-full w-full pointer-events-none select-none object-contain"
                       referrerPolicy="no-referrer"
                     />
-
-                    {/* Clean instructions overlay */}
-                    <div className="absolute top-2 left-2 pointer-events-none px-2.5 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] text-slate-300 flex items-center gap-1.5 shadow-sm">
-                      <Move className="w-3 h-3 text-amber-400" />
-                      <span>Left-click drag to pan · Scroll to zoom</span>
-                    </div>
-
-                    <div className="absolute bottom-2 right-2 pointer-events-none px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-mono text-amber-300 shadow-sm">
-                      {Math.round(editImageZoom * 100)}% zoom
-                    </div>
                   </div>
                 </div>
               )}
@@ -2675,6 +2581,25 @@ export function ProfileView({
             handleProcessTopUp(orderData);
             setIsBiddingOpen(false);
             setTargetSlotToBump(null);
+          }}
+        />
+      )}
+
+
+      {/* ========================================================================= */}
+      {/* REUSABLE SHARE / BRAG CARD MODAL (Uses Modal primitive & backdrop blur)  */}
+      {/* ========================================================================= */}
+      {isShareModalOpen && p && (
+        <ShareCardModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          project={{
+            id: String(p.id),
+            title: p.name || "Untitled Project",
+            handle: p.handle,
+            image_path: p.imageUrl,
+            current_rank: globalRank > 0 ? globalRank : p.peak_rank || 1,
+            current_active_value_minor: Math.round((p.active_value || 0) * 100),
           }}
         />
       )}

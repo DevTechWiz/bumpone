@@ -9,7 +9,6 @@ import {
   ArrowRight,
   ArrowLeft,
   Upload,
-  Check,
   Shield,
   Tag,
   Lock,
@@ -76,7 +75,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   categories,
   existingHandles,
   preselectedTargetSlot,
-  onSubmitTopUp,
+  onSubmitTopUp: _onSubmitTopUp,
   hasBackdrop = true,
 }) => {
   const { user, profile } = useAuth();
@@ -383,7 +382,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   const bumpedVictim = projectedRank && projectedRank <= 100 ? currentSlots[projectedRank - 1] : null;
   const victimSlot100 = currentSlots[99] || null;
   // Only new project bids displace the current occupant of #100 off the board into #101 (existing top-ups reorder internally)
-  const willDisplaceOccupantOf100 = mode === 'new' && victimSlot100 && projectedRank && projectedRank <= 100;
+  const _willDisplaceOccupantOf100 = mode === 'new' && victimSlot100 && projectedRank && projectedRank <= 100;
 
   const handleQuickPreset = (targetAmount: number, isUnfilled100 = false) => {
     if (isUnfilled100) {
@@ -482,7 +481,23 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       }
 
       if (data.checkout_url) {
-        window.location.href = data.checkout_url;
+        // SEC-025: never follow a redirect we cannot vouch for — the payment
+        // gateway is always https, and our own dev-mode mock returns URLs on
+        // this page's origin. Anything else (javascript:, data:, http:// …)
+        // is dropped as an invalid response.
+        try {
+          const checkoutUrl = new URL(data.checkout_url, window.location.origin);
+          if (
+            checkoutUrl.protocol === 'https:' ||
+            checkoutUrl.origin === window.location.origin
+          ) {
+            window.location.href = checkoutUrl.href;
+            return;
+          }
+        } catch {
+          // malformed URL — fall through to the error below
+        }
+        setErrorMsg('Invalid payment redirect received. Please try again.');
         return;
       }
 
@@ -731,7 +746,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           {/* Live Rank Projection Calculator Box */}
           {projectedRank && (
             <div
-              className={`p-3.5 rounded-xl border transition-all ${tierProjected === 'king'
+              className={`p-3.5 rounded-xl border transition-colors ${tierProjected === 'king'
                 ? 'bg-amber-950/20 border-amber-400/40 text-amber-200'
                 : tierProjected === 'champion'
                   ? 'bg-purple-950/20 border-purple-400/40 text-purple-200'
@@ -750,7 +765,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                     Projected Outcome:
                   </span>
                   {projectedRank <= 100 ? (
-                    <Badge variant="rank" rank={projectedRank} />
+                    <Badge variant="rank" rank={projectedRank} className="backdrop-blur-none shadow-none" />
                   ) : (
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-rose-950/40 text-rose-300 border border-rose-500/30">
                       Rank #{projectedRank} (Archived)

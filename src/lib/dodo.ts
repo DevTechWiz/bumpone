@@ -78,10 +78,15 @@ export async function createDodoCheckoutSession(params: CreateCheckoutParams): P
 export function verifyDodoWebhook(rawBody: string, headers: Record<string, string>): any {
   const webhookKey = process.env.DODO_PAYMENTS_WEBHOOK_KEY || process.env.DODO_PAYMENTS_WEBHOOK_SECRET;
   if (!webhookKey || webhookKey.startsWith('whsec_your_dodo') || webhookKey.startsWith('whsec_placeholder')) {
-    if (process.env.NODE_ENV === 'production') {
+    // Fail closed everywhere. Unsigned processing is only allowed as an explicit,
+    // local-development-only escape hatch: non-production NODE_ENV AND the
+    // ALLOW_INSECURE_WEBHOOKS flag set to 'true'. Production can never verify unsigned.
+    const allowInsecure =
+      process.env.NODE_ENV !== 'production' && process.env.ALLOW_INSECURE_WEBHOOKS === 'true';
+    if (!allowInsecure) {
       throw new Error('Dodo webhook secret is not configured');
     }
-    // In local dev without real webhook key, allow parsing directly
+    console.warn('[dodo] ALLOW_INSECURE_WEBHOOKS is enabled — accepting UNSIGNED webhook payload (development only)');
     return JSON.parse(rawBody);
   }
 

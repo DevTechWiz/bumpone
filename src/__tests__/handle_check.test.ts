@@ -63,6 +63,17 @@ describe('Profile Handle Availability & Validation API', () => {
     expect(data.handle).toBe('unique_creator');
   });
 
+  it('rejects malformed userId uuids before the query (SEC-020 hardening)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/profile/check-handle?handle=unique_creator&userId=my-user-id');
+    const res = await GET(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.available).toBe(false);
+    expect(data.error).toContain('Invalid user id');
+    expect(supabaseAdmin.from).not.toHaveBeenCalled();
+  });
+
   it('returns available: false when handle is taken by another user', async () => {
     const mockMaybeSingle = vi.fn().mockResolvedValue({ data: { id: 'other-user-id' }, error: null });
     const mockNeq = vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle });
@@ -73,7 +84,7 @@ describe('Profile Handle Availability & Validation API', () => {
       select: mockSelect,
     } as any);
 
-    const req = new NextRequest('http://localhost:3000/api/profile/check-handle?handle=taken_handle&userId=my-user-id');
+    const req = new NextRequest('http://localhost:3000/api/profile/check-handle?handle=taken_handle&userId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed');
     const res = await GET(req);
     const data = await res.json();
 

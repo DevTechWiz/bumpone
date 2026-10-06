@@ -87,8 +87,8 @@ export const CosmicBackground: React.FC = () => {
     initStars();
 
     // Cache pre-rendered static nebula gradients on an offscreen canvas
-    let nebulaCanvas: HTMLCanvasElement | null = document.createElement('canvas');
-    let nebulaCtx = nebulaCanvas.getContext('2d');
+    const nebulaCanvas: HTMLCanvasElement | null = document.createElement('canvas');
+    const nebulaCtx = nebulaCanvas.getContext('2d');
     const updateNebula = () => {
       if (!nebulaCanvas || !nebulaCtx) return;
       nebulaCanvas.width = width;

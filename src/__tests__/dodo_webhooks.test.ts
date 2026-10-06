@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Webhook } from 'svix';
+import { verifyDodoWebhook } from '../lib/dodo';
+
+const secret = `whsec_${Buffer.from('12345678901234567890123456789012').toString('base64')}`;
 
 describe('Dodo Payments & Webhook Verification Contract', () => {
-  const secret = `whsec_${Buffer.from('12345678901234567890123456789012').toString('base64')}`;
-
   it('verifies valid Svix webhook signature and extracts payload', () => {
     const wh = new Webhook(secret);
     const payload = JSON.stringify({
@@ -56,5 +57,72 @@ describe('Dodo Payments & Webhook Verification Contract', () => {
     };
 
     expect(() => wh.verify(payload, fakeHeaders)).toThrow();
+  });
+});
+
+describe('verifyDodoWebhook fail-closed behavior (SEC-002)', () => {
+  beforeEach(() => {
+    vi.stubEnv('DODO_PAYMENTS_WEBHOOK_KEY', '');
+    vi.stubEnv('DODO_PAYMENTS_WEBHOOK_SECRET', '');
+    vi.stubEnv('ALLOW_INSECURE_WEBHOOKS', '');
+    vi.stubEnv('NODE_ENV', 'test');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const unsignedBody = JSON.stringify({ type: 'payment.succeeded', data: { payment_id: 'p1', amount: 1000 } });
+  const emptyHeaders = { 'webhook-id': '', 'webhook-timestamp': '', 'webhook-signature': '' };
+
+  it('throws (rejects) when no webhook secret is configured', () => {
+    expect(() => verifyDodoWebhook(unsignedBody, emptyHeaders)).toThrow('webhook secret is not configured');
+  });
+
+  it('throws when the secret is a placeholder value', () => {
+    vi.stubEnv('DODO_PAYMENTS_WEBHOOK_KEY', 'whsec_your_dodo_webhook_key_here');
+    expect(() => verifyDodoWebhook(unsignedBody, emptyHeaders)).toThrow('webhook secret is not configured');
+  });
+
+  it('throws in production even when ALLOW_INSECURE_WEBHOOKS is set', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('ALLOW_INSECURE_WEBHOOKS', 'true');
+    expect(() => verifyDodoWebhook(unsignedBody, emptyHeaders)).toThrow('webhook secret is not configured');
+  });
+
+  it('allows unsigned parsing only with the explicit local dev flag', () => {
+    vi.stubEnv('ALLOW_INSECURE_WEBHOOKS', 'true');
+    const parsed = verifyDodoWebhook(unsignedBody, emptyHeaders);
+    expect(parsed.type).toBe('payment.succeeded');
+    expect(parsed.data.payment_id).toBe('p1');
+  });
+
+  it('verifies a real signature when a secret is configured', () => {
+    vi.stubEnv('DODO_PAYMENTS_WEBHOOK_KEY', secret);
+    const wh = new Webhook(secret);
+    const payload = JSON.stringify({ type: 'payment.succeeded', data: { payment_id: 'pay_1', amount: 1000 } });
+    const timestamp = new Date();
+    const msgId = 'msg_ok';
+    const headers = {
+      'webhook-id': msgId,
+      'webhook-timestamp': Math.floor(timestamp.getTime() / 1000).toString(),
+      'webhook-signature': wh.sign(msgId, timestamp, payload),
+    };
+    expect(verifyDodoWebhook(payload, headers).data.payment_id).toBe('pay_1');
+  });
+
+  it('rejects a tampered body even when a secret is configured', () => {
+    vi.stubEnv('DODO_PAYMENTS_WEBHOOK_KEY', secret);
+    const wh = new Webhook(secret);
+    const payload = JSON.stringify({ type: 'payment.succeeded', data: { payment_id: 'pay_1', amount: 1000 } });
+    const timestamp = new Date();
+    const msgId = 'msg_ok';
+    const headers = {
+      'webhook-id': msgId,
+      'webhook-timestamp': Math.floor(timestamp.getTime() / 1000).toString(),
+      'webhook-signature': wh.sign(msgId, timestamp, payload),
+    };
+    const tampered = payload.replace('pay_1', 'pay_2');
+    expect(() => verifyDodoWebhook(tampered, headers)).toThrow();
   });
 });

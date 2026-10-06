@@ -1,7 +1,7 @@
 'use client';
 
 import { type Profile } from './board';
-import { safeGetJSON, safeSetJSON, sessionGetJSON, sessionSetJSON } from './storage';
+import { sessionGetJSON, sessionSetJSON } from './storage';
 
 export interface BoardClientResponse {
   profiles: Profile[];

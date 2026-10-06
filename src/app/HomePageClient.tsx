@@ -16,20 +16,19 @@ import { Button, Skeleton } from '../components/ui';
 import { useAuth } from '../lib/useAuth';
 import { createClient } from '../lib/supabase/client';
 import { UserMenu } from '../components/UserMenu';
-import type { SlotItem, BumpEvent, BoardStats, Message, FloatingReaction } from '../lib/slotTypes';
+import type { SlotItem, BumpEvent, Message, FloatingReaction } from '../lib/slotTypes';
 import {
   CATEGORIES,
   MIN_TOP_UP,
   sortBoard,
   rankOf,
-  quoteTopUp,
   recomputeRank,
   toSlotItem,
   formatNumber,
   type Profile,
 } from '../lib/board';
 import dynamic from 'next/dynamic';
-import { safeGetJSON, safeSetJSON, sessionGetJSON, sessionSetJSON, safeSet, safeRemove } from '../lib/storage';
+import { safeGetJSON, sessionGetJSON, sessionSetJSON, safeSet } from '../lib/storage';
 import { fetchBoardClient, invalidateClientBoardCache } from '../lib/boardClient';
 import { GridBoard } from '../components/GridBoard';
 import type { TopUpOrder } from '../components/TakeOverModal';
@@ -144,27 +143,30 @@ const INITIAL_MESSAGES: Message[] = [
   },
 ];
 
-export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[] }) {
+export interface HomePageClientProps {
+  initialProfiles?: Profile[];
+  initialViewingProfileId?: string | null;
+  initialViewingProfileMode?: 'user' | 'project';
+  initialProject?: Profile | null;
+}
+
+export function HomePageClient({
+  initialProfiles,
+  initialViewingProfileId,
+  initialViewingProfileMode = 'user',
+  initialProject,
+}: HomePageClientProps) {
   // 1. Core state: profiles (canonical domain) + off-board keep-list.
   // Initial states start consistent between server & client to prevent hydration mismatch.
   const [profiles, setProfiles] = useState<Profile[]>(() => {
-    if (initialProfiles && initialProfiles.length > 0) return initialProfiles;
-    if (typeof window !== 'undefined') {
-      const cached = sessionGetJSON<Profile[]>('bumped_board_cache');
-      if (cached && Array.isArray(cached) && cached.length > 0) return cached;
-      const saved = safeGetJSON<Profile[]>(STORAGE_KEY_PROFILES);
-      if (saved && Array.isArray(saved) && saved.length > 0 && typeof saved[0].active_value === 'number') {
-        return saved;
-      }
+    const list: Profile[] = initialProfiles && initialProfiles.length > 0 ? [...initialProfiles] : [];
+    if (initialProject && !list.some((p) => p.id === initialProject.id)) {
+      list.push(initialProject);
     }
-    return [];
+    return list;
   });
   const [offboard, setOffboard] = useState<Profile[]>(() => {
     if (initialProfiles && initialProfiles.length > 100) return initialProfiles.slice(100, 150);
-    if (typeof window !== 'undefined') {
-      const savedOffboard = safeGetJSON<Profile[]>(STORAGE_KEY_OFFBOARD);
-      if (Array.isArray(savedOffboard) && savedOffboard.length > 0) return savedOffboard;
-    }
     return [];
   });
   const [isBoardLoading, setIsBoardLoading] = useState<boolean>(() => {
@@ -195,26 +197,32 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     // If initialProfiles is provided from SSR, delay background sync to keep main thread completely idle
     const fetchLiveBoard = () => {
       fetchBoardClient({ limit: 120 })
-      .then((data) => {
-        if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
-          setProfiles(data.profiles);
-          const sorted = sortBoard(data.profiles);
-          if (sorted.length > 100) {
-            const dbOffboard = sorted.slice(100);
-            setOffboard((prev) => {
-              const combined = [...dbOffboard];
-              for (const p of prev) {
-                if (!combined.some((c) => c.id === p.id)) {
-                  combined.push(p);
-                }
+        .then((data) => {
+          if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
+            setProfiles(() => {
+              const next = [...data.profiles];
+              if (initialProject && !next.some((p) => p.id === initialProject.id)) {
+                next.push(initialProject);
               }
-              return combined.slice(0, 50);
+              return next;
             });
+            const sorted = sortBoard(data.profiles);
+            if (sorted.length > 100) {
+              const dbOffboard = sorted.slice(100);
+              setOffboard((prev) => {
+                const combined = [...dbOffboard];
+                for (const p of prev) {
+                  if (!combined.some((c) => c.id === p.id)) {
+                    combined.push(p);
+                  }
+                }
+                return combined.slice(0, 50);
+              });
+            }
           }
-        }
-      })
-      .catch((err) => console.warn('Could not fetch board profiles:', err))
-      .finally(() => setIsBoardLoading(false));
+        })
+        .catch((err) => console.warn('Could not fetch board profiles:', err))
+        .finally(() => setIsBoardLoading(false));
     };
 
     if (initialProfiles && initialProfiles.length > 0) {
@@ -242,8 +250,12 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
-  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
-  const [viewingProfileMode, setViewingProfileMode] = useState<'user' | 'project'>('user');
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(
+    () => initialViewingProfileId || null
+  );
+  const [viewingProfileMode, setViewingProfileMode] = useState<'user' | 'project'>(
+    () => initialViewingProfileMode || 'user'
+  );
   const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
   const [bumpResult, setBumpResult] = useState<BumpResultData | null>(null);
   const slotsRef = useRef<SlotItem[]>([]);
@@ -265,7 +277,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
         window.history.back();
         return;
       }
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.pushState({}, '', '/');
     }
     setViewingProfileId(null);
   }, []);
@@ -318,8 +330,40 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
       return;
     }
 
-    // Default / Root: Check if URL still has ?rank=X or ?target=X
+    // Direct URL check in popstate if history state lacks modal key (e.g. direct landing page in history)
     if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith('/project/')) {
+        const projId = pathname.replace('/project/', '');
+        if (projId) {
+          setSelectedSlot(null);
+          setIsTakeOverOpen(false);
+          setTargetSlotToBump(null);
+          setViewingProfileMode('project');
+          setViewingProfileId(projId);
+          return;
+        }
+      }
+      if (pathname.startsWith('/profile/')) {
+        const profId = pathname.replace('/profile/', '');
+        if (profId) {
+          setSelectedSlot(null);
+          setIsTakeOverOpen(false);
+          setTargetSlotToBump(null);
+          setViewingProfileMode('user');
+          setViewingProfileId(profId);
+          return;
+        }
+      }
+      if (pathname === '/profile') {
+        setSelectedSlot(null);
+        setIsTakeOverOpen(false);
+        setTargetSlotToBump(null);
+        setViewingProfileMode('user');
+        setViewingProfileId('self');
+        return;
+      }
+
       const params = new URLSearchParams(window.location.search);
       const rankParam = params.get('rank');
       if (rankParam) {
@@ -400,7 +444,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
               setProfiles(data.profiles);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
         setPaymentBanner({
           type: 'success',
           text: 'Payment processed successfully! Your active value has been credited and your slot is live.',
@@ -469,7 +513,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           setBumpHistory(data.events);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     fetch('/api/war-room/messages')
       .then((res) => (res.ok ? res.json() : null))
@@ -478,7 +522,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           setMessages(data.messages);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       active = false;
@@ -528,7 +572,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     }, 30000);
 
     // Subscribe to Supabase Realtime after initial hydration has settled
-    let rtTimer: NodeJS.Timeout | null = setTimeout(() => {
+    const rtTimer: NodeJS.Timeout | null = setTimeout(() => {
       if (!isMounted) return;
       try {
         const supabase = createClient();
@@ -669,7 +713,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
         try {
           const supabase = createClient();
           supabase.removeChannel(realtimeChannel);
-        } catch {}
+        } catch { }
       }
       if (typeof window !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -710,7 +754,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: targetId, reaction: reactionType }),
-      }).catch(() => {});
+      }).catch(() => { });
     }
   };
 
@@ -957,8 +1001,8 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
     const existing = order.projectId
       ? prev.find((p) => p.id === order.projectId)
       : order.currentValue > 0
-      ? prev.find((p) => p.active_value === order.currentValue && p.name === order.title)
-      : undefined;
+        ? prev.find((p) => p.active_value === order.currentValue && p.name === order.title)
+        : undefined;
 
     if (existing) {
       previousRank = rankOf(prev, existing.id);
@@ -1207,9 +1251,10 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           </div>
           <div>
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white m-0 inline-flex items-center">
                 BumpOne<span className="text-amber-400 font-semibold">.lol</span>
-              </span>
+                <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
+              </h1>
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Top 100
               </span>
@@ -1688,6 +1733,7 @@ export function HomePageClient({ initialProfiles }: { initialProfiles?: Profile[
           <ProfileView
             profileId={viewingProfileId}
             initialMode={viewingProfileMode}
+            initialProject={initialProject && initialProject.id === viewingProfileId ? initialProject : undefined}
             onBack={handleCloseProfile}
             onSelectProfile={(nextId, nextMode) => {
               const mode = nextMode || (nextId.startsWith('slot-') || !isNaN(Number(nextId)) ? 'project' : 'user');

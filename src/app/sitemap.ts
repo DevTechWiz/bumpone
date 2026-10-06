@@ -4,14 +4,15 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 export const revalidate = 3600; // Cache sitemap for 1 hour
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bumpone.lol';
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const baseUrl = (envUrl && !envUrl.includes('localhost')) ? envUrl : 'https://bumpone.lol';
   const now = new Date();
 
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
       lastModified: now,
-      changeFrequency: 'always',
+      changeFrequency: 'hourly',
       priority: 1.0,
     },
     {

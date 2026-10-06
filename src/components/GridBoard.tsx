@@ -33,7 +33,7 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   onHoverRank,
   onOrientationChange,
 }) => {
-  const [orientation, setOrientation] = useState<GridOrientation>(() => {
+  const [_orientation, setOrientation] = useState<GridOrientation>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth < window.innerHeight ? 'portrait' : 'landscape';
     }

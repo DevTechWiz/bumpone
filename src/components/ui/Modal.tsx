@@ -73,7 +73,7 @@ export const Modal: React.FC<ModalProps> = ({
         className={`relative w-full ${maxWidthStyles[maxWidth]} bg-[#18191d]/95 backdrop-blur-xl border border-white/[0.14] rounded-2xl shadow-2xl shadow-black/90 overflow-hidden z-10 pointer-events-auto animate-in fade-in zoom-in-95 duration-200`}
       >
         {/* Header (conditionally rendered only if title, subtitle, or back button is present) */}
-        {Boolean(title || subtitle || onBack) ? (
+        {title || subtitle || onBack ? (
           <div className="flex items-start justify-between p-5 sm:p-6 border-b border-white/[0.08]">
             <div className="flex items-start gap-3">
               {onBack && (

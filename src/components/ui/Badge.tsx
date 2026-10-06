@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Crown, Sparkles, Shield, AlertTriangle } from 'lucide-react';
+import { Crown, Sparkles, Shield } from 'lucide-react';
 import { getRankTier, type RankTier } from '@/lib/slotTypes';
 
 export type { RankTier };

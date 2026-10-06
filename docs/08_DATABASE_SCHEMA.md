@@ -5,7 +5,7 @@ BumpOne.lol runs on PostgreSQL 16+ via Supabase. The database architecture is de
 1. **Zero Race-Condition Concurrency:** Serialized rank displacement transactions using PostgreSQL transaction advisory locks (`pg_advisory_xact_lock`).
 2. **Strict Financial & Rank Integrity:** Monetary values are modeled exclusively as `bigint` minor units (USD cents). Ranks are strictly unique via partial index and bounded by CHECK constraints.
 3. **Immutable Journals & Protected Foreign Keys:** Financial transactions (`payments`) and displacement audit history (`board_events`) use `ON DELETE RESTRICT` so history can never be silently erased.
-4. **Native 2026 Supabase Realtime:** Built-in publication broadcasting changes on `projects`, `board_events`, `reaction_counts`, and `messages` directly to client WebSockets.
+4. **Native 2026 Supabase Realtime:** Built-in publication broadcasting changes on `projects`, `users`, `board_events`, and `messages` directly to client WebSockets.
 
 ---
 
@@ -54,15 +54,12 @@ create index idx_users_total_reactions on users (total_reactions desc);
 
 ---
 
-### 3. `admin_users`
-Role-based administrator authorization.
-```sql
-create table admin_users (
-  id uuid primary key references auth.users(id) on delete cascade,
-  role text not null default 'admin', -- 'admin', 'super_admin'
-  created_at timestamptz not null default now()
-);
-```
+### 3. Admin authorization (no dedicated table)
+Administrators are authorized without any database table (the former `admin_users` table was dropped in `013_drop_overengineered_tables.sql`):
+1. `ADMIN_EMAILS` environment variable (comma-separated) → `super_admin`.
+2. Supabase Auth `app_metadata.role` of `admin` or `super_admin`.
+
+Every admin mutation writes an `admin_audit_log` row (section 11).
 
 ---
 
@@ -85,10 +82,6 @@ create table projects (
   ranking_sequence bigint not null default 0, -- monotonic sequence of latest rank event (tiebreaker)
   is_active boolean not null default true,
   moderation_status project_moderation_status not null default 'approved',
-  image_pos_x int not null default 50,
-  image_pos_y int not null default 50,
-  image_zoom numeric(3,2) not null default 1.0,
-  frame text not null default 'default',
   views_count bigint not null default 0,
   reactions_fire int not null default 0,
   reactions_eyes int not null default 0,
@@ -228,8 +221,8 @@ create index idx_board_events_created on board_events (created_at desc);
 
 ---
 
-### 9. `reactions` (Dual-Target Event Ledger)
-Audit ledger tracking 1-reaction-per-identity across projects (reels) and user profiles. Standalone counts table eliminated in favor of inlined columns on `projects` and `users` for 0-join instant read queries.
+### 9. `reactions` (Authenticated Event Ledger)
+Audit ledger tracking 1-reaction-per-emoji per authenticated user per project (plus a creator-level variant). Standalone counts table eliminated in favor of inlined columns on `projects` and `users` for 0-join instant read queries. The legacy `anonymous_id` identity was superseded by `user_id` in `008_auth_gated_reactions.sql`.
 ```sql
 create type reaction_type as enum ('fire', 'eyes', 'heart', 'laugh');
 
@@ -237,15 +230,15 @@ create table reactions (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,
   target_user_id uuid references users(id) on delete cascade,
-  anonymous_id text not null,
+  user_id uuid references users(id) on delete cascade,
+  anonymous_id text,
   reaction_type reaction_type not null,
   created_at timestamptz not null default now(),
   constraint chk_reaction_target check (
     (project_id is not null and target_user_id is null) or
     (project_id is null and target_user_id is not null)
   ),
-  constraint uq_project_reaction unique (project_id, anonymous_id, reaction_type),
-  constraint uq_user_reaction unique (target_user_id, anonymous_id, reaction_type)
+  constraint uq_project_user_reaction unique (project_id, user_id, reaction_type)
 );
 
 create index idx_reactions_anonymous on reactions (anonymous_id);
@@ -311,16 +304,8 @@ create table admin_audit_log (
 
 ---
 
-### 12. `system_state`
-Global operational switches and emergency purchase pause.
-```sql
-create table system_state (
-  id text primary key default 'global',
-  purchases_paused boolean not null default false,
-  updated_by uuid references auth.users(id) on delete set null,
-  updated_at timestamptz not null default now()
-);
-```
+### 12. Emergency purchase pause (no table)
+The former `system_state` table was dropped in `013_drop_overengineered_tables.sql`. The kill switch is the `PURCHASES_PAUSED` environment variable read at the edge by `POST /api/purchase/create`, which returns `503 Service Unavailable` while set.
 
 ---
 
@@ -333,8 +318,9 @@ create table system_state (
    - Atomically recalculates ranks 1..100 (`ORDER BY current_active_value_minor DESC, ranking_sequence ASC`)
    - Inserts into `payments`, `board_events` (buyer bump + graveyard casualty `left_top_100` displacement), and `payment_events`
    - Restricted to `service_role`
-2. **`add_project_reaction(p_project_id, p_anonymous_id, p_reaction_type)`**:
-   - Atomically records reaction and safely increments count only on genuine insert (eliminates duplicate-count bug)
+2. **`add_project_reaction_auth(p_project_id, p_user_id, p_reaction_type)` / `remove_project_reaction_auth(...)`**:
+   - Auth-gated atomic reaction add/remove; increments the inlined count only on a genuine insert (eliminates the duplicate-count bug), unique per `(project_id, user_id, reaction_type)`
+   - The legacy anonymous-identity RPCs (`add_project_reaction` / `remove_project_reaction`) were superseded by these in `008_auth_gated_reactions.sql` and must not be called
 3. **`recalculate_board_ranks()`**:
    - Serialized re-ranking maintenance RPC with advisory lock
 4. **`protect_project_authoritative_fields()` Trigger**:

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowLeft, ShieldAlert, CheckCircle2, AlertTriangle, Mail } from "lucide-react";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy - BumpOne.lol",

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, Check, Mail, ShieldAlert, Sparkles } from 'lucide-react';
+import { Bell, Check, Mail, ShieldAlert } from 'lucide-react';
 import { Modal, Button } from './ui';
 import { soundEngine } from '../lib/sound';
 

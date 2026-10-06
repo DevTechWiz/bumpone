@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, ArrowUpRight, Share2, Check, ShieldCheck, Flag, AlertCircle, User, Copy } from 'lucide-react';
+import { Zap, ArrowUpRight, Share2, Check, ShieldCheck, Flag, AlertCircle, User } from 'lucide-react';
 import { Modal, Button, Badge, Avatar } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import { soundEngine } from '../lib/sound';
@@ -15,6 +15,9 @@ export interface SlotDetailModalProps {
   hasBackdrop?: boolean;
   onUpdateReactions?: (slotId: string, reactions: { fire: number; eyes: number; heart: number; laugh: number }) => void;
 }
+
+// Client-side cache for user reactions so they highlight instantly (0ms) on card click
+const userReactionsCache = new Map<string, string[]>();
 
 export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   slot,
@@ -40,7 +43,12 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
     heart: slot?.reactions?.heart || 0,
     laugh: slot?.reactions?.laugh || 0,
   }));
-  const [activeReactions, setActiveReactions] = useState<Set<string>>(new Set());
+  const [activeReactions, setActiveReactions] = useState<Set<string>>(() => {
+    if (slot?.id && userReactionsCache.has(slot.id)) {
+      return new Set(userReactionsCache.get(slot.id)!);
+    }
+    return new Set();
+  });
 
   React.useEffect(() => {
     if (slot) {
@@ -50,28 +58,39 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
         heart: slot.reactions?.heart || 0,
         laugh: slot.reactions?.laugh || 0,
       });
+      if (slot.id && userReactionsCache.has(slot.id)) {
+        setActiveReactions(new Set(userReactionsCache.get(slot.id)!));
+      }
     }
   }, [slot]);
 
   React.useEffect(() => {
     let isCancelled = false;
-    if (slot?.id) {
-      fetch(`/api/reactions?projectId=${slot.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (isCancelled) return;
-          if (Array.isArray(data?.userReactions)) {
-            setActiveReactions(new Set(data.userReactions));
-          }
-          if (data?.reactions) {
-            setLocalReactions(data.reactions);
-            onUpdateReactions?.(slot.id, data.reactions);
-          }
-        })
-        .catch(() => {});
-    } else {
+    if (!user || !slot?.id) {
       setActiveReactions(new Set());
+      return;
     }
+
+    // Immediately seed from cache if available for 0ms visual responsiveness
+    if (userReactionsCache.has(slot.id)) {
+      setActiveReactions(new Set(userReactionsCache.get(slot.id)!));
+    }
+
+    fetch(`/api/reactions?projectId=${slot.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isCancelled) return;
+        if (Array.isArray(data?.userReactions)) {
+          userReactionsCache.set(slot.id, data.userReactions);
+          setActiveReactions(new Set(data.userReactions));
+        }
+        if (data?.reactions) {
+          setLocalReactions(data.reactions);
+          onUpdateReactions?.(slot.id, data.reactions);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       isCancelled = true;
     };
@@ -97,6 +116,9 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
       newActive.add(type);
     }
     setActiveReactions(newActive);
+    if (slot?.id) {
+      userReactionsCache.set(slot.id, Array.from(newActive));
+    }
 
     const updatedReactions = {
       fire: localReactions.fire || 0,
@@ -145,7 +167,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
 
   const handleCopyShare = () => {
     soundEngine.playClick();
-    const shareText = `Check out #${slot.rank} "${slot.title}" on BumpOne.lol ($${slot.activeValue} active value)!`;
+    const _shareText = `Check out #${slot.rank} "${slot.title}" on BumpOne.lol ($${slot.activeValue} active value)!`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?rank=${slot.rank}`);
       setCopied(true);
@@ -401,6 +423,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
             <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-white shrink-0" />
           </a>
         )}
+
 
         {/* Reporting Section */}
         {showReport && (

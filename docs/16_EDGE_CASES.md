@@ -232,7 +232,7 @@ A user attempts to react multiple times to the same profile.
 
 Solution:
 
-Unique constraint on (profile_id, user_id, reaction_type).
+Unique constraint on (project_id, user_id, reaction_type).
 
 Rate limiting on reaction endpoint.
 

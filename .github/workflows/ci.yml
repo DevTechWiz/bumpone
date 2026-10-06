@@ -1,0 +1,81 @@
+name: CI Security & Regression Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-and-quality-gate:
+    name: Build, Test & Security Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Verify clean dependency installation
+        run: npm ci
+
+      - name: Dependency security audit
+        run: npm audit --audit-level=critical
+
+      - name: ESLint static analysis
+        run: npm run lint
+
+      - name: Static Tripwires - Hardcoded Secrets & Keys Scanner
+        run: |
+          echo "Scanning codebase for dangerous secret leaks..."
+          # Fail if private keys or real tokens are checked in
+          if grep -rnw --exclude-dir={.git,.next,node_modules} --exclude={"*.md","*.log","*.lock"} "BEGIN PRIVATE KEY" .; then
+            echo "::error::Found private key in repository!"
+            exit 1
+          fi
+          # Ensure test webhook flags cannot be hardcoded true in production code
+          if grep -rn "ALLOW_INSECURE_WEBHOOKS\s*=\s*['\"]true['\"]" src/lib/; then
+            echo "::error::Found hardcoded insecure webhook override in src/lib!"
+            exit 1
+          fi
+
+      - name: TypeScript type checking
+        run: npm run typecheck
+
+      - name: Production Next.js build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_SUPABASE_URL: https://lgpejkhnlxdekozwyczi.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxncGVqa2hubHhkZWtvend5Y3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0NzQ0NDksImV4cCI6MjEwNjA1MDQ0OX0.U-R1ieQ_FsLOiKd4OwWBqLVR68gs-3VcQw3G5SWHzP4
+          NEXT_PUBLIC_APP_URL: https://bumpone.lol
+          NEXT_PUBLIC_R2_PUBLIC_URL: https://assets.bumpone.lol
+        run: npm run build
+
+      - name: Run complete test suite (Unit, Security, Financial, RLS)
+        run: npm test
+
+      - name: Database security suites (fresh Postgres container)
+        shell: pwsh
+        run: ./supabase/tests/run-db-tests.ps1
+
+      - name: Secret leak tripwire in build output
+        run: |
+          echo "Checking .next build artifacts for leaked service keys or webhook secrets..."
+          if grep -rn "SUPABASE_SERVICE_ROLE_KEY" .next/ 2>/dev/null; then
+            echo "::error::Service role key string found in client build artifact!"
+            exit 1
+          fi
+          if grep -rn "whsec_" .next/ 2>/dev/null; then
+            echo "::error::Webhook secret prefix found in client build artifact!"
+            exit 1
+          fi

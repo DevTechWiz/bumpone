@@ -12,15 +12,15 @@ Each user's active value carries forward and grows with each top-up.
 
 ## Initial Board State (Genesis Pricing)
 
-Empty slots start with face values $1–$100:
+Empty slots start with face values $10–$109:
 
-#1   = $100
-#2   = $99
-#3   = $98
+#1   = $109
+#2   = $108
+#3   = $107
 ...
-#100 = $1
+#100 = $10
 
-These are the initial active values. They establish the starting ranking.
+These are the initial active values (seeded by `supabase/migrations/004_seed.sql`, formula `(110 - rank) * 100` minor units). They establish the starting ranking; seeded rows carry `total_paid_minor = 0` because no real payment occurred.
 
 Once a slot is filled, every takeover adds +$10: `required_top_up = target_value - current_active_value + $10`, with the buyer's existing active value carrying forward.
 

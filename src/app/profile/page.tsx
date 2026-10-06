@@ -1,37 +1,23 @@
-'use client';
+import type { Metadata } from 'next';
+import { getBoardProfiles } from '@/lib/getBoard';
+import { HomePageClient } from '@/app/HomePageClient';
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
-import { ProfileView } from '../../components/ProfileView';
+export const metadata: Metadata = {
+  title: 'My Creator Dashboard - BumpOne.lol',
+  description: 'Manage your projects, slot telemetry, and verified creator credentials on BumpOne.lol.',
+  alternates: {
+    canonical: 'https://bumpone.lol/profile',
+  },
+};
 
-export default function MyProfilePage() {
-  const router = useRouter();
-
-  const handleBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back();
-    } else {
-      router.push('/');
-    }
-  };
+export default async function MyProfilePage() {
+  const initialProfiles = await getBoardProfiles(120);
 
   return (
-    <div className="min-h-screen bg-[#121316] text-neutral-100 py-6">
-      <ProfileView
-        profileId="self"
-        initialMode="user"
-        onBack={handleBack}
-        onSelectProfile={(nextId, mode) => {
-          if (mode === 'project' || nextId.startsWith('slot-')) {
-            router.push(`/project/${nextId}`);
-          } else {
-            router.push(`/profile/${nextId}`);
-          }
-        }}
-        onRequireAuth={() => router.push('/?auth=true')}
-        onClaimSlot={() => router.push('/?claim=true')}
-        onBumpProject={(projId) => router.push(`/?target=${projId}`)}
-      />
-    </div>
+    <HomePageClient
+      initialProfiles={initialProfiles}
+      initialViewingProfileId="self"
+      initialViewingProfileMode="user"
+    />
   );
 }

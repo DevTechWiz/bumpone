@@ -10,7 +10,7 @@ Ranking is sorted by current_active_value descending.
 
 ## Sorting Rule
 
-The canonical ranking source is `current_active_value DESC`. Equal values are ordered by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher). `current_rank` is a materialized cache of this ordering, never the source of truth.
+The canonical ranking source is `current_active_value_minor DESC`. Equal values are ordered by earliest rank-event sequence (monotonic `global_event_sequence`; the profile that first reached the value ranks higher). `current_rank` is a materialized cache of this ordering, never the source of truth.
 
 ### Simultaneous Purchases & Equal Active Value Handling
 If two users buy for the same slot simultaneously and pay the same top-up (e.g. Alice and Bob both pay $110 to claim #1):

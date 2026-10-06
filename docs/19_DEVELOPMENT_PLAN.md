@@ -35,15 +35,16 @@ Validate the visual concept.
 
 # Phase 2 — Database
 
-Implement:
+Implement (canonical production names, see [25_PRODUCTION_ARCHITECTURE.md](25_PRODUCTION_ARCHITECTURE.md)):
 
-- profiles
-- purchases
-- rank events
-- system state
+- users, projects, categories
+- payments + payment_events (idempotency ledger)
+- board_events (rank journey journal)
+- purchase_quotes
 - reports
+- admin_audit_log
 
-Seed fake data.
+Seed data via `supabase/migrations/004_seed.sql`.
 
 ---
 

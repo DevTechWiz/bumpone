@@ -6,9 +6,6 @@ import {
   Share2,
   Check,
   X,
-  ExternalLink,
-  Flame,
-  Shield,
   Layers,
 } from 'lucide-react';
 import { Modal, Button } from './ui';
@@ -43,6 +40,18 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
   const { profile, previousRank, newRank, displacedCount, displacedProfiles = [] } = result;
   const isKing = newRank === 1;
   const tier = getRankTier(newRank);
+
+  const twitterShareUrl = (() => {
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/share/${profile.id}`
+      : `https://bumpone.lol/share/${profile.id}`;
+
+    const tweetText = isKing
+      ? `👑 Just conquered Rank #1 Center King on @bumpone! ${displacedCount > 0 ? `Displaced ${displacedCount} projects on the grid.` : ''} Active Value: ${money(profile.active_value)}. Check the live board:`
+      : `🚀 ${profile.name} just bumped to Rank #${newRank} on @bumpone! ${displacedCount > 0 ? `Displaced ${displacedCount} spots.` : ''} Check the live grid:`;
+
+    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
+  })();
 
   const handleShare = async () => {
     const shareUrl = typeof window !== 'undefined'
@@ -196,13 +205,25 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
 
         {/* CTA Actions */}
         <div className="relative z-10 flex flex-col sm:flex-row gap-2.5">
+          <a
+            href={twitterShareUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/20 text-white hover:text-amber-300 text-xs font-bold py-2.5 px-3 transition-colors no-underline shadow-sm"
+          >
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            <span>Post on X</span>
+          </a>
+
           <Button
             onClick={handleShare}
             variant="secondary"
             className="flex-1 justify-center gap-2 text-xs py-2.5 bg-white/[0.08] hover:bg-white/[0.12] border-white/20"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4 text-amber-300" />}
-            <span>{copied ? 'Link Copied!' : 'Share Bump Moment'}</span>
+            <span>{copied ? 'Link Copied!' : 'Copy Link'}</span>
           </Button>
 
           <Button
@@ -211,7 +232,7 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
             className="flex-1 justify-center gap-2 text-xs py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold shadow-lg shadow-amber-500/25 border-0"
           >
             <Sparkles className="w-4 h-4" />
-            <span>View on Board</span>
+            <span>View Board</span>
           </Button>
         </div>
       </div>

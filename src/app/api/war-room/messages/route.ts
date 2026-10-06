@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { allowRequest } from '@/lib/rateLimit';
-
-const messageSchema = z.object({
-  text: z.string().trim().min(1, 'Message cannot be empty').max(200, 'Message cannot exceed 200 characters'),
-  slotTag: z.number().int().min(1).max(100).optional(),
-});
+import { allowRequest, allowRequestDistributed } from '@/lib/rateLimit';
+import { clientIp, readJsonWithLimit } from '@/lib/requestGuard';
+import { messageSchema } from '@/lib/contentSchemas';
+import { securityLog } from '@/lib/securityLogger';
 
 const AVATAR_COLORS = [
   'bg-indigo-500',
@@ -18,8 +15,12 @@ const AVATAR_COLORS = [
   'bg-rose-500',
 ];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    if (!allowRequest(`war_room_read:${clientIp(request)}`, 120, 60_000)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': '60' } });
+    }
+
     const isSupabaseConfigured = Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
       process.env.SUPABASE_SERVICE_ROLE_KEY &&
@@ -62,27 +63,33 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = clientIp(request);
   try {
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
+      securityLog.authzFailure('war_room_post_unauthenticated', undefined, ip);
       return NextResponse.json(
         { error: 'Sign in to send messages in the Live Showcase Feed.' },
         { status: 401 }
       );
     }
 
-    // Rate limit: 5 messages per 30 seconds per user
-    if (!allowRequest(`war_room_msg:${user.id}`, 5, 30_000)) {
+    // Rate limit: 5 messages per 30 seconds per user (distributed + local fallback)
+    const allowed = await allowRequestDistributed(`war_room_msg:${user.id}`, 5, 30_000);
+    if (!allowed) {
+      securityLog.rateLimit('war_room_post_cooldown', `war_room_msg:${user.id}`, ip, 5, 30_000);
       return NextResponse.json(
         { error: 'Message cooldown active. Please wait a few seconds before posting again.' },
         { status: 429, headers: { 'Retry-After': '10' } }
       );
     }
 
-    const json = await request.json().catch(() => null);
-    const parsed = messageSchema.safeParse(json);
+    // Bounded body read before validation (SEC-008); malformed JSON → 400.
+    const body = await readJsonWithLimit(request, 4 * 1024);
+    if (!body.ok) return body.response;
+    const parsed = messageSchema.safeParse(body.value);
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message || 'Invalid transmission format.' },
@@ -92,7 +99,20 @@ export async function POST(request: NextRequest) {
 
     const { text, slotTag } = parsed.data;
 
-    // Fetch author's handle and display name
+    // Detect attempts to spoof official status
+    const untrustedBody = body.value as Record<string, unknown>;
+    let isOfficial = false;
+    if (untrustedBody?.isOfficial === true || untrustedBody?.is_official === true) {
+      const isAdmin = user.app_metadata?.role === 'admin' || user.app_metadata?.role === 'super_admin';
+      if (!isAdmin) {
+        securityLog.suspiciousRealtime('war_room_official_spoof_attempt', ip, user.id, 'Non-admin attempted to set isOfficial: true');
+        isOfficial = false;
+      } else {
+        isOfficial = true;
+      }
+    }
+
+    // Authoritative author identity: strictly from users table or auth token, NEVER client payload
     const { data: userData } = await supabaseAdmin
       .from('users')
       .select('handle, display_name')
@@ -116,7 +136,7 @@ export async function POST(request: NextRequest) {
         avatar_color: avatarColor,
         text,
         slot_tag: slotTag ?? null,
-        is_official: false, // Strictly enforced: users can NEVER spoof official flag
+        is_official: isOfficial,
       })
       .select('id, user_id, author_name, author_handle, avatar_color, text, slot_tag, is_official, created_at')
       .single();
@@ -133,7 +153,7 @@ export async function POST(request: NextRequest) {
       text: inserted.text,
       slotTag: inserted.slot_tag ?? undefined,
       timestamp: new Date(inserted.created_at).getTime(),
-      isOfficial: false,
+      isOfficial: inserted.is_official,
     };
 
     return NextResponse.json({ success: true, message });

@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { allowRequest } from '@/lib/rateLimit';
+import { clientIp, PRIVATE_NO_STORE } from '@/lib/requestGuard';
+import { safeExternalUrl } from '@/lib/urls';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Handles are strictly [a-z0-9_] (validated by check-handle + the users trigger),
+// which also makes the PostgREST .or() filter injection-safe (SEC-020).
+const HANDLE_RE = /^[a-z0-9_]{1,30}$/;
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Per-IP budget: profile scraping is one service-role query per hit (SEC-007).
+  if (!allowRequest(`profile_read:${clientIp(request)}`, 120, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { ...PRIVATE_NO_STORE, 'Retry-After': '60' } });
+  }
+
   const { id } = await params;
 
   try {
@@ -15,14 +29,22 @@ export async function GET(
     );
 
     if (isSupabaseConfigured) {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      const cleanHandle = id.startsWith('@') ? id : `@${id}`;
+      const isUuid = UUID_RE.test(id);
       const plainHandle = id.startsWith('@') ? id.slice(1) : id;
+
+      // SEC-020: malformed handles can never match a stored row and must not
+      // reach the query builder (404, not 500).
+      if (!isUuid && !HANDLE_RE.test(plainHandle)) {
+        return NextResponse.json({ error: 'Profile not found' }, { status: 404, headers: PRIVATE_NO_STORE });
+      }
 
       let query = supabaseAdmin
         .from('projects')
         .select(`
           id,
+          user_id,
+          moderation_status,
+          is_active,
           ranking_sequence,
           title,
           handle,
@@ -43,48 +65,32 @@ export async function GET(
       if (isUuid) {
         query = query.eq('id', id);
       } else {
-        query = query.or(`handle.eq.${cleanHandle},handle.eq.${plainHandle}`).order('current_rank', { ascending: true });
+        query = query
+          .or(`handle.eq.@${plainHandle},handle.eq.${plainHandle}`)
+          .order('current_rank', { ascending: true });
       }
 
-      const { data: projectList, error: queryErr } = await query.limit(1);
-      let project = projectList && projectList.length > 0 ? projectList[0] : null;
-      let error = queryErr;
+      const { data: projectList, error } = await query.limit(1);
+      const project = projectList && projectList.length > 0 ? projectList[0] : null;
 
-      // Fallback if board_events or legacy schema differs
-      if (error || !project) {
-        let fallbackQuery = supabaseAdmin
-          .from('projects')
-          .select(`
-            id,
-            title,
-            handle,
-            image_path,
-            destination_url,
-            current_rank,
-            current_active_value_minor,
-            total_paid_minor,
-            reactions_fire,
-            reactions_eyes,
-            reactions_heart,
-            reactions_laugh,
-            total_reactions,
-            categories(name)
-          `);
-
-        if (isUuid) {
-          fallbackQuery = fallbackQuery.eq('id', id);
-        } else {
-          fallbackQuery = fallbackQuery.or(`handle.eq.${cleanHandle},handle.eq.${plainHandle}`).order('current_rank', { ascending: true });
-        }
-
-        const { data: fbList, error: fbErr } = await fallbackQuery.limit(1);
-        if (!fbErr && fbList && fbList.length > 0) {
-          project = fbList[0] as any;
-          error = null;
-        }
+      if (error) {
+        console.error('Profile query failed:', error.message);
       }
 
       if (!error && project) {
+        // SEC-006: only approved+active projects are publicly readable.
+        // The owner may always fetch their own project (drafts, suspended state).
+        const isVisible =
+          (project as any).moderation_status === 'approved' && (project as any).is_active === true;
+
+        if (!isVisible) {
+          const supabase = await createServerSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user || user.id !== (project as any).user_id) {
+            return NextResponse.json({ error: 'Profile not found' }, { status: 404, headers: PRIVATE_NO_STORE });
+          }
+        }
+
         const reactions = {
           fire: Number((project as any).reactions_fire || 0),
           eyes: Number((project as any).reactions_eyes || 0),
@@ -96,29 +102,32 @@ export async function GET(
           ? (project as any).categories[0]?.name
           : (project as any).categories?.name;
 
-        const activeValue = (project as any).current_active_value_minor != null
-          ? Math.floor(Number((project as any).current_active_value_minor) / 100)
-          : Number((project as any).current_active_value || 0);
+        const activeValue = Math.floor(Number((project as any).current_active_value_minor || 0) / 100);
 
-        return NextResponse.json({
-          id: project.id,
-          name: (project as any).title || (project as any).display_name || 'Project',
-          handle: project.handle,
-          category: categoryName || 'Tech',
-          active_value: activeValue,
-          total_paid: Math.round(Number(project.total_paid_minor || 0) / 100),
-          imageUrl: project.image_path,
-          linkUrl: project.destination_url,
-          rank: project.current_rank,
-          reactions,
-          board_events: (project as any).board_events || [],
-        });
+        return NextResponse.json(
+          {
+            id: project.id,
+            name: (project as any).title || (project as any).display_name || 'Project',
+            handle: project.handle,
+            category: categoryName || 'Tech',
+            active_value: activeValue,
+            total_paid: Math.round(Number(project.total_paid_minor || 0) / 100),
+            imageUrl: project.image_path,
+            linkUrl: safeExternalUrl(project.destination_url),
+            rank: project.current_rank,
+            reactions,
+            board_events: (project as any).board_events || [],
+          },
+          // Owner-only drafts share this response shape: never cache in a
+          // shared cache (cache-security, Phase 3).
+          { headers: PRIVATE_NO_STORE }
+        );
       }
     }
 
-    return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Profile not found' }, { status: 404, headers: PRIVATE_NO_STORE });
   } catch (err: any) {
     console.error('Error fetching profile:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500, headers: PRIVATE_NO_STORE });
   }
 }

@@ -14,17 +14,18 @@ The core concept is:
 
 BumpOne.lol is fundamentally differentiated from simple static paid leaderboards:
 
-1. **Measurable Attention & Real Estate**: Buyers aren't just paying for an abstract rank number—they are buying **physical visual prominence** (a massive 4×4 King center tile, 2×2 Elite tiles, profile views, outbound clicks, and viral share moments).
+1. **Measurable Attention & Real Estate**: Buyers aren't just paying for an abstract rank number—they are buying **physical visual prominence** (a massive 3×3 King center tile, 2×2 Champion tiles, profile views, outbound clicks, and viral share moments).
 2. **"Bump Battles" (Player vs. Player)**: Taking #1 isn't a silent checkout—it's a broadcasted battle event (*"Alex stormed the Throne and displaced 14 profiles"*).
 3. **The Concentric Top 100 & The Graveyard**:
-   * **#1 The King Throne**: A colossal 4×4 center citadel dominating the arena.
-   * **#2–#13 The Inner Orbit Elites**: 2×2 prominent display tiles.
-   * **#14–#40 The Vanguard**: Enhanced 1×1 tiles.
+   * **#1 The King Throne**: A colossal 3×3 center citadel dominating the arena.
+   * **#2–#5 The Champions**: Four cardinal 2×2 anchor tiles framing the King.
+   * **#6–#15 The Elite Council**: Inner-ring display tiles.
+   * **#16–#40 The Vanguard**: Enhanced mid-tier tiles.
    * **#41–#100 The Contenders**: 1×1 tiles on the outer perimeter.
-   * **#101+ The Graveyard**: Profiles knocked off the board fall into the Graveyard Drawer, where they can reclaim their turf at any time.
+   * **#101+ The Graveyard (Billboard Archive)**: Profiles knocked off the board are archived, where they can reclaim their turf at any time.
 4. **Three Discovery Signals**:
    * 💰 **Power**: Authoritative ranking by Active Value (dollars paid).
-   * ❤️ **Popular**: Community-ranked by anonymous emoji reactions (🔥, 👀, ❤️, 😂).
+   * ❤️ **Popular**: Community-ranked by emoji reactions (🔥, 👀, ❤️, 😂).
    * 📈 **Trending**: Momentum ranking by climb velocity and recent bump activity.
 5. **Prestige & Lifetime Spend Transparency**:
    * Profiles display both their **Active Value** (current ranking strength) and **Total Lifetime Spend** (e.g. *"Total Spent: $1,200 | Active Value: $710"*).

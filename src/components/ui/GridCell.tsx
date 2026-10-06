@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, AlertTriangle, Crown, Sparkles, Shield, Zap } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ExternalLink, Crown, Sparkles, Shield, Zap } from 'lucide-react';
 import { Badge, getRankTier } from './Badge';
 import { formatNumber } from '../../lib/board';
 
@@ -13,11 +13,6 @@ export interface GridSlotData {
   bidderName?: string;
   timestamp?: string;
   isNew?: boolean;
-  imageZoom?: number;
-  imagePosX?: number;
-  imagePosY?: number;
-  imageFit?: "cover" | "contain";
-  imageRotation?: number;
 }
 
 export interface GridCellProps {
@@ -78,7 +73,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
   };
 
   const isHero = slot.rank === 1;
-  const isFeatured = slot.rank <= 5;
+  const _isFeatured = slot.rank <= 5;
 
   const optimizedSrc = useMemo(() => {
     if (!slot.imageUrl) return "";

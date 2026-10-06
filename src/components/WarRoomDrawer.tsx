@@ -50,7 +50,7 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
 }) => {
   const activeMessages = messages;
   const [activeChannel, setActiveChannel] = useState<WarRoomChannel>('dispatch');
-  const [senderName, setSenderName] = useState(
+  const [_senderName, setSenderName] = useState(
     senderHandle ? (senderHandle.startsWith('@') ? senderHandle : `@${senderHandle}`) : '@spectator'
   );
 
@@ -75,31 +75,35 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const realtimeChannelRef = useRef<any>(null);
 
-  // Connect Supabase Realtime Broadcast for multi-user chat synchronization
+  // Connect Supabase Realtime postgres_changes on messages table (SEC-012: Server-authoritative identity)
   useEffect(() => {
     if (!isOpen) return;
     try {
       const supabase = createClient();
-      const channel = supabase.channel('war_room', {
-        config: { broadcast: { self: false } },
-      });
+      const channel = supabase
+        .channel('war_room_feed')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages' },
+          (payload: any) => {
+            const row = payload?.new;
+            if (row && !row.is_deleted && row.text) {
+              onSendMessage({
+                id: row.id,
+                sender: row.author_handle
+                  ? (row.author_handle.startsWith('@') ? row.author_handle : `@${row.author_handle}`)
+                  : (row.author_name || '@spectator'),
+                avatarColor: row.avatar_color || 'bg-indigo-500',
+                text: String(row.text).slice(0, 200),
+                slotTag: typeof row.slot_tag === 'number' ? row.slot_tag : undefined,
+                timestamp: new Date(row.created_at).getTime(),
+                isOfficial: Boolean(row.is_official),
+              });
+            }
+          }
+        )
+        .subscribe();
 
-      channel.on('broadcast', { event: 'message' }, ({ payload }) => {
-        if (payload && typeof payload.text === 'string' && payload.text.trim()) {
-          // Security: Broadcast payloads can NEVER spoof official announcements
-          onSendMessage({
-            id: payload.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            sender: String(payload.sender || '@spectator').slice(0, 50),
-            avatarColor: payload.avatarColor || 'bg-indigo-500',
-            text: String(payload.text).slice(0, 200),
-            slotTag: typeof payload.slotTag === 'number' ? payload.slotTag : undefined,
-            timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
-            isOfficial: false,
-          });
-        }
-      });
-
-      channel.subscribe();
       realtimeChannelRef.current = channel;
 
       return () => {
@@ -152,19 +156,6 @@ export const WarRoomDrawer: React.FC<WarRoomDrawerProps> = ({
 
       if (data.message) {
         onSendMessage(data.message);
-
-        // Broadcast to other live spectators
-        if (realtimeChannelRef.current) {
-          try {
-            realtimeChannelRef.current.send({
-              type: 'broadcast',
-              event: 'message',
-              payload: data.message,
-            });
-          } catch {
-            // Safe fallback
-          }
-        }
       }
 
       setMessageInput('');

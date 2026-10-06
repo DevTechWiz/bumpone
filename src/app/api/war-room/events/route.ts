@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { allowRequest } from '@/lib/rateLimit';
+import { clientIp } from '@/lib/requestGuard';
 import type { BumpEvent, SlotItem } from '@/lib/slotTypes';
+import { safeExternalUrl } from '@/lib/urls';
 
 export async function GET(request: NextRequest) {
   try {
+    if (!allowRequest(`war_room_events:${clientIp(request)}`, 120, 60_000)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': '60' } });
+    }
+
     const isSupabaseConfigured = Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
       process.env.SUPABASE_SERVICE_ROLE_KEY &&
@@ -46,7 +53,7 @@ export async function GET(request: NextRequest) {
       const activeValue = Math.floor(Number(row.new_active_value_minor || 0) / 100);
       const prevActiveValue = Math.floor(Number(row.previous_active_value_minor || 0) / 100);
       const imageUrl = proj.image_path || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80';
-      const linkUrl = proj.destination_url || 'https://bumpone.lol';
+      const linkUrl = safeExternalUrl(proj.destination_url) || 'https://bumpone.lol';
       const timestamp = new Date(row.created_at).getTime();
 
       const promotedItem: SlotItem = {

@@ -6,7 +6,6 @@ import {
   Sparkles,
   Shield,
   Zap,
-  AlertTriangle,
   Trophy,
   ChevronDown,
   Layers,

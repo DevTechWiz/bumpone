@@ -1,5 +1,8 @@
 # BumpOne.lol — Admin System
 
+> **Implementation notes:** Admins are authorized server-side by `requireAdmin()` — `ADMIN_EMAILS` env var or Supabase Auth `app_metadata.role` (`admin`/`super_admin`). There is no `admin_users` table. The emergency pause is the `PURCHASES_PAUSED` environment variable (checked by `POST /api/purchase/create`; the endpoint records the action). Every mutation writes an `admin_audit_log` row.
+> Endpoints: `GET /api/admin/overview`, `POST /api/admin/moderate`, `POST /api/admin/emergency` (see [09_API_SPEC.md](09_API_SPEC.md)).
+
 ## Dashboard
 
 Admin should be able to see:
@@ -69,7 +72,7 @@ Useful if:
 
 # Audit Log
 
-Every administrative mutation must record:
+Every administrative mutation must record (table `admin_audit_log`):
 
 admin
 action

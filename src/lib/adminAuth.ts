@@ -1,5 +1,4 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export async function requireAdmin() {
   const supabase = await createServerSupabaseClient();
@@ -19,21 +18,6 @@ export async function requireAdmin() {
   // 2. Check Supabase Auth app_metadata
   if (user.app_metadata?.role === 'admin' || user.app_metadata?.role === 'super_admin') {
     return { user, role: user.app_metadata.role as string };
-  }
-
-  // 3. Fallback to admin_users table if still present
-  try {
-    const { data: membership } = await supabaseAdmin
-      .from('admin_users')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (membership) {
-      return { user, role: membership.role };
-    }
-  } catch {
-    // admin_users table dropped or unavailable
   }
 
   return { error: 'Forbidden' as const };

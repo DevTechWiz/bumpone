@@ -1,7 +1,5 @@
 import { ImageResponse } from 'next/og';
 
-export const runtime = 'edge';
-
 export const alt = 'BumpOne.lol - The 100-Slot Digital Billboard & Attention Grid';
 export const size = {
   width: 1200,

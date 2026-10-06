@@ -1,5 +1,5 @@
 // BumpOne.lol — canonical domain (project architecture; UI consumes this, never the reverse).
-// Ordering: current_active_value DESC, earliest sequence first.
+// Ordering: current_active_value_minor DESC, earliest ranking_sequence first.
 // Pricing: $10 minimum entry + $10 minimum increment on filled slots.
 // Genesis face values run $1–$100. Quotes: 10-minute validity,
 // informational only, final position recomputed at payment confirmation.
@@ -27,16 +27,6 @@ export const REACTION_EMOJI: Record<ReactionKey, string> = {
   heart: "❤️",
   laugh: "😂",
 };
-
-export type FrameStyle = "default" | "gold" | "neon" | "cosmic" | "inset";
-
-export const FRAME_STYLES: { id: FrameStyle; label: string; borderClass: string; glowClass: string }[] = [
-  { id: "default", label: "Classic", borderClass: "border-white/[0.12]", glowClass: "" },
-  { id: "gold", label: "Gold King", borderClass: "border-2 border-amber-400/90", glowClass: "shadow-[0_0_30px_rgba(251,191,36,0.35)] ring-1 ring-amber-300/60" },
-  { id: "neon", label: "Cyber Emerald", borderClass: "border-2 border-emerald-400/90", glowClass: "shadow-[0_0_30px_rgba(52,211,153,0.35)] ring-1 ring-emerald-300/60" },
-  { id: "cosmic", label: "Cosmic Aurora", borderClass: "border-2 border-purple-400/90", glowClass: "shadow-[0_0_30px_rgba(168,85,247,0.4)] ring-1 ring-fuchsia-300/60" },
-  { id: "inset", label: "Studio Mat", borderClass: "border-4 border-white/20 p-2 bg-[#090a0d]", glowClass: "shadow-inner" },
-];
 
 export interface User {
   id: string;
@@ -86,25 +76,9 @@ export interface Profile {
   owner_handle?: string;
   owner_avatar?: string;
   owner_bio?: string;
-  frame?: FrameStyle;
-  imageZoom?: number;
-  imagePosX?: number;
-  imagePosY?: number;
-  imageFit?: "cover" | "contain";
-  imageRotation?: number;
 }
 
 export type Project = Profile;
-
-export interface FeedEntry {
-  id: string;
-  profile_id: string;
-  name: string;
-  text: string;
-  displaced: number;
-  category: Category;
-  ts: number;
-}
 
 export interface Quote {
   quote_id: string;
@@ -147,16 +121,6 @@ const ART: Artwork[] = [
 ];
 
 const ART_MAP = new Map(ART.map((a) => [a.url, a]));
-
-export const CREATORS: User[] = [];
-
-export function getCreator(_idOrHandle: string): User | undefined {
-  return undefined;
-}
-
-export function buildProfiles(): Profile[] {
-  return [];
-}
 
 /** Canonical ordering: active_value DESC, earliest sequence first. */
 export function sortBoard(profiles: Profile[]): Profile[] {
@@ -265,11 +229,6 @@ export function toSlotItem(p: Profile, rank: number, isNew = false): SlotItem {
     aspectRatio: art?.aspectRatio,
     naturalWidth: art?.width,
     naturalHeight: art?.height,
-    imageZoom: p.imageZoom,
-    imagePosX: p.imagePosX,
-    imagePosY: p.imagePosY,
-    imageFit: p.imageFit,
-    imageRotation: p.imageRotation,
     owner_id: p.owner_id,
     owner_name: p.owner_name,
     owner_handle: p.owner_handle,
@@ -277,25 +236,4 @@ export function toSlotItem(p: Profile, rank: number, isNew = false): SlotItem {
     category: p.category,
     reactions: p.reactions,
   };
-}
-
-export function seedFeed(profiles: Profile[]): FeedEntry[] {
-  const sorted = sortBoard(profiles);
-  const verbs = ["took", "bumped to", "stormed", "claimed"];
-  const picks = [0, 3, 6, 11, 17, 23, 30, 44];
-  return picks
-    .map((pi, k) => {
-      const p = sorted[pi];
-      if (!p) return null;
-      return {
-        id: "e" + k,
-        profile_id: p.id,
-        name: p.name,
-        text: `${p.name} ${verbs[k % verbs.length]} #${pi + 1}`,
-        displaced: 3 + ((k * 7) % 34),
-        category: p.category,
-        ts: Date.now() - (k + 1) * 47000,
-      } as FeedEntry;
-    })
-    .filter((e): e is FeedEntry => e !== null);
 }

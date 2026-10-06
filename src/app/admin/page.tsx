@@ -11,6 +11,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState('');
   const [reason, setReason] = useState('');
+  const [pauseReason, setPauseReason] = useState('');
 
   const load = async () => {
     const res = await fetch('/api/admin/overview');
@@ -20,8 +21,9 @@ export default function AdminPage() {
   useEffect(() => { load(); }, []);
   const pause = async () => {
     if (!stats) return;
-    const res = await fetch('/api/admin/emergency', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused: !stats.purchasesPaused }) });
-    if (res.ok) setStats({ ...stats, purchasesPaused: !stats.purchasesPaused }); else setError('Could not update purchase state.');
+    if (pauseReason.trim().length < 3) { setError('A reason (3+ characters) is required for pause/resume actions.'); return; }
+    const res = await fetch('/api/admin/emergency', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused: !stats.purchasesPaused, reason: pauseReason.trim() }) });
+    if (res.ok) { setPauseReason(''); setError(null); await load(); } else setError('Could not update purchase state.');
   };
   const moderate = async (status: 'approved' | 'suspended') => {
     const res = await fetch('/api/admin/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, status, reason }) });
@@ -53,9 +55,13 @@ export default function AdminPage() {
               <Metric label="Open reports" value={stats.openReports} />
               <Metric label="Purchases" value={stats.purchasesPaused ? 'Paused' : 'Live'} />
             </div>
-            <button onClick={pause} className="rounded bg-rose-600 px-4 py-2">
-              {stats.purchasesPaused ? 'Resume purchases' : 'Pause purchases'}
-            </button>
+            <div className="space-y-2 rounded border border-rose-900/60 bg-rose-950/20 p-4">
+              <p className="text-sm text-neutral-300">Emergency purchase control — takes effect on the next checkout attempt; already-paid transactions keep settling via webhooks.</p>
+              <input className="w-full rounded bg-black p-2" placeholder="Reason (required, recorded in audit log)" value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} />
+              <button onClick={pause} className="rounded bg-rose-600 px-4 py-2">
+                {stats.purchasesPaused ? 'Resume purchases' : 'Pause purchases'}
+              </button>
+            </div>
             <section className="space-y-3 rounded border border-white/10 p-4">
               <h2>Moderate project</h2>
               <input className="w-full rounded bg-black p-2" placeholder="Project UUID" value={projectId} onChange={(e) => setProjectId(e.target.value)} />

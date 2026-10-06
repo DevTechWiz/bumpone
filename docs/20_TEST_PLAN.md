@@ -74,11 +74,9 @@ Insert at #50.
 
 Expected:
 
-101 ranked profiles.
+101 profiles exist, 100 ranked (ranks #1–#100 visible).
 
-Only #1–#100 visible.
-
-Old #100 becomes #101.
+Old #100 falls to the Graveyard (`current_rank = null`, #101+).
 
 ---
 
@@ -94,7 +92,7 @@ Test:
 - new active value strictly exceeds target active value
 - active value carries forward on subsequent bumps
 - payment above all existing: enters at #1
-- payment below all existing: enters at last position
+- payment below all existing on a full board: falls to the Graveyard (`current_rank = null`, #101+)
 - payment between two profiles: inserts at correct position
 - active value grows with each top-up
 
@@ -135,7 +133,7 @@ Verify the profile moves above a $700 profile.
 
 # Genesis Pricing Tests
 
-Verify a fresh board seeds face values $100 down to $1 (#1 → #100), and the first takeover of a filled slot adds +$10.
+Verify a fresh board seeds face values $109 down to $10 (#1 → #100, per `004_seed.sql`), with `total_paid_minor = 0`, and the first takeover of a filled slot adds +$10.
 
 # Ranking Ordering Tests
 

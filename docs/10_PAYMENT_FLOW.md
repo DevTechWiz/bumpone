@@ -33,15 +33,15 @@ Server creates quote with `expires_at` (creation + 10 minutes) in `purchase_quot
 
 ↓
 
-Server calls Dodo Payments API to create a payment session with:
-* Amount in minor units (`amount_minor = top_up * 100`).
+Server calls Dodo Payments API to create a checkout session with:
+* Amount in minor units (`quoted_amount_minor`).
 * Currency: `USD`.
-* Metadata: `{ quote_id, profile_id, user_id, target_rank, expected_rank }`.
-* `return_url`: `https://bumpone.lol/purchase/result?payment_id={payment_id}`.
+* Metadata: `{ quote_id, project_id, user_id, mode }`.
+* `return_url`: `https://bumpone.lol/?status=pending_payment&quote_id={quote_id}` (informational only).
 
 ↓
 
-Server records purchase record in `purchases` (`status = 'created'`, `dodo_payment_id`).
+**No `payments` row is written yet.** `payments`, `board_events`, and `payment_events` are created exclusively by the `process_dodo_purchase` RPC when the verified webhook arrives.
 
 ↓
 
@@ -66,18 +66,17 @@ Server checks idempotency against `payment_events` table using Dodo `webhook_id`
 
 ↓
 
-Server executes atomic PostgreSQL transaction / RPC:
-1. Recomputes final position against live ranking state using amount actually paid (`amount_minor / 100`).
-2. Increments `current_active_value = current_active_value + top_up`.
-3. Materializes updated ranks for the buyer and shifts intermediate profiles down.
-4. If a profile falls past rank #100, shifts it to the off-board archive (Graveyard).
-5. Inserts immutable row into `rank_events` with monotonic `global_event_sequence`.
+Server executes atomic PostgreSQL transaction / RPC (`process_dodo_purchase`):
+1. Recomputes final position against live ranking state using amount actually paid (`amount_minor`).
+2. Increments `current_active_value_minor = current_active_value_minor + amount_minor` and sets `ranking_sequence`.
+3. Materializes updated ranks for the buyer (`ORDER BY current_active_value_minor DESC, ranking_sequence ASC`) and shifts intermediate profiles down.
+4. If a profile falls past rank #100, shifts it to the off-board archive (Graveyard) with a `left_top_100` board event.
+5. Inserts immutable rows into `payments`, `payment_events`, and `board_events` (monotonic `event_sequence`).
 6. Updates purchase status to `paid`.
-7. Inserts realtime notification into `realtime_outbox`.
 
 ↓
 
-Realtime worker / trigger broadcasts `board.updated` and `bump.feed` to connected clients.
+The route invalidates the server board cache. Clients pick up the change through their realtime subscription (`postgres_changes` on `board_events`) and polling loop — there is no `realtime_outbox` table or background broadcast worker.
 
 ---
 
@@ -162,11 +161,13 @@ Store:
 ```sql
 payment_events (
   id uuid primary key default gen_random_uuid(),
-  event_id text unique not null, -- Dodo webhook-id
-  payment_id text not null,      -- Dodo payment_id
-  event_type text not null,      -- e.g. payment.succeeded
+  provider text not null default 'dodo',
+  provider_event_id text not null, -- Dodo webhook-id
+  payment_id text,                 -- Dodo payment_id (nullable)
+  event_type text not null,        -- e.g. payment.succeeded
   payload jsonb not null,
-  processed_at timestamptz default now()
+  processed_at timestamptz not null default now(),
+  unique (provider, provider_event_id)
 );
 ```
 
@@ -180,7 +181,7 @@ BumpOne operates a competitive auction model. **Application-level refunds are in
 
 1. Payments purchase rank positions that immediately affect other users.
 2. Reversing a payment after displacement cascades is logically unsound.
-3. Gateway-level chargebacks (Dodo/Stripe disputes) are handled externally by the payment provider, not by this application.
+3. Gateway-level chargebacks (Dodo disputes) are handled externally by the payment provider, not by this application.
 
 If a `refund.succeeded` webhook is received, BumpOne acknowledges it with `200 OK` but takes **no application action**.
 

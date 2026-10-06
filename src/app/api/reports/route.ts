@@ -1,32 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import crypto from 'crypto';
 import { allowRequest } from '@/lib/rateLimit';
+import { clientIp, readJsonWithLimit, PRIVATE_NO_STORE } from '@/lib/requestGuard';
+import { ReportSchema } from '@/lib/contentSchemas';
 
-const ReportSchema = z.object({
-  projectId: z.string().optional(),
-  profileId: z.string().optional(),
-  reason: z.enum(['scam', 'spam', 'offensive', 'broken_link', 'other']),
-  details: z.string().min(10, 'A comment with at least 10 characters is required for review').max(500),
-}).refine(data => Boolean(data.projectId || data.profileId), {
-  message: 'Either projectId or profileId is required',
-});
+const MAX_BODY_BYTES = 16 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (!allowRequest(`report:${ip}`, 5, 60 * 60_000)) return NextResponse.json({ error: 'Too many reports' }, { status: 429, headers: { 'Retry-After': '3600' } });
-    const json = await request.json();
-    const result = ReportSchema.safeParse(json);
+    // SEC-021: CF-Connecting-IP is edge-set and cannot be forged by the client.
+    const ip = clientIp(request);
+    if (!allowRequest(`report:${ip}`, 5, 60 * 60_000)) {
+      return NextResponse.json({ error: 'Too many reports' }, { status: 429, headers: { 'Retry-After': '3600' } });
+    }
+
+    const body = await readJsonWithLimit(request, MAX_BODY_BYTES);
+    if (!body.ok) return body.response;
+
+    const result = ReportSchema.safeParse(body.value);
 
     if (!result.success) {
-      return NextResponse.json({ error: 'Invalid report data', details: result.error.format() }, { status: 400 });
+      // Field names only — never echo schema internals/stack details (Phase 3).
+      const fields = result.error.issues.map((issue) => issue.path.join('.')).filter(Boolean);
+      return NextResponse.json(
+        { error: 'Invalid report data', fields: [...new Set(fields)] },
+        { status: 400, headers: PRIVATE_NO_STORE }
+      );
     }
 
     const { projectId, profileId, reason, details } = result.data;
     const targetId = (projectId || profileId)!;
-    const reporterId = crypto.createHash('sha256').update(`${process.env.ANON_COOKIE_SECRET || 'development'}:${ip}`).digest('hex');
+    // reports.project_id is uuid: reject malformed ids before they reach Postgres (400, not 500)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)) {
+      return NextResponse.json({ error: 'Invalid project id' }, { status: 400 });
+    }
+
+    // SEC-021: the reporter fingerprint salt must be a real secret in production.
+    // Fail closed (503) instead of silently degrading to the 'development' salt,
+    // which would let anyone compute another IP's fingerprint.
+    const secret = process.env.ANON_COOKIE_SECRET;
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('ANON_COOKIE_SECRET is not set — report submission disabled (SEC-021)');
+        return NextResponse.json({ error: 'Reports are temporarily unavailable' }, { status: 503 });
+      }
+      console.warn('ANON_COOKIE_SECRET unset — using development salt for report fingerprints');
+    }
+    const reporterId = crypto.createHash('sha256').update(`${secret || 'development'}:${ip}`).digest('hex');
 
     const isSupabaseConfigured = Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&

@@ -5,7 +5,6 @@ import {
   quoteTopUp,
   buildQuote,
   recomputeRank,
-  MIN_INCREMENT,
   MIN_TOP_UP,
   QUOTE_VALIDITY_MIN,
   type Profile,

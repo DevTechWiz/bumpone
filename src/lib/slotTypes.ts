@@ -22,11 +22,6 @@ export interface SlotItem {
   aspectRatio?: number;
   naturalWidth?: number;
   naturalHeight?: number;
-  imageZoom?: number;
-  imagePosX?: number;
-  imagePosY?: number;
-  imageFit?: "cover" | "contain";
-  imageRotation?: number;
   owner_id?: string;
   owner_name?: string;
   owner_handle?: string;

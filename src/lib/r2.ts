@@ -46,7 +46,7 @@ export async function uploadImageToR2(
       });
       return `${publicBaseUrl.replace(/\/$/, '')}/${key}`;
     }
-  } catch (cfErr) {
+  } catch {
     // OpenNext context not available (e.g. running in standard Node.js or local dev)
   }
 

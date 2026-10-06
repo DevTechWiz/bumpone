@@ -10,20 +10,21 @@ Next.js
 
 ---
 
-## Hosting & Infrastructure (Cloudflare + Vercel Hybrid)
+## Hosting & Infrastructure (Cloudflare)
 
 * **Edge CDN & DDoS Shield**: **Cloudflare** (Free tier)
   * DNS proxy & DDoS attack absorption.
   * Web Application Firewall (WAF) & Bot Fight Mode.
   * Unlimited free bandwidth: caches static assets and images at 300+ edge locations for $0.
-* **Application Hosting**: **Vercel** (Hobby/Pro)
-  * Native Next.js 15 App Router runtime.
-  * Serverless Route Handlers (`app/api/`) and server-side image processing (`sharp`).
+* **Application Hosting**: **Cloudflare Workers via OpenNext** (`@opennextjs/cloudflare`)
+  * Next.js 15 App Router build deployed with `opennextjs-cloudflare build/deploy`.
+  * Route Handlers (`app/api/`) run on Workers with `nodejs_compat`; server-side image processing (`sharp`).
+  * Custom domain routes `bumpone.lol` + `www.bumpone.lol`.
 * **Edge Caching Strategy**:
   * `/api/board` utilizes Stale-While-Revalidate edge caching (`s-maxage=5, stale-while-revalidate=10`).
   * 50,000+ concurrent visitors generate only 1 database query every 5 seconds.
-  * Instant board updates push via Supabase Realtime WebSockets to active viewers.
-* **Cost Profile**: **$0/month at launch** (Cloudflare Free + Vercel Free + Supabase Free + Dodo pay-per-sale).
+  * Board changes stream to active viewers via Supabase Realtime (`postgres_changes`), with edge polling as the fallback.
+* **Cost Profile**: **$0/month at launch** (Cloudflare Free + Supabase Free + Dodo pay-per-sale).
 
 ---
 
@@ -50,7 +51,7 @@ Supabase Auth:
 
 ## Storage (Zero Egress Fees)
 
-**Cloudflare R2** (S3-compatible bucket: `profile-images`):
+**Cloudflare R2** (S3-compatible bucket: `bumpone-assets`, binding `bumpone_assets`):
 - **Zero egress bandwidth fees** (never pay for image bandwidth during viral spikes).
 - 10 GB free monthly storage.
 - S3 client API (`@aws-sdk/client-s3`).
@@ -60,8 +61,8 @@ Supabase Auth:
 
 ## Realtime & Spectator Updates
 
-- **Public Spectators**: **Cloudflare Edge SWR Polling** (`/api/board` cached for 5s at 300+ edge locations). Handles 100,000+ simultaneous viewers with zero database load and zero WebSocket exhaustion.
-- **Interactive Channels**: Supabase Realtime (reserved for active authenticated users in the War Room chat).
+- **Public Spectators**: **Cloudflare Edge SWR Polling** (`/api/board` cached for 5s at 300+ edge locations) handles 100,000+ simultaneous viewers with minimal database load.
+- **Live Updates**: Supabase Realtime `postgres_changes` subscriptions on `board_events`, `projects`, `users`, and `messages` (board bumps, reaction counts, War Room chat), with polling as the fallback.
 
 ---
 
@@ -89,7 +90,7 @@ Server-side `sharp` (strips EXIF, resizes to max 2560x2560, converts to WebP).
 ## Monitoring
 
 Initially:
-- Vercel logs
+- Cloudflare Workers logs (`wrangler tail`)
 - Supabase logs
 - Dodo Payments dashboard
 

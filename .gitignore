@@ -33,3 +33,4 @@ supabase/.temp/
 # Deprecated nested directory
 /web/
 scratch/
+.playwright-mcp/

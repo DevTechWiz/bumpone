@@ -17,6 +17,21 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
+  // Disable the legacy XSS auditor (it can interfere with legitimate
+  // reflected content); CSP is the active XSS defense (SEC-011).
+  {
+    key: "X-XSS-Protection",
+    value: "0",
+  },
+  // HSTS only in production builds: never pin `localhost`/dev origins to HTTPS.
+  ...(process.env.NODE_ENV === "production"
+    ? [
+        {
+          key: "Strict-Transport-Security",
+          value: "max-age=31536000; includeSubDomains",
+        },
+      ]
+    : []),
 ];
 
 const nextConfig: NextConfig = {

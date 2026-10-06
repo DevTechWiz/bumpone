@@ -1,38 +1,48 @@
-"use client";
+import type { Metadata } from "next";
+import { getBoardProfiles } from "@/lib/getBoard";
+import { HomePageClient } from "@/app/HomePageClient";
 
-import { useParams, useRouter } from "next/navigation";
-import { ProfileView } from "../../../components/ProfileView";
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bumpone.lol';
+  const cleanHandle = id.startsWith('@') ? id : `@${id}`;
 
-export default function ProfilePage() {
-  const router = useRouter();
-  const routeParams = useParams();
-  const id = (routeParams?.id as string) || "slot-1";
-
-  const handleBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back();
-    } else {
-      router.push("/");
-    }
+  return {
+    title: `${cleanHandle} - Creator Profile - BumpOne.lol`,
+    description: `View ${cleanHandle}'s creator profile, projects, and rank stats on BumpOne.lol.`,
+    alternates: {
+      canonical: `${baseUrl}/profile/${id}`,
+    },
+    openGraph: {
+      title: `${cleanHandle} - BumpOne.lol`,
+      description: `View ${cleanHandle}'s creator profile and projects on BumpOne.lol.`,
+      url: `${baseUrl}/profile/${id}`,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${cleanHandle} - BumpOne.lol`,
+      description: `View ${cleanHandle}'s creator profile and projects on BumpOne.lol.`,
+    },
   };
+}
+
+export default async function ProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const initialProfiles = await getBoardProfiles(120);
 
   return (
-    <div className="min-h-screen bg-[#121316] text-neutral-100 font-sans py-6">
-      <ProfileView
-        profileId={id}
-        initialMode="user"
-        onBack={handleBack}
-        onSelectProfile={(nextId, mode) => {
-          if (mode === "project" || nextId.startsWith("slot-")) {
-            router.push(`/project/${nextId}`);
-          } else {
-            router.push(`/profile/${nextId}`);
-          }
-        }}
-        onRequireAuth={() => router.push("/?auth=true")}
-        onClaimSlot={() => router.push("/?claim=true")}
-        onBumpProject={(projId) => router.push(`/?target=${projId}`)}
-      />
-    </div>
+    <HomePageClient
+      initialProfiles={initialProfiles}
+      initialViewingProfileId={id}
+      initialViewingProfileMode="user"
+    />
   );
 }

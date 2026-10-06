@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/cloudflare-docs/production/src/content/ruleset-engine/ruleset-schema.json",
+  "description": "BumpOne.lol Declarative Cloudflare WAF Distributed Rate Limiting Ruleset",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "description": "Rate limit financial checkout creation (/api/purchase/create)",
+      "expression": "http.request.uri.path eq \"/api/purchase/create\" and http.request.method eq \"POST\"",
+      "action": "managed_challenge",
+      "ratelimit": {
+        "characteristics": ["cf.colo.id", "ip.src"],
+        "period": 60,
+        "requests_per_period": 10,
+        "mitigation_timeout": 300
+      }
+    },
+    {
+      "description": "Rate limit authentication account sync (/api/auth/sync)",
+      "expression": "http.request.uri.path eq \"/api/auth/sync\" and http.request.method eq \"POST\"",
+      "action": "managed_challenge",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 60,
+        "requests_per_period": 30,
+        "mitigation_timeout": 300
+      }
+    },
+    {
+      "description": "Rate limit payment provider webhook endpoint (/api/webhooks/dodo)",
+      "expression": "http.request.uri.path eq \"/api/webhooks/dodo\" and http.request.method eq \"POST\"",
+      "action": "block",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 60,
+        "requests_per_period": 120,
+        "mitigation_timeout": 600
+      }
+    },
+    {
+      "description": "Rate limit War Room chat feed posting (/api/war-room/messages)",
+      "expression": "http.request.uri.path eq \"/api/war-room/messages\" and http.request.method eq \"POST\"",
+      "action": "managed_challenge",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 30,
+        "requests_per_period": 10,
+        "mitigation_timeout": 60
+      }
+    },
+    {
+      "description": "Rate limit public emoji reactions (/api/reactions)",
+      "expression": "http.request.uri.path eq \"/api/reactions\" and http.request.method eq \"POST\"",
+      "action": "block",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 60,
+        "requests_per_period": 60,
+        "mitigation_timeout": 120
+      }
+    },
+    {
+      "description": "Rate limit community abuse reports (/api/reports)",
+      "expression": "http.request.uri.path eq \"/api/reports\" and http.request.method eq \"POST\"",
+      "action": "block",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 3600,
+        "requests_per_period": 5,
+        "mitigation_timeout": 3600
+      }
+    },
+    {
+      "description": "Rate limit project metadata edits (/api/project/update)",
+      "expression": "http.request.uri.path eq \"/api/project/update\" and http.request.method eq \"POST\"",
+      "action": "managed_challenge",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 60,
+        "requests_per_period": 30,
+        "mitigation_timeout": 300
+      }
+    },
+    {
+      "description": "Rate limit administrative control endpoints (/api/admin/*)",
+      "expression": "http.request.uri.path matches \"^/api/admin/.*\"",
+      "action": "block",
+      "ratelimit": {
+        "characteristics": ["ip.src"],
+        "period": 60,
+        "requests_per_period": 30,
+        "mitigation_timeout": 600
+      }
+    }
+  ]
+}

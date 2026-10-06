@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bumpone.lol';
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const baseUrl = (envUrl && !envUrl.includes('localhost')) ? envUrl : 'https://bumpone.lol';
 
   return {
     rules: [
@@ -10,9 +11,11 @@ export default function robots(): MetadataRoute.Robots {
         allow: '/',
         disallow: [
           '/admin',
-          '/api/admin',
-          '/api/purchase',
-          '/api/webhooks',
+          '/admin/*',
+          '/api/*',
+          '/auth/*',
+          '/profile',
+          '/profile/*',
         ],
       },
       {
@@ -20,9 +23,11 @@ export default function robots(): MetadataRoute.Robots {
         allow: '/',
         disallow: [
           '/admin',
-          '/api/admin',
-          '/api/purchase',
-          '/api/webhooks',
+          '/admin/*',
+          '/api/*',
+          '/auth/*',
+          '/profile',
+          '/profile/*',
         ],
       },
     ],

@@ -14,7 +14,7 @@ export interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
-  onSuccess,
+  onSuccess: _onSuccess,
 }) => {
   const [loadingProvider, setLoadingProvider] = useState<'google' | 'x' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

@@ -1,5 +1,11 @@
 import { supabaseAdmin } from './supabase/admin';
 import type { Profile, Category } from './board';
+import { safeExternalUrl } from './urls';
+
+// Same rules as the profile/[id] route (SEC-006/SEC-020): only approved+active
+// projects are publicly readable, and malformed handles never reach .or().
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HANDLE_RE = /^[a-z0-9_]{1,30}$/;
 
 export async function getProject(id: string): Promise<Profile | null> {
   if (!id) return null;
@@ -13,9 +19,11 @@ export async function getProject(id: string): Promise<Profile | null> {
 
     if (!isSupabaseConfigured) return null;
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const isUuid = UUID_RE.test(id);
     const cleanHandle = id.startsWith('@') ? id : `@${id}`;
     const plainHandle = id.startsWith('@') ? id.slice(1) : id;
+
+    if (!isUuid && !HANDLE_RE.test(plainHandle)) return null;
 
     let query = supabaseAdmin
       .from('projects')
@@ -38,7 +46,9 @@ export async function getProject(id: string): Promise<Profile | null> {
         updated_at,
         categories(name),
         users(id, handle, display_name, avatar_url, bio)
-      `);
+      `)
+      .eq('is_active', true)
+      .eq('moderation_status', 'approved');
 
     if (isUuid) {
       query = query.eq('id', id);
@@ -62,9 +72,7 @@ export async function getProject(id: string): Promise<Profile | null> {
       ? (project as any).categories[0]?.name
       : (project as any).categories?.name;
 
-    const activeValue = (project as any).current_active_value_minor != null
-      ? Math.floor(Number((project as any).current_active_value_minor) / 100)
-      : Number((project as any).current_active_value || 0);
+    const activeValue = Math.floor(Number((project as any).current_active_value_minor || 0) / 100);
 
     const owner = (project as any).users || {};
     const joinedDaysAgo = (project as any).created_at
@@ -80,7 +88,7 @@ export async function getProject(id: string): Promise<Profile | null> {
       category: (categoryName || 'Tech') as Category,
       active_value: activeValue,
       imageUrl: (project as any).image_path || '',
-      linkUrl: (project as any).destination_url || '',
+      linkUrl: safeExternalUrl((project as any).destination_url),
       owner_id: owner.id || undefined,
       owner_name: owner.display_name || undefined,
       owner_handle: owner.handle || undefined,

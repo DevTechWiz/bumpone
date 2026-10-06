@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase/admin';
-import { type Profile, type Category, sortBoard } from './board';
+import { type Profile, type Category } from './board';
 import { boardMemoryCache, CACHE_TTL_MS } from './boardCache';
+import { safeExternalUrl } from './urls';
 
 export async function getBoardProfiles(limit: number = 120): Promise<Profile[]> {
   const cacheKey = `server_ssr:All:${limit}`;
@@ -71,9 +72,7 @@ export async function getBoardProfiles(limit: number = 120): Promise<Profile[]> 
         ? row.categories[0]?.name
         : row.categories?.name;
 
-      const activeValue = row.current_active_value_minor != null
-        ? Math.floor(Number(row.current_active_value_minor) / 100)
-        : Number(row.current_active_value || 0);
+      const activeValue = Math.floor(Number(row.current_active_value_minor || 0) / 100);
 
       const views = Number(row.views_count || 0);
       const joinedDaysAgo = row.created_at
@@ -84,13 +83,13 @@ export async function getBoardProfiles(limit: number = 120): Promise<Profile[]> 
 
       return {
         id: row.id,
-        seq: Number(row.ranking_sequence || row.sequence || 0),
+        seq: Number(row.ranking_sequence || 0),
         name: row.title || row.display_name || 'Project',
         handle: row.handle,
         category: (categoryName || 'Tech') as Category,
         active_value: activeValue,
         imageUrl: row.image_path,
-        linkUrl: row.destination_url,
+        linkUrl: safeExternalUrl(row.destination_url),
         owner_id: row.user_id || undefined,
         owner_name: owner.display_name || undefined,
         owner_handle: owner.handle || undefined,

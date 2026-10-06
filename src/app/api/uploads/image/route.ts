@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImageToR2 } from '@/lib/r2';
+import { readImageDimensions } from '@/lib/imageDimensions';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { allowRequest } from '@/lib/rateLimit';
+import { bodyTooLarge } from '@/lib/requestGuard';
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+// Multipart envelope headroom over the 5MB file cap; anything larger is
+// rejected on the declared content-length BEFORE buffering the body (SEC-008).
+const MAX_REQUEST_BYTES = 6 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 async function getSharpInstance() {
@@ -41,6 +46,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Upload limit reached' }, { status: 429, headers: { 'Retry-After': '3600' } });
     }
 
+    // SEC-008: reject oversized requests before `formData()` buffers them.
+    if (bodyTooLarge(request, MAX_REQUEST_BYTES)) {
+      return NextResponse.json({ error: 'Image exceeds 5MB size limit' }, { status: 413 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const rawType = ((formData.get('type') || formData.get('folder') || '') as string).toLowerCase();
@@ -69,6 +79,7 @@ export async function POST(request: NextRequest) {
 
     let processedBuffer = inputBuffer;
     let format = detected.format;
+    let sharpProcessed = false;
 
     // Check if Sharp is available (e.g. running on Vercel or local Node.js)
     const sharp = await getSharpInstance();
@@ -87,8 +98,28 @@ export async function POST(request: NextRequest) {
           .webp({ quality: 85 })
           .toBuffer();
         format = 'webp';
+        sharpProcessed = true;
       } catch (sharpErr) {
         console.warn('Sharp processing failed, falling back to direct upload of validated buffer:', sharpErr);
+      }
+    }
+
+    // Phase 4: the sharp-unavailable / sharp-rejected fallback previously
+    // stored the original bytes without any dimension check — a crafted
+    // tiny file with enormous header dimensions (decompression bomb for
+    // downstream viewers) slipped through. Enforce the same bounds from
+    // raw headers before falling back (SEC-023 keeps the availability
+    // behavior, this closes the validation gap).
+    if (!sharpProcessed) {
+      const dims = readImageDimensions(inputBuffer);
+      if (
+        !dims ||
+        dims.width < 64 ||
+        dims.height < 64 ||
+        dims.width > 4096 ||
+        dims.height > 4096
+      ) {
+        return NextResponse.json({ error: 'Image dimensions must be between 64px and 4096px.' }, { status: 400 });
       }
     }
 
