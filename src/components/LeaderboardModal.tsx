@@ -36,7 +36,7 @@ interface TierFilterDef {
 const TIER_FILTERS: TierFilterDef[] = [
   {
     key: 'all',
-    label: 'All Slots',
+    label: 'All Levels',
     range: '#1–100',
     icon: Layers,
     activeClasses: 'bg-white text-zinc-950 font-semibold border-white shadow-sm',
@@ -77,7 +77,7 @@ const TIER_FILTERS: TierFilterDef[] = [
   {
     key: 'contender',
     label: 'Contender',
-    range: '#41–100',
+    range: '#41–99',
     icon: Zap,
     activeClasses: 'bg-white/[0.14] text-white border-white/[0.25] shadow-sm',
     iconActiveColor: 'text-zinc-200',
@@ -87,10 +87,19 @@ const TIER_FILTERS: TierFilterDef[] = [
     label: 'Floor',
     range: '#100',
     icon: AlertTriangle,
-    activeClasses: 'bg-amber-950/40 text-amber-300 border-amber-500/50 shadow-sm shadow-amber-500/15',
-    iconActiveColor: 'text-amber-400',
+    activeClasses: 'bg-rose-950/40 text-rose-300 border-rose-500/50 shadow-sm shadow-rose-500/15',
+    iconActiveColor: 'text-rose-400',
   },
 ];
+
+const getTierInfo = (rank: number) => {
+  if (rank === 1) return { label: '👑 King', colorClass: 'text-amber-300 font-semibold' };
+  if (rank <= 5) return { label: '💎 Champion', colorClass: 'text-purple-300 font-semibold' };
+  if (rank <= 15) return { label: '✨ Elite', colorClass: 'text-sky-300 font-medium' };
+  if (rank <= 40) return { label: '🛡️ Vanguard', colorClass: 'text-emerald-300 font-medium' };
+  if (rank === 100) return { label: '⚠️ Floor (#100)', colorClass: 'text-rose-400 font-semibold' };
+  return { label: '⚡ Contender', colorClass: 'text-zinc-400 font-medium' };
+};
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   isOpen,
@@ -136,7 +145,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
     if (filterTier === 'champion') return slot.rank >= 2 && slot.rank <= 5;
     if (filterTier === 'elite') return slot.rank >= 6 && slot.rank <= 15;
     if (filterTier === 'vanguard') return slot.rank >= 16 && slot.rank <= 40;
-    if (filterTier === 'contender') return slot.rank >= 41 && slot.rank <= 100;
+    if (filterTier === 'contender') return slot.rank >= 41 && slot.rank <= 99;
     if (filterTier === 'bubble') return slot.rank === 100;
     return true;
   });
@@ -148,11 +157,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
       hasBackdrop={hasBackdrop}
       title="Top 100 Leaderboard"
       subtitle="Ranked by active value, highest first. Top up anytime to climb."
-      maxWidth="lg"
+      maxWidth="2xl"
+      bodyClassName="p-4 sm:p-5 flex flex-col flex-1 min-h-0 overflow-hidden space-y-3"
     >
-      <div className="space-y-3.5">
+      <div className="flex flex-col flex-1 min-h-0 space-y-3">
         {/* Search & Tier Filters */}
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 shrink-0">
           <Input
             placeholder="Search by title, handle (@...), or rank (#)..."
             value={search}
@@ -160,8 +170,15 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             leftAddon={<Search className="w-4 h-4" />}
           />
 
-          {/* Segmented Filter Pills with Uniform Height, Width, and Alignment */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 px-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {/* Segmented Filter Pills with responsive wrap & mouse wheel support */}
+          <div
+            className="flex flex-wrap items-center gap-1.5 py-0.5"
+            onWheel={(e) => {
+              if (e.deltaY !== 0 && e.currentTarget.scrollWidth > e.currentTarget.clientWidth) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+          >
             {TIER_FILTERS.map((tier) => {
               const Icon = tier.icon;
               const isActive = filterTier === tier.key;
@@ -171,7 +188,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   key={tier.key}
                   type="button"
                   onClick={() => setFilterTier(tier.key)}
-                  className={`h-8 shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-3 rounded-xl text-xs font-medium border transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${
+                  className={`h-8 whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 rounded-xl text-xs font-medium border transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${
                     isActive
                       ? tier.activeClasses
                       : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border-white/[0.08]'
@@ -200,8 +217,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </div>
         </div>
 
-        {/* List Items in dark glass with Uniform Alignment */}
-        <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1 [scrollbar-width:thin]">
+        {/* List Items with smooth vertical scroll without cutting off */}
+        <div className="space-y-1.5 flex-1 min-h-[280px] max-h-[58vh] overflow-y-auto pr-1.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-white/35 [&::-webkit-scrollbar-thumb]:rounded-full">
           {isLoading || (slots.length === 0 && search === '') ? (
             Array.from({ length: 6 }).map((_, i) => (
               <div
@@ -246,18 +263,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </div>
           ) : (
             filteredSlots.map((slot) => {
-              const tierStatus =
-                slot.rank === 1
-                  ? '👑 King of Board'
-                  : slot.rank <= 5
-                  ? '💎 Champion'
-                  : slot.rank <= 15
-                  ? '⚡ Elite'
-                  : slot.rank <= 40
-                  ? '🛡️ Vanguard'
-                  : slot.rank === 100
-                  ? '⚠️ Floor (#100)'
-                  : 'Contender';
+              const tierInfo = getTierInfo(slot.rank);
 
               const displayHandle = slot.owner_handle
                 ? `@${slot.owner_handle.replace(/^@/, '')}`
@@ -313,8 +319,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                       <span className="font-mono text-xs font-bold text-white block">
                         ${slot.activeValue.toLocaleString()}
                       </span>
-                      <span className="text-[10px] text-slate-400 block font-medium">
-                        {tierStatus}
+                      <span className={`text-[10px] block ${tierInfo.colorClass}`}>
+                        {tierInfo.label}
                       </span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" />
@@ -326,7 +332,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
         </div>
 
         {/* Footer Status Bar */}
-        <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-400">
+        <div className="pt-2 shrink-0 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-400">
           <span>
             Showing <strong className="text-white font-mono">{filteredSlots.length}</strong> of{' '}
             <strong className="text-white font-mono">{slots.length}</strong> billboard slots

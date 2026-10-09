@@ -25,7 +25,7 @@ const inFlightRequests = new Map<string, Promise<BoardClientResponse>>();
 
 // 10-second client cache TTL (zero network requests during rapid tab/filter interactions)
 const CLIENT_CACHE_TTL_MS = 10000;
-const SESSION_CACHE_KEY = 'bumped_board_cache';
+const SESSION_CACHE_KEY = 'bumped_board_cache_v2';
 
 export function isDocumentVisible(): boolean {
   if (typeof document === 'undefined') return true;

@@ -9,7 +9,7 @@ export interface ModalProps {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   zIndex?: string;
   hasBackdrop?: boolean;
   bodyClassName?: string;
@@ -53,6 +53,7 @@ export const Modal: React.FC<ModalProps> = ({
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
   };
 
   return (
@@ -70,11 +71,11 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative w-full ${maxWidthStyles[maxWidth]} bg-[#18191d]/95 backdrop-blur-xl border border-white/[0.14] rounded-2xl shadow-2xl shadow-black/90 overflow-hidden z-10 pointer-events-auto animate-in fade-in zoom-in-95 duration-200`}
+        className={`relative w-full ${maxWidthStyles[maxWidth]} bg-[#18191d]/95 backdrop-blur-xl border border-white/[0.14] rounded-2xl shadow-2xl shadow-black/90 overflow-hidden z-10 pointer-events-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]`}
       >
         {/* Header (conditionally rendered only if title, subtitle, or back button is present) */}
         {title || subtitle || onBack ? (
-          <div className="flex items-start justify-between p-5 sm:p-6 border-b border-white/[0.08]">
+          <div className="flex items-start justify-between p-5 sm:p-6 border-b border-white/[0.08] shrink-0">
             <div className="flex items-start gap-3">
               {onBack && (
                 <button
@@ -119,13 +120,19 @@ export const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Content Body */}
-        <div className={`p-5 sm:p-6 max-h-[85vh] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.15)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/15 hover:[&::-webkit-scrollbar-thumb]:bg-white/30 [&::-webkit-scrollbar-thumb]:rounded-full space-y-4 ${bodyClassName || ''}`}>
+        <div
+          className={
+            bodyClassName
+              ? bodyClassName
+              : `p-5 sm:p-6 max-h-[85vh] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.15)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/15 hover:[&::-webkit-scrollbar-thumb]:bg-white/30 [&::-webkit-scrollbar-thumb]:rounded-full space-y-4`
+          }
+        >
           {children}
         </div>
 
         {/* Optional Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 p-4 sm:p-5 bg-black/40 border-t border-white/[0.08]">
+          <div className="flex items-center justify-end gap-3 p-4 sm:p-5 bg-black/40 border-t border-white/[0.08] shrink-0">
             {footer}
           </div>
         )}
