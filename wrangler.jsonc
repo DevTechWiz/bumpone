@@ -35,7 +35,7 @@
     "APP_URL": "https://bumpone.lol",
     "NEXT_PUBLIC_R2_PUBLIC_URL": "https://assets.bumpone.lol",
     "DODO_PAYMENTS_ENVIRONMENT": "live_mode",
-    "DODO_PRODUCT_ID": "pdt_0NowwCBxH2gSEio45FSUM",
+    "DODO_PRODUCT_ID": "pdt_0NpN6wMWmRcjASc4ZdBbK",
     "R2_BUCKET_NAME": "bumpone-assets",
     "ADMIN_EMAILS": "devendra.tampula@gmail.com",
     "RESEND_FROM_EMAIL": "BumpOne Support <support@bumpone.lol>",
