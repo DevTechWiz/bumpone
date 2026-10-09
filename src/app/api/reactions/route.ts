@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { invalidateBoardCache } from '@/lib/boardCache';
 import { allowRequest } from '@/lib/rateLimit';
-import { clientIp, PRIVATE_NO_STORE } from '@/lib/requestGuard';
+import { clientIp, PRIVATE_NO_STORE, newRequestId } from '@/lib/requestGuard';
 
 const VALID_REACTIONS = ['fire', 'eyes', 'heart', 'laugh'] as const;
 type ReactionType = (typeof VALID_REACTIONS)[number];
@@ -79,9 +79,10 @@ export async function GET(request: NextRequest) {
     // one user's reaction state to another (cache-security, Phase 3).
     return NextResponse.json({ userReactions, reactions }, { headers: PRIVATE_NO_STORE });
   } catch (err: any) {
-    console.error('Error fetching user reactions:', err);
+    const requestId = newRequestId();
+    console.error('Error fetching user reactions:', requestId, err);
     return NextResponse.json(
-      { userReactions: [], reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 } },
+      { userReactions: [], reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 }, request_id: requestId },
       { status: 500, headers: PRIVATE_NO_STORE }
     );
   }
@@ -138,8 +139,20 @@ export async function POST(request: NextRequest) {
       });
 
       if (rpcRes.error || !rpcRes.data) {
-        console.error('add_project_reaction_auth RPC failed:', rpcRes.error?.message);
-        return NextResponse.json({ error: 'Failed to record reaction' }, { status: 500 });
+        const requestId = newRequestId();
+        console.error('add_project_reaction_auth RPC failed:', requestId, rpcRes.error?.message);
+        return NextResponse.json({ error: 'Failed to record reaction', request_id: requestId }, { status: 500 });
+      }
+
+      // The RPC reports soft failures as data ({success:false, error:'Project
+      // not found'}), never as a PostgREST error — translate them to real
+      // HTTP statuses so phantom profile ids can not collect 200s.
+      if (rpcRes.data.success === false) {
+        const rpcError = String(rpcRes.data.error || 'Reaction rejected');
+        return NextResponse.json(
+          { error: rpcError },
+          { status: rpcError === 'Project not found' ? 404 : 400 }
+        );
       }
 
       count = rpcRes.data.count ?? count;
@@ -167,8 +180,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, count, alreadyReacted, reactions });
   } catch (err: any) {
-    console.error('Error recording reaction:', err);
-    return NextResponse.json({ error: 'Failed to record reaction' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Error recording reaction:', requestId, err);
+    return NextResponse.json({ error: 'Failed to record reaction', request_id: requestId }, { status: 500 });
   }
 }
 
@@ -221,8 +235,18 @@ export async function DELETE(request: NextRequest) {
       });
 
       if (rpcRes.error || !rpcRes.data) {
-        console.error('remove_project_reaction_auth RPC failed:', rpcRes.error?.message);
-        return NextResponse.json({ error: 'Failed to remove reaction' }, { status: 500 });
+        const requestId = newRequestId();
+        console.error('remove_project_reaction_auth RPC failed:', requestId, rpcRes.error?.message);
+        return NextResponse.json({ error: 'Failed to remove reaction', request_id: requestId }, { status: 500 });
+      }
+
+      // Same soft-failure contract as POST: {success:false} is data, not an error.
+      if (rpcRes.data.success === false) {
+        const rpcError = String(rpcRes.data.error || 'Reaction rejected');
+        return NextResponse.json(
+          { error: rpcError },
+          { status: rpcError === 'Project not found' ? 404 : 400 }
+        );
       }
 
       count = rpcRes.data.count ?? count;
@@ -249,8 +273,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, count, reactions });
   } catch (err: any) {
-    console.error('Error removing reaction:', err);
-    return NextResponse.json({ error: 'Failed to remove reaction' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Error removing reaction:', requestId, err);
+    return NextResponse.json({ error: 'Failed to remove reaction', request_id: requestId }, { status: 500 });
   }
 }
 

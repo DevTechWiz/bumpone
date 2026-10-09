@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ZoomIn, ZoomOut, Maximize2, Crown, Sparkles } from 'lucide-react';
 import { GridCell } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import {
@@ -19,10 +19,6 @@ export interface GridBoardProps {
   onOrientationChange?: (orientation: GridOrientation) => void;
 }
 
-/** Cards are flush: adjacent rects touch exactly (no gutter, no overlap). */
-const GAP = 0;
-const GAP_INSET = GAP / 2;
-
 const GridBoardComponent: React.FC<GridBoardProps> = ({
   slots,
   isLoading = false,
@@ -33,25 +29,15 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   onHoverRank,
   onOrientationChange,
 }) => {
-  const [_orientation, setOrientation] = useState<GridOrientation>(() => {
+  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [mounted, setMounted] = useState<boolean>(false);
+  const [orientation, setOrientation] = useState<GridOrientation>(() => {
     if (typeof window !== 'undefined') {
-      return window.innerWidth < window.innerHeight ? 'portrait' : 'landscape';
+      const isPortrait = window.innerWidth < 768 && window.innerHeight > window.innerWidth;
+      return isPortrait ? 'portrait' : 'landscape';
     }
     return 'landscape';
   });
-
-  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
-  const [size, setSize] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const isMobile = window.innerWidth < 768;
-      return {
-        w: isMobile ? Math.max(320, window.innerWidth - 16) : 1000,
-        h: isMobile ? Math.max(480, window.innerHeight - 96) : 700,
-      };
-    }
-    return { w: 1000, h: 700 };
-  });
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleCellClick = useCallback(
     (cellData: any) => {
@@ -68,9 +54,10 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   );
 
   useEffect(() => {
+    setMounted(true);
     const handleResize = () => {
       const isPortrait = window.innerWidth < 768 && window.innerHeight > window.innerWidth;
-      const next = isPortrait ? 'portrait' : 'landscape';
+      const next: GridOrientation = isPortrait ? 'portrait' : 'landscape';
       setOrientation(next);
       onOrientationChange?.(next);
     };
@@ -80,73 +67,28 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [onOrientationChange]);
 
-  // Measure board → dynamic treemap (fills every pixel of the container).
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const apply = (w: number, h: number) => {
-      if (w <= 0 || h <= 0) return;
-      setSize((prev) =>
-        Math.abs(prev.w - w) < 4 && Math.abs(prev.h - h) < 4
-          ? prev
-          : { w, h }
-      );
-    };
-
-    if (el.clientWidth > 0 && el.clientHeight > 0) {
-      apply(el.clientWidth, el.clientHeight);
-    }
-
-    const ro = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) apply(rect.width, rect.height);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const [mounted, setMounted] = useState(false);
-  const [renderFullBoard, setRenderFullBoard] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    if (typeof window !== 'undefined') {
-      if ('requestIdleCallback' in window) {
-        const handle = (window as any).requestIdleCallback(
-          () => setRenderFullBoard(true),
-          { timeout: 4500 }
-        );
-        return () => (window as any).cancelIdleCallback?.(handle);
-      } else {
-        const timer = setTimeout(() => setRenderFullBoard(true), 3500);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, []);
-
-  const layout = useMemo(() => {
-    if (size.w <= 0 || size.h <= 0) return null;
-    return computeBoardLayout(size.w, size.h, Math.min(100, slots.length || 100));
-  }, [size.w, size.h, slots.length]);
-
+  // Compute percentage-based styles so the grid is centered and fills 100% of container immediately
   const cellStyles = useMemo(() => {
-    if (!layout) return null;
+    const virtualW = orientation === 'portrait' ? 900 : 1500;
+    const virtualH = orientation === 'portrait' ? 1500 : 900;
+    const layout = computeBoardLayout(virtualW, virtualH, 100);
+    if (!layout || layout.width <= 0 || layout.height <= 0) return null;
+
     const styles: Record<number, React.CSSProperties> = {};
     for (let rank = 1; rank <= 100; rank++) {
       const rect = layout.slots[rank];
       if (rect) {
         styles[rank] = {
           position: 'absolute',
-          left: rect.x + GAP_INSET,
-          top: rect.y + GAP_INSET,
-          width: Math.max(1, rect.w - GAP),
-          height: Math.max(1, rect.h - GAP),
+          left: `${(rect.x / layout.width) * 100}%`,
+          top: `${(rect.y / layout.height) * 100}%`,
+          width: `${(rect.w / layout.width) * 100}%`,
+          height: `${(rect.h / layout.height) * 100}%`,
         };
       }
     }
     return styles;
-  }, [layout]);
+  }, [orientation]);
 
   const handleZoomIn = () => {
     soundEngine.playClick();
@@ -162,6 +104,8 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
     soundEngine.playClick();
     setZoomLevel(1.0);
   };
+
+  const showSkeleton = (isLoading && slots.length === 0) || slots.length === 0;
 
   return (
     <div className="w-full h-full relative overflow-hidden rounded-2xl bg-[#141519]/90 backdrop-blur-xl border border-white/[0.09] shadow-2xl shadow-black/90 flex flex-col group/board">
@@ -215,38 +159,120 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
       {/* Full-bleed treemap board */}
       <div className="relative z-10 w-full h-full overflow-hidden">
         <div
-          ref={containerRef}
           className="absolute inset-0 origin-center transition-transform duration-300 ease-out"
           style={{ transform: `scale(${zoomLevel})` }}
         >
-          {cellStyles && (isLoading || slots.length === 0)
-            ? Array.from({ length: renderFullBoard ? 100 : 16 }).map((_, idx) => {
+          {cellStyles && showSkeleton
+            ? Array.from({ length: 100 }).map((_, idx) => {
                 const rank = idx + 1;
                 const style = cellStyles[rank];
                 if (!style) return null;
 
+                if (rank === 1) {
+                  return (
+                    <div
+                      key="shimmer-cell-1"
+                      style={style}
+                      className="rounded-lg bg-gradient-to-b from-amber-500/[0.08] to-[#141519]/95 border-2 border-amber-400/90 shadow-2xl shadow-amber-500/20 ring-2 ring-amber-400/30 shimmer-effect overflow-hidden p-2 sm:p-3 flex flex-col justify-between"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[9px] sm:text-[10px] font-extrabold text-amber-300 bg-black/60 px-2 py-0.5 rounded border border-amber-400/30 flex items-center gap-1">
+                          <Crown className="w-3 h-3 text-amber-400" /> #1 KING
+                        </span>
+                        <span className="h-3.5 w-10 sm:w-12 rounded bg-amber-400/20" />
+                      </div>
+                      <div className="flex flex-col items-center justify-center my-auto space-y-1.5 text-center">
+                        <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-amber-400/15 flex items-center justify-center">
+                          <Crown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400/70" />
+                        </div>
+                        <div className="h-2.5 sm:h-3 w-24 sm:w-32 rounded bg-white/20 mx-auto" />
+                        <div className="h-2 w-16 sm:w-20 rounded bg-white/10 mx-auto" />
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-amber-400/20">
+                        <div className="h-2 w-12 rounded bg-amber-400/20" />
+                        <div className="h-2 w-8 rounded bg-white/10" />
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (rank >= 2 && rank <= 5) {
+                  return (
+                    <div
+                      key={`shimmer-cell-${rank}`}
+                      style={style}
+                      className="rounded-lg bg-gradient-to-b from-purple-500/[0.06] to-[#141519]/95 border-2 border-purple-400/80 shadow-lg shadow-purple-500/20 ring-1 ring-purple-400/30 shimmer-effect overflow-hidden p-1.5 sm:p-2 flex flex-col justify-between"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[8px] sm:text-[9px] font-bold text-purple-300 bg-black/50 px-1.5 py-0.5 rounded border border-purple-400/30 flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-purple-400" /> #{rank}
+                        </span>
+                        <div className="h-2.5 w-7 rounded bg-purple-400/20" />
+                      </div>
+                      <div className="space-y-1 my-auto">
+                        <div className="h-2 w-3/4 rounded bg-white/15" />
+                        <div className="h-1.5 w-1/2 rounded bg-white/10" />
+                      </div>
+                      <div className="flex items-center justify-between pt-0.5 border-t border-purple-400/20">
+                        <div className="h-1.5 w-8 rounded bg-purple-400/20" />
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (rank >= 6 && rank <= 15) {
+                  return (
+                    <div
+                      key={`shimmer-cell-${rank}`}
+                      style={style}
+                      className="rounded-lg bg-[#141519]/95 border-[1.5px] border-sky-400/50 shadow-md shadow-sky-500/10 shimmer-effect overflow-hidden p-1 sm:p-1.5 flex flex-col justify-between"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[8px] font-bold text-sky-300 bg-black/40 px-1 rounded">
+                          #{rank}
+                        </span>
+                      </div>
+                      <div className="space-y-1 my-auto">
+                        <div className="h-1.5 w-3/4 rounded bg-white/10" />
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (rank >= 16 && rank <= 40) {
+                  return (
+                    <div
+                      key={`shimmer-cell-${rank}`}
+                      style={style}
+                      className="rounded-md bg-[#141519]/95 border border-emerald-400/30 shadow-sm shadow-emerald-500/10 shimmer-effect overflow-hidden p-1 flex flex-col justify-between"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[7px] font-bold text-emerald-300 bg-black/40 px-1 rounded">
+                          #{rank}
+                        </span>
+                      </div>
+                      <div className="h-1 w-1/2 rounded bg-white/5 my-auto" />
+                    </div>
+                  );
+                }
+
                 return (
                   <div
-                    key={`skeleton-cell-${rank}`}
+                    key={`shimmer-cell-${rank}`}
                     style={style}
-                    className="rounded-lg bg-white/[0.03] border border-white/[0.05] shimmer-effect overflow-hidden p-1.5 sm:p-2 flex flex-col justify-between"
+                    className="rounded-md bg-[#141519]/90 border border-white/[0.07] shimmer-effect overflow-hidden p-0.5 sm:p-1 flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-[9px] font-bold text-white/30 bg-black/40 px-1 rounded">
+                      <span className="font-mono text-[7px] sm:text-[8px] font-bold text-neutral-500 bg-black/40 px-0.5 rounded">
                         #{rank}
                       </span>
                     </div>
-                    {rank <= 13 && (
-                      <div className="space-y-1">
-                        <div className="h-2 w-3/4 rounded bg-white/10" />
-                        <div className="h-1.5 w-1/2 rounded bg-white/5" />
-                      </div>
-                    )}
+                    <div className="h-1 w-1/2 rounded bg-white/5 my-auto" />
                   </div>
                 );
               })
             : cellStyles &&
-              slots.slice(0, renderFullBoard ? 100 : 16).map((slot) => {
+              slots.map((slot) => {
                 const style = cellStyles[slot.rank];
                 if (!style) return null;
 

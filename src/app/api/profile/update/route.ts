@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getHandleCooldownRemainingDays } from '@/lib/board';
 import { normalizeUrl } from '@/lib/urls';
-import { readJsonWithLimit } from '@/lib/requestGuard';
+import { readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { allowRequest } from '@/lib/rateLimit';
 import { stripControlChars } from '@/lib/textSanitize';
 
@@ -66,8 +66,9 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .maybeSingle();
     if (currentError) {
-      console.error('Profile update: failed to load user:', currentError.message);
-      return NextResponse.json({ error: 'Unable to update profile' }, { status: 500 });
+      const requestId = newRequestId();
+      console.error('Profile update: failed to load user:', requestId, currentError.message);
+      return NextResponse.json({ error: 'Unable to update profile', request_id: requestId }, { status: 500 });
     }
     if (!current) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -187,13 +188,15 @@ export async function POST(request: NextRequest) {
       if ((updateError as any).code === '23505' || msg.includes('duplicate key')) {
         return NextResponse.json({ error: 'This @handle is already taken.' }, { status: 409 });
       }
-      console.error('Profile update failed:', updateError.message);
-      return NextResponse.json({ error: 'Unable to update profile' }, { status: 500 });
+      const requestId = newRequestId();
+      console.error('Profile update failed:', requestId, updateError.message);
+      return NextResponse.json({ error: 'Unable to update profile', request_id: requestId }, { status: 500 });
     }
 
     return NextResponse.json({ user: updatedRows && updatedRows[0] ? updatedRows[0] : current });
   } catch (err) {
-    console.error('Profile update error:', err);
-    return NextResponse.json({ error: 'Unable to update profile' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Profile update error:', requestId, err);
+    return NextResponse.json({ error: 'Unable to update profile', request_id: requestId }, { status: 500 });
   }
 }

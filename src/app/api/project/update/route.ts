@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { normalizeUrl } from '@/lib/urls';
-import { readJsonWithLimit } from '@/lib/requestGuard';
+import { readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { allowRequest } from '@/lib/rateLimit';
 import { securityLog } from '@/lib/securityLogger';
 
@@ -17,6 +17,7 @@ const ProjectUpdateSchema = z.object({
   title: z.string().trim().min(1).max(100).nullish(),
   destination_url: z.string().trim().min(1).max(2048).nullish(),
   image_path: z.string().trim().min(1).max(7_000_000).nullish(),
+  category: z.string().trim().min(1).max(50).nullish(),
 });
 
 function isValidHttpsUrl(value: string): boolean {
@@ -67,6 +68,22 @@ export async function POST(request: NextRequest) {
       }
       payload.image_path = input.image_path;
     }
+    if (input.category !== undefined && input.category !== null) {
+      const { data: categoryRow, error: categoryError } = await supabaseAdmin
+        .from('categories')
+        .select('id')
+        .eq('name', input.category)
+        .maybeSingle();
+      if (categoryError) {
+        const requestId = newRequestId();
+        console.error('Category lookup failed:', requestId, categoryError.message);
+        return NextResponse.json({ error: 'Unable to update project', request_id: requestId }, { status: 500 });
+      }
+      if (!categoryRow) {
+        return NextResponse.json({ error: 'Unknown category' }, { status: 400 });
+      }
+      payload.category_id = categoryRow.id;
+    }
 
     if (Object.keys(payload).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -86,8 +103,9 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (currentError) {
-        console.error('Project pre-read failed:', currentError.message);
-        return NextResponse.json({ error: 'Unable to update project' }, { status: 500 });
+        const requestId = newRequestId();
+        console.error('Project pre-read failed:', requestId, currentError.message);
+        return NextResponse.json({ error: 'Unable to update project', request_id: requestId }, { status: 500 });
       }
       // Ownership is part of the WHERE clause: a mismatched id writes nothing (SEC-010/IDOR).
       if (!current) {
@@ -109,15 +127,16 @@ export async function POST(request: NextRequest) {
       .update(payload)
       .eq('id', input.projectId)
       .eq('user_id', user.id)
-      .select('id, title, handle, destination_url, image_path, moderation_status');
+      .select('id, title, handle, destination_url, image_path, category_id, moderation_status');
 
     if (updateError) {
       const msg = updateError.message || '';
       if (msg.includes('invalid_destination_url') || msg.includes('invalid_image_path') || msg.includes('invalid_title')) {
         return NextResponse.json({ error: 'Invalid project data' }, { status: 400 });
       }
-      console.error('Project update failed:', updateError.message);
-      return NextResponse.json({ error: 'Unable to update project' }, { status: 500 });
+      const requestId = newRequestId();
+      console.error('Project update failed:', requestId, updateError.message);
+      return NextResponse.json({ error: 'Unable to update project', request_id: requestId }, { status: 500 });
     }
 
     if (!rows || rows.length === 0) {
@@ -140,7 +159,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ project: rows[0] });
   } catch (err) {
-    console.error('Project update error:', err);
-    return NextResponse.json({ error: 'Unable to update project' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Project update error:', requestId, err);
+    return NextResponse.json({ error: 'Unable to update project', request_id: requestId }, { status: 500 });
   }
 }

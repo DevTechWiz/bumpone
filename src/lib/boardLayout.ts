@@ -56,19 +56,16 @@ export function computeBoardLayout(
   const centerC = Math.floor(cols / 2);
   const centerR = Math.floor(rows / 2);
 
-  // Dynamically tuned coordinate weighting driven by kingScale
+  // Center-magnified coordinate weighting: center cards (King #1, Champions) scale up majestically,
+  // while perimeter cards (Contenders) scale down into sleek, compact tiles.
+  const edgeScale = isLandscape ? 0.74 : 0.82;
+  const effectiveKingScale = isLandscape ? Math.max(1.38, kingScale) : Math.max(1.18, kingScale * 0.85);
+
   const colWeights: number[] = [];
   for (let c = 0; c < cols; c++) {
-    const d = Math.abs(c - centerC);
-    let w = 1.0;
-    if (d === 0) w = 1.0 + (kingScale - 1.0) * 1.10;
-    else if (d === 1) w = 1.0 + (kingScale - 1.0) * 0.96;
-    else if (d === 2) w = 1.0 + (kingScale - 1.0) * 0.36;
-    else if (d === 3) w = 0.96;
-    else if (d === 4) w = 0.86;
-    else if (d === 5) w = 0.78;
-    else if (d === 6) w = 0.72;
-    else w = 0.68;
+    const d = Math.abs(c - centerC) / centerC; // 0 at center, 1 at edge
+    const decay = 0.5 * (1 + Math.cos(d * Math.PI)); // smooth 1 at center, 0 at edge
+    const w = edgeScale + (effectiveKingScale - edgeScale) * decay;
     colWeights.push(w);
   }
   const sumCW = colWeights.reduce((a, b) => a + b, 0);
@@ -76,13 +73,9 @@ export function computeBoardLayout(
 
   const rowWeights: number[] = [];
   for (let r = 0; r < rows; r++) {
-    const d = Math.abs(r - centerR);
-    let w = 1.0;
-    if (d === 0) w = 1.0 + (kingScale - 1.0) * 0.84;
-    else if (d === 1) w = 1.0 + (kingScale - 1.0) * 0.72;
-    else if (d === 2) w = 1.0 + (kingScale - 1.0) * 0.36;
-    else if (d === 3) w = 0.86;
-    else w = 0.72;
+    const d = Math.abs(r - centerR) / centerR; // 0 at center, 1 at edge
+    const decay = 0.5 * (1 + Math.cos(d * Math.PI)); // smooth 1 at center, 0 at edge
+    const w = edgeScale + (effectiveKingScale - edgeScale) * decay;
     rowWeights.push(w);
   }
   const sumRH = rowWeights.reduce((a, b) => a + b, 0);
@@ -134,10 +127,14 @@ export function computeBoardLayout(
         [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
       ]
     : [
+        // Top Champion (#2)
         [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
+        // Bottom Champion (#3)
         [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
-        [{ r: centerR - 1, c: centerC - 2 }, { r: centerR - 1, c: centerC - 1 }, { r: centerR, c: centerC - 2 }, { r: centerR, c: centerC - 1 }],
-        [{ r: centerR - 1, c: centerC + 1 }, { r: centerR - 1, c: centerC + 2 }, { r: centerR, c: centerC + 1 }, { r: centerR, c: centerC + 2 }],
+        // Left Champion (#4) - distinct cols (centerC - 3, centerC - 2) so zero overlap with King
+        [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
+        // Right Champion (#5) - distinct cols (centerC + 2, centerC + 3) so zero overlap with King
+        [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
       ];
 
   let curRank = 2;
@@ -164,31 +161,33 @@ export function computeBoardLayout(
     curRank++;
   }
 
-  // 3. Batch 3: Ranks 6 - 15 (10 slots) - Elite Council (2-cell cards in inner rings)
+  // 3. Batch 3: Ranks 6 - 15 (10 slots) - Elite Council (2-cell cards in inner rings with balanced aspect ratios)
   const batch3Candidates = isLandscape
     ? [
-        [{ r: centerR - 2, c: centerC - 3 }, { r: centerR - 2, c: centerC - 2 }],
-        [{ r: centerR - 2, c: centerC + 2 }, { r: centerR - 2, c: centerC + 3 }],
-        [{ r: centerR + 2, c: centerC - 3 }, { r: centerR + 2, c: centerC - 2 }],
-        [{ r: centerR + 2, c: centerC + 2 }, { r: centerR + 2, c: centerC + 3 }],
-        [{ r: centerR + 1, c: centerC - 3 }, { r: centerR + 1, c: centerC - 2 }],
-        [{ r: centerR + 1, c: centerC + 2 }, { r: centerR + 1, c: centerC + 3 }],
+        // Elite (#6..#15): 1-column wide x 2-rows tall vertical cards (prevents excessive width)
+        [{ r: centerR - 3, c: centerC - 3 }, { r: centerR - 2, c: centerC - 3 }],
+        [{ r: centerR - 3, c: centerC - 2 }, { r: centerR - 2, c: centerC - 2 }],
         [{ r: centerR - 3, c: centerC + 1 }, { r: centerR - 2, c: centerC + 1 }],
+        [{ r: centerR - 3, c: centerC + 2 }, { r: centerR - 2, c: centerC + 2 }],
+        [{ r: centerR - 3, c: centerC + 3 }, { r: centerR - 2, c: centerC + 3 }],
+        [{ r: centerR + 2, c: centerC - 3 }, { r: centerR + 3, c: centerC - 3 }],
+        [{ r: centerR + 2, c: centerC - 2 }, { r: centerR + 3, c: centerC - 2 }],
         [{ r: centerR + 2, c: centerC + 1 }, { r: centerR + 3, c: centerC + 1 }],
-        [{ r: centerR - 1, c: centerC - 4 }, { r: centerR, c: centerC - 4 }],
-        [{ r: centerR - 1, c: centerC + 4 }, { r: centerR, c: centerC + 4 }],
+        [{ r: centerR + 2, c: centerC + 2 }, { r: centerR + 3, c: centerC + 2 }],
+        [{ r: centerR + 2, c: centerC + 3 }, { r: centerR + 3, c: centerC + 3 }],
       ]
     : [
-        [{ r: centerR - 4, c: centerC - 1 }, { r: centerR - 4, c: centerC }],
-        [{ r: centerR + 4, c: centerC - 1 }, { r: centerR + 4, c: centerC }],
-        [{ r: centerR - 2, c: centerC - 2 }, { r: centerR - 1, c: centerC - 2 }],
-        [{ r: centerR - 2, c: centerC + 2 }, { r: centerR - 1, c: centerC + 2 }],
-        [{ r: centerR, c: centerC - 2 }, { r: centerR + 1, c: centerC - 2 }],
-        [{ r: centerR, c: centerC + 2 }, { r: centerR + 1, c: centerC + 2 }],
-        [{ r: centerR - 3, c: centerC - 2 }, { r: centerR - 3, c: centerC - 1 }],
-        [{ r: centerR - 3, c: centerC + 1 }, { r: centerR - 3, c: centerC + 2 }],
-        [{ r: centerR + 2, c: centerC - 2 }, { r: centerR + 3, c: centerC - 2 }],
-        [{ r: centerR + 2, c: centerC + 2 }, { r: centerR + 3, c: centerC + 2 }],
+        // In portrait orientation, use balanced pairs (horizontal near center rows, vertical near top/bottom)
+        [{ r: centerR - 4, c: centerC - 2 }, { r: centerR - 3, c: centerC - 2 }],
+        [{ r: centerR - 4, c: centerC + 2 }, { r: centerR - 3, c: centerC + 2 }],
+        [{ r: centerR + 3, c: centerC - 2 }, { r: centerR + 4, c: centerC - 2 }],
+        [{ r: centerR + 3, c: centerC + 2 }, { r: centerR + 4, c: centerC + 2 }],
+        [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }],
+        [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }],
+        [{ r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
+        [{ r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
+        [{ r: centerR + 1, c: centerC - 3 }, { r: centerR + 1, c: centerC - 2 }],
+        [{ r: centerR + 1, c: centerC + 2 }, { r: centerR + 1, c: centerC + 3 }],
       ];
 
   for (const pair of batch3Candidates) {
@@ -247,13 +246,33 @@ export function computeBoardLayout(
     const { r, c } = cell;
     if (grid[r][c] !== 0 || cellUsed[r][c]) continue;
 
-    if (r + 1 < rows && grid[r + 1][c] === 0 && !cellUsed[r + 1][c]) {
+    // Evaluate both pairing directions
+    const canPairH = c + 1 < cols && grid[r][c + 1] === 0 && !cellUsed[r][c + 1];
+    const canPairV = r + 1 < rows && grid[r + 1][c] === 0 && !cellUsed[r + 1][c];
+    const ratioH = canPairH ? (colW[c] + colW[c + 1]) / rowH[r] : 0;
+    const ratioV = canPairV ? colW[c] / (rowH[r] + rowH[r + 1]) : 0;
+
+    // Strictly enforce natural aspect ratios (must be between 0.45 and 2.20, never 2:6 or 4:1)
+    const validH = canPairH && ratioH >= 0.45 && ratioH <= 2.20;
+    const validV = canPairV && ratioV >= 0.45 && ratioV <= 2.20;
+
+    let chosenDir: 'H' | 'V' | null = null;
+    if (validH && validV) {
+      // Pick direction closest to 1.0 (golden balanced card)
+      chosenDir = Math.abs(ratioH - 1.0) <= Math.abs(ratioV - 1.0) ? 'H' : 'V';
+    } else if (validH) {
+      chosenDir = 'H';
+    } else if (validV) {
+      chosenDir = 'V';
+    }
+
+    if (chosenDir === 'H') {
       cellUsed[r][c] = true;
-      cellUsed[r + 1][c] = true;
+      cellUsed[r][c + 1] = true;
       grid[r][c] = curRank;
-      grid[r + 1][c] = curRank;
+      grid[r][c + 1] = curRank;
       const x = colX[c], y = rowY[r];
-      const w = colW[c], h = rowH[r] + rowH[r + 1];
+      const w = colW[c] + colW[c + 1], h = rowH[r];
       const batch = curRank <= 40 ? 4 : 5;
       const batchName = batch === 4 ? 'VANGUARD' : 'BASE';
       slots[curRank] = {
@@ -269,13 +288,13 @@ export function computeBoardLayout(
       };
       curRank++;
       pairsMade++;
-    } else if (c + 1 < cols && grid[r][c + 1] === 0 && !cellUsed[r][c + 1]) {
+    } else if (chosenDir === 'V') {
       cellUsed[r][c] = true;
-      cellUsed[r][c + 1] = true;
+      cellUsed[r + 1][c] = true;
       grid[r][c] = curRank;
-      grid[r][c + 1] = curRank;
+      grid[r + 1][c] = curRank;
       const x = colX[c], y = rowY[r];
-      const w = colW[c] + colW[c + 1], h = rowH[r];
+      const w = colW[c], h = rowH[r] + rowH[r + 1];
       const batch = curRank <= 40 ? 4 : 5;
       const batchName = batch === 4 ? 'VANGUARD' : 'BASE';
       slots[curRank] = {

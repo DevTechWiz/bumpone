@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { ensurePublicUser } from '@/lib/userSync';
 import { allowRequest } from '@/lib/rateLimit';
+import { newRequestId } from '@/lib/requestGuard';
 
 export async function POST() {
   try {
@@ -24,7 +25,8 @@ export async function POST() {
     return NextResponse.json({ user: publicUser }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (err) {
     // SEC-019: never echo internal error details to the client
-    console.error('Auth sync failed:', err);
-    return NextResponse.json({ error: 'Sync failed' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Auth sync failed:', requestId, err);
+    return NextResponse.json({ error: 'Sync failed', request_id: requestId }, { status: 500 });
   }
 }

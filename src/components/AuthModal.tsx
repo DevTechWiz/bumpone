@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertCircle, Loader2, Compass } from 'lucide-react';
+import Image from 'next/image';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { Modal } from './ui';
 import { createClient } from '../lib/supabase/client';
 
@@ -63,8 +64,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="pt-3 pb-2 px-1">
         {/* Header Emblem & Title */}
         <div className="text-center pb-6">
-          <div className="relative inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-b from-white/[0.12] to-white/[0.04] border border-white/[0.16] shadow-lg mb-3">
-            <Compass className="w-5 h-5 text-white" />
+          <div className="relative inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-b from-white/[0.12] to-white/[0.04] border border-white/[0.16] shadow-lg mb-3 p-2">
+            <Image
+              src="/bumpone-logo.png"
+              alt="BumpOne Logo"
+              width={40}
+              height={40}
+              className="w-full h-full object-contain"
+              priority
+            />
             <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-[#18191d]" />
           </div>
           
@@ -72,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             Sign in to <span className="text-white">BumpOne</span><span className="text-amber-400">.lol</span>
           </h3>
           <p className="text-xs text-neutral-400 mt-1">
-            Claim, climb, and control your slot on the board
+            Claim, promote, and showcase your project on the billboard
           </p>
         </div>
 
@@ -83,7 +91,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* Centered High-Contrast SSO Buttons */}
+        {/* High-Contrast SSO Buttons */}
         <div className="space-y-3">
           {/* Google Button */}
           <button
@@ -135,9 +143,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Subtle, WCAG AA compliant footer */}
+        {/* WCAG AA compliant footer */}
         <p className="text-[11px] text-center text-neutral-400 mt-6">
-          By signing in, you agree to the Board Rules & Game Protocol.
+          By signing in, you agree to the Billboard Advertising Rules & Guidelines.
         </p>
       </div>
     </Modal>

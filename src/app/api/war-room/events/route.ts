@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { allowRequest } from '@/lib/rateLimit';
-import { clientIp } from '@/lib/requestGuard';
+import { clientIp, newRequestId } from '@/lib/requestGuard';
 import type { BumpEvent, SlotItem } from '@/lib/slotTypes';
 import { safeExternalUrl } from '@/lib/urls';
 
@@ -42,8 +42,9 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     if (error) {
-      console.error('Error fetching board events:', error);
-      return NextResponse.json({ error: 'Failed to fetch board events' }, { status: 500 });
+      const requestId = newRequestId();
+      console.error('Error fetching board events:', requestId, error);
+      return NextResponse.json({ error: 'Failed to fetch board events', request_id: requestId }, { status: 500 });
     }
 
     const events: BumpEvent[] = (data || []).map((row: any) => {
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
       const handle = row.project_handle_snapshot || proj.handle || '@unknown';
       const activeValue = Math.floor(Number(row.new_active_value_minor || 0) / 100);
       const prevActiveValue = Math.floor(Number(row.previous_active_value_minor || 0) / 100);
-      const imageUrl = proj.image_path || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80';
+      const imageUrl = proj.image_path || '';
       const linkUrl = safeExternalUrl(proj.destination_url) || 'https://bumpone.lol';
       const timestamp = new Date(row.created_at).getTime();
 
@@ -85,12 +86,14 @@ export async function GET(request: NextRequest) {
         droppedItem,
         previousRank: row.previous_rank ?? (row.new_rank + 1),
         newRank: row.new_rank,
+        profilesDisplaced: typeof row.profiles_displaced === 'number' ? row.profiles_displaced : undefined,
       };
     });
 
     return NextResponse.json({ events });
   } catch (err: any) {
-    console.error('Failed to load board events:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Failed to load board events:', requestId, err);
+    return NextResponse.json({ error: 'Internal server error', request_id: requestId }, { status: 500 });
   }
 }

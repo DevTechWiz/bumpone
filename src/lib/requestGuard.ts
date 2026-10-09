@@ -110,3 +110,12 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
 
 /** Shared response header for user-specific JSON (never cache into a shared cache). */
 export const PRIVATE_NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
+
+/**
+ * Correlation id for 500 responses (contract 24: "Unexpected server failure:
+ * 500, with a request ID but no sensitive detail"). The id is echoed to the
+ * client and printed with the server-side log line so support can correlate.
+ */
+export function newRequestId(): string {
+  return crypto.randomUUID();
+}

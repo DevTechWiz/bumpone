@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Crown,
   Sparkles,
@@ -11,6 +11,35 @@ import {
 import { Modal, Button } from './ui';
 import { Profile, money } from '../lib/board';
 import { getRankTier } from '../lib/slotTypes';
+
+// docs/13:118-126 — the rank number and displaced counter animate to their
+// final values. Respects prefers-reduced-motion by snapping to the target.
+function useCountUp(from: number, to: number, durationMs = 900): number {
+  const reduced =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [value, setValue] = useState(reduced ? to : from);
+
+  useEffect(() => {
+    if (reduced || from === to || durationMs <= 0) {
+      setValue(to);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setValue(Math.round(from + (to - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [from, to, durationMs, reduced]);
+
+  return value;
+}
 
 export interface BumpResultData {
   profile: Profile;
@@ -35,6 +64,10 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
+  // Hooks must run before any early return so the hook order stays stable.
+  const displayRank = useCountUp(result?.previousRank ?? result?.newRank ?? 0, result?.newRank ?? 0);
+  const displayDisplaced = useCountUp(0, result?.displacedCount ?? 0, 700);
+
   if (!isOpen || !result) return null;
 
   const { profile, previousRank, newRank, displacedCount, displacedProfiles = [] } = result;
@@ -47,8 +80,8 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
       : `https://bumpone.lol/share/${profile.id}`;
 
     const tweetText = isKing
-      ? `👑 Just conquered Rank #1 Center King on @bumpone! ${displacedCount > 0 ? `Displaced ${displacedCount} projects on the grid.` : ''} Active Value: ${money(profile.active_value)}. Check the live board:`
-      : `🚀 ${profile.name} just bumped to Rank #${newRank} on @bumpone! ${displacedCount > 0 ? `Displaced ${displacedCount} spots.` : ''} Check the live grid:`;
+      ? `👑 Just conquered Rank #1 Center King on @bumpone_lol! ${displacedCount > 0 ? `Displaced ${displacedCount} projects on the grid.` : ''} Active Value: ${money(profile.active_value)}. Check the live board:`
+      : `🚀 ${profile.name} just bumped to Rank #${newRank} on @bumpone_lol! ${displacedCount > 0 ? `Displaced ${displacedCount} spots.` : ''} Check the live grid:`;
 
     return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
   })();
@@ -125,27 +158,33 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
         </div>
 
         {/* Profile Avatar */}
-        <div className="relative z-10 mx-auto w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-xl mb-4 bg-zinc-900">
-          <img
-            src={profile.imageUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400'}
-            alt={profile.name}
-            className="w-full h-full object-cover"
-          />
+        <div className="relative z-10 mx-auto w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-xl mb-4 bg-zinc-900 flex items-center justify-center">
+          {profile.imageUrl ? (
+            <img
+              src={profile.imageUrl}
+              alt={profile.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-amber-400 font-bold text-2xl font-mono">
+              {profile.name?.slice(0, 2).toUpperCase() || 'BO'}
+            </div>
+          )}
           <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-mono font-bold text-amber-300 border border-white/10">
-            #{newRank}
+            #{displayRank}
           </div>
         </div>
 
         {/* Main Headline */}
         <h2 className="relative z-10 text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
-          {isKing ? "You're Center King #1" : `You're Now Ranked #${newRank}`}
+          {isKing ? "You're Center King #1" : `You're Now Ranked #${displayRank}`}
         </h2>
 
         {/* Displacement Callout */}
         <p className="relative z-10 text-neutral-300 text-sm sm:text-base font-medium mb-6">
           {displacedCount > 0 ? (
             <span>
-              You just moved above <strong className="text-amber-300 font-bold">{displacedCount} profiles</strong> on the live board.
+              You just moved above <strong className="text-amber-300 font-bold">{displayDisplaced} profiles</strong> on the live board.
             </span>
           ) : (
             <span>You established your position with <strong className="text-emerald-300 font-bold">{money(profile.active_value)}</strong> in active value.</span>
@@ -159,7 +198,7 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
             <div className="flex items-center gap-1.5 mt-1 font-mono font-bold text-sm">
               <span className="text-neutral-500">{previousRank ? `#${previousRank}` : 'ENTRY'}</span>
               <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400">#{newRank}</span>
+              <span className="text-emerald-400">#{displayRank}</span>
             </div>
           </div>
 
@@ -174,7 +213,7 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
             <span className="text-[11px] text-neutral-400 font-medium">Displaced</span>
             <div className="flex items-center gap-1 mt-1 font-mono font-bold text-sm text-sky-400">
               <Layers className="w-3.5 h-3.5" />
-              <span>{displacedCount}</span>
+              <span>{displayDisplaced}</span>
             </div>
           </div>
         </div>
@@ -203,8 +242,8 @@ export const BumpResultModal: React.FC<BumpResultModalProps> = ({
           </div>
         )}
 
-        {/* CTA Actions */}
-        <div className="relative z-10 flex flex-col sm:flex-row gap-2.5">
+        {/* CTA Actions — subtle staggered entrance (docs/13:125) */}
+        <div className="relative z-10 flex flex-col sm:flex-row gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-300 fill-mode-both">
           <a
             href={twitterShareUrl}
             target="_blank"

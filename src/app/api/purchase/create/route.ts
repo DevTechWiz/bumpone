@@ -6,7 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { MIN_TOP_UP } from '@/lib/board';
 import { requiredQuoteAmountMinor } from '@/lib/paymentEvents';
 import { allowRequest } from '@/lib/rateLimit';
-import { readJsonWithLimit } from '@/lib/requestGuard';
+import { readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { normalizeUrl } from '@/lib/urls';
 import { isPurchasesPaused } from '@/lib/pauseState';
 import { stripControlChars } from '@/lib/textSanitize';
@@ -137,10 +137,16 @@ export async function POST(request: NextRequest) {
       throw new Error('Unable to create payment quote');
     }
 
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl =
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.NODE_ENV === 'production' ? 'https://bumpone.lol' : 'http://localhost:3000');
     if (process.env.NODE_ENV === 'production' && !appUrl.startsWith('https://')) {
       throw new Error('APP_URL must use HTTPS in production');
     }
+
+    // PURCHASE_ATTEMPT: record every checkout initialization (docs/security spec).
+    securityLog.purchaseAttempt('checkout_init', user.id, projectId as string, suppliedMinor);
 
     const session = await createDodoCheckoutSession({
       amountMinor: suppliedMinor,
@@ -154,7 +160,8 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ quote_id: quote.id, checkout_url: session.checkoutUrl, session_id: session.sessionId, expires_at: expiresAt });
   } catch (error) {
-    console.error('Purchase checkout creation failed', error);
-    return NextResponse.json({ error: 'Unable to create checkout session' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Purchase checkout creation failed', requestId, error);
+    return NextResponse.json({ error: 'Unable to create checkout session', request_id: requestId }, { status: 500 });
   }
 }

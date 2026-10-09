@@ -11,11 +11,19 @@ export const QUOTE_VALIDITY_MIN = 10;
 
 export const CATEGORIES = [
   "AI",
+  "SaaS",
   "Apps",
+  "Dev Tools",
   "Websites",
+  "Crypto & Web3",
+  "Design",
+  "Productivity",
   "Creators",
   "Games",
-  "Design",
+  "FinTech",
+  "E-Commerce",
+  "Marketing",
+  "Community",
   "Tech",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -76,6 +84,9 @@ export interface Profile {
   owner_handle?: string;
   owner_avatar?: string;
   owner_bio?: string;
+  aspectRatio?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
 }
 
 export type Project = Profile;
@@ -89,38 +100,6 @@ export interface Quote {
   expected_rank: number;
   expires_at: number;
 }
-
-interface Artwork {
-  url: string;
-  aspectRatio: number;
-  width: number;
-  height: number;
-}
-
-const ART: Artwork[] = [
-  { url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500&auto=format&fit=crop&q=80", aspectRatio: 0.67, width: 500, height: 750 },
-  { url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=700&auto=format&fit=crop&q=80", aspectRatio: 1.5, width: 750, height: 500 },
-  { url: "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=500&auto=format&fit=crop&q=80", aspectRatio: 1.0, width: 500, height: 500 },
-  { url: "https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=500&auto=format&fit=crop&q=80", aspectRatio: 1.0, width: 500, height: 500 },
-  { url: "https://images.unsplash.com/photo-1563089145-599997674d42?w=500&auto=format&fit=crop&q=80", aspectRatio: 1.0, width: 500, height: 500 },
-  { url: "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=500&auto=format&fit=crop&q=80", aspectRatio: 1.0, width: 500, height: 500 },
-  { url: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=500&auto=format&fit=crop&q=80", aspectRatio: 1.0, width: 500, height: 500 },
-];
-
-const ART_MAP = new Map(ART.map((a) => [a.url, a]));
 
 /** Canonical ordering: active_value DESC, earliest sequence first. */
 export function sortBoard(profiles: Profile[]): Profile[] {
@@ -212,8 +191,7 @@ export function getOptimizedImageUrl(url: string, rank: number): string {
 }
 
 /** Adapter: canonical Profile -> reference SlotItem shape (UI layer only). */
-export function toSlotItem(p: Profile, rank: number, isNew = false): SlotItem {
-  const art = ART_MAP.get(p.imageUrl);
+export function toSlotItem(p: Profile, rank: number, isNew = false, categoryRank?: number, globalRank?: number): SlotItem {
   const imageUrl = getOptimizedImageUrl(p.imageUrl, rank);
   return {
     id: p.id,
@@ -226,14 +204,16 @@ export function toSlotItem(p: Profile, rank: number, isNew = false): SlotItem {
     activeValue: p.active_value,
     createdAt: Date.now() - p.joined_days_ago * 86400000,
     isNew,
-    aspectRatio: art?.aspectRatio,
-    naturalWidth: art?.width,
-    naturalHeight: art?.height,
+    aspectRatio: p.aspectRatio,
+    naturalWidth: p.naturalWidth,
+    naturalHeight: p.naturalHeight,
     owner_id: p.owner_id,
     owner_name: p.owner_name,
     owner_handle: p.owner_handle,
     owner_avatar: p.owner_avatar,
     category: p.category,
+    categoryRank,
+    globalRank,
     reactions: p.reactions,
   };
 }

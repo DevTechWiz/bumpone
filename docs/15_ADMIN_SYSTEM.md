@@ -28,8 +28,14 @@ Admin can:
 - reject
 - suspend
 - restore
-- replace image
-- disable link
+
+> **Not implemented:** "replace image" and "disable link" are not part of the
+> shipped admin surface — the contract defines only
+> `GET /api/admin/overview`, `POST /api/admin/moderate`, and
+> `POST /api/admin/emergency`
+> ([24_IMPLEMENTATION_CONTRACT.md](24_IMPLEMENTATION_CONTRACT.md)).
+> Image and link changes go through the owner-facing project update endpoint
+> (`POST /api/project/update`).
 
 ---
 

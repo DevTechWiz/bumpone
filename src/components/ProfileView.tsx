@@ -45,7 +45,7 @@ import {
   SkeletonCard,
   SkeletonText,
 } from "./ui";
-import { normalizeUrl, type TopUpOrder } from "./TakeOverModal";
+import { normalizeUrl } from "./TakeOverModal";
 import type { SlotItem } from "../lib/slotTypes";
 import { processImageForUpload } from "../lib/imageOptimization";
 
@@ -58,6 +58,17 @@ const ShareCardModal = dynamic(
   () => import("./ShareCardModal").then((m) => m.ShareCardModal),
   { ssr: false }
 );
+
+type PassportMetrics = {
+  id?: string;
+  rank?: number | null;
+  views?: number;
+  total_paid?: number;
+  peak_rank?: number;
+  times_bumped?: number;
+  times_climbed?: number;
+  journey?: number[];
+};
 import {
   CATEGORIES,
   sortBoard,
@@ -497,7 +508,49 @@ export function ProfileView({
     );
   }, [isViewingUser, creatorProjects, activeUser, initialProject, matchedProject, profileId, initialMode]);
 
-  const p: Profile = singleProject;
+  const [passport, setPassport] = useState<PassportMetrics | null>(null);
+
+  const p: Profile = useMemo(() => {
+    if (!passport) return singleProject;
+    return {
+      ...singleProject,
+      views: typeof passport.views === "number" ? passport.views : singleProject.views,
+      peak_rank:
+        typeof passport.peak_rank === "number" && passport.peak_rank > 0
+          ? passport.peak_rank
+          : singleProject.peak_rank,
+      times_bumped:
+        typeof passport.times_bumped === "number"
+          ? passport.times_bumped
+          : singleProject.times_bumped,
+      times_climbed:
+        typeof passport.times_climbed === "number"
+          ? passport.times_climbed
+          : singleProject.times_climbed,
+      journey:
+        Array.isArray(passport.journey) && passport.journey.length > 0
+          ? passport.journey
+          : singleProject.journey,
+    };
+  }, [singleProject, passport]);
+
+  // Hydrate the Bumped Passport from the profile API (docs/01 Rule 25): peak,
+  // bumps, climbs, views, lifetime spend and the full rank journey.
+  useEffect(() => {
+    setPassport(null);
+    const targetId = singleProject.id;
+    if (!targetId || targetId === "slot-preview") return;
+    let alive = true;
+    fetch(`/api/profile/${encodeURIComponent(targetId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (alive && data && data.id) setPassport(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [singleProject.id]);
 
   const isProjectLoading =
     !isViewingUser &&
@@ -579,18 +632,6 @@ export function ProfileView({
       setTargetSlotToBump(slot);
       setIsBiddingOpen(true);
     }
-  };
-
-  const handleProcessTopUp = (_order: TopUpOrder) => {
-    soundEngine.playCoronation();
-    invalidateClientBoardCache();
-    fetchBoardClient({ limit: 120, forceFresh: true })
-      .then((data) => {
-        if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
-          setProfiles(data.profiles);
-        }
-      })
-      .catch(() => { });
   };
 
   const calculatedRank = p.id !== "slot-preview" ? sorted.findIndex((x) => x.id === p.id) + 1 : 0;
@@ -1067,6 +1108,7 @@ export function ProfileView({
               title: updated.name,
               destination_url: updated.linkUrl,
               image_path: updated.imageUrl,
+              category: updated.category,
             }),
           });
           if (!res.ok) {
@@ -1610,6 +1652,8 @@ export function ProfileView({
                               <img
                                 src={proj.imageUrl}
                                 alt={proj.name || "Project"}
+                                loading="lazy"
+                                decoding="async"
                                 className="relative z-10 max-h-full max-w-full object-contain p-1.5 transition-transform duration-300 group-hover:scale-105"
                                 referrerPolicy="no-referrer"
                               />
@@ -1837,6 +1881,8 @@ export function ProfileView({
                     <img
                       src={p.imageUrl.includes("images.unsplash.com") && p.imageUrl.includes("w=") ? p.imageUrl.replace(/w=\d+/, "w=600") : p.imageUrl}
                       alt={p.name || "Project"}
+                      width={600}
+                      height={400}
                       loading="eager"
                       fetchPriority="high"
                       decoding="async"
@@ -1889,8 +1935,6 @@ export function ProfileView({
                   <div>
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{p.name || "Untitled Project"}</h1>
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-400 font-mono">
-                      <span>Project #{p.id}</span>
-                      <span>·</span>
                       <span>{p.category || "General"}</span>
                       {isLiveOnWall && (
                         <>
@@ -1946,7 +1990,9 @@ export function ProfileView({
                         ? `#${globalRank}`
                         : isGraveyard
                           ? `#${globalRank} (Archive)`
-                          : "Unranked"
+                          : passport?.rank != null && passport.rank > 100
+                            ? `#${passport.rank} (Archive)`
+                            : "Unranked"
                     }
                     label="Overall Rank"
                   />
@@ -1981,6 +2027,21 @@ export function ProfileView({
                   />
                 </div>
 
+                <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+                  <StatDisplay
+                    variant="metric"
+                    value={passport?.total_paid != null ? money(passport.total_paid) : "—"}
+                    valueClassName="text-amber-300"
+                    label="Total Lifetime Spend"
+                  />
+                  <StatDisplay
+                    variant="metric"
+                    value={p.times_climbed != null && p.times_climbed > 0 ? p.times_climbed.toLocaleString() : "0"}
+                    valueClassName="text-emerald-300"
+                    label="Times Climbed"
+                  />
+                </div>
+
                 {/* Interactive Project Community Reactions */}
                 <div className="mt-5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between gap-3">
                   <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider font-semibold">
@@ -2000,8 +2061,8 @@ export function ProfileView({
                           type="button"
                           onClick={() => handleProjectReaction(type as any)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${isActive
-                              ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20 scale-105'
-                              : 'bg-white/[0.04] hover:bg-white/[0.1] border-white/[0.08] text-neutral-300 hover:scale-105 active:scale-95'
+                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20 scale-105'
+                            : 'bg-white/[0.04] hover:bg-white/[0.1] border-white/[0.08] text-neutral-300 hover:scale-105 active:scale-95'
                             } border`}
                           title={user ? (isActive ? `Remove ${label}` : `React with ${label}`) : `Sign in to react with ${label}`}
                         >
@@ -2074,6 +2135,7 @@ export function ProfileView({
                 </h2>
                 <span className="text-[11px] text-slate-400 font-mono">
                   {p.times_bumped != null && p.times_bumped > 0 ? `${p.times_bumped} bumps total` : "0 bumps total"}
+                  {p.times_climbed != null && p.times_climbed > 0 ? ` · ${p.times_climbed} climbs` : ""}
                 </span>
               </div>
 
@@ -2092,10 +2154,10 @@ export function ProfileView({
                       <div
                         key={i}
                         className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-mono shrink-0 border ${isLast
-                            ? "bg-amber-400/20 text-amber-300 border-amber-400/40 font-bold"
-                            : isPeak
-                              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                              : "bg-white/[0.04] text-slate-400 border-white/[0.06]"
+                          ? "bg-amber-400/20 text-amber-300 border-amber-400/40 font-bold"
+                          : isPeak
+                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                            : "bg-white/[0.04] text-slate-400 border-white/[0.06]"
                           }`}
                       >
                         <span>#{r}</span>
@@ -2205,12 +2267,12 @@ export function ProfileView({
                     placeholder="username"
                     required
                     className={`w-full bg-[#141519] text-white rounded-xl text-sm border pl-8 pr-3.5 py-2.5 transition-colors focus:outline-none ${cooldownDaysRemaining > 0
-                        ? "border-white/[0.08] text-slate-400 cursor-not-allowed bg-black/40"
-                        : handleCheckError
-                          ? "border-rose-500/50 focus:ring-1 focus:ring-rose-500/40"
-                          : handleCheckSuccess
-                            ? "border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/40"
-                            : "border-white/[0.12] hover:border-white/[0.2] focus:ring-1 focus:ring-amber-400/40"
+                      ? "border-white/[0.08] text-slate-400 cursor-not-allowed bg-black/40"
+                      : handleCheckError
+                        ? "border-rose-500/50 focus:ring-1 focus:ring-rose-500/40"
+                        : handleCheckSuccess
+                          ? "border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/40"
+                          : "border-white/[0.12] hover:border-white/[0.2] focus:ring-1 focus:ring-amber-400/40"
                       }`}
                   />
                   {cooldownDaysRemaining > 0 && (
@@ -2496,8 +2558,8 @@ export function ProfileView({
                 }}
                 onClick={() => fileInputRef.current?.click()}
                 className={`relative rounded-xl p-3.5 text-center cursor-pointer transition-all duration-200 group border-2 ${isDraggingFile
-                    ? "border-amber-400 bg-amber-500/10"
-                    : "border-dashed border-white/[0.16] hover:border-amber-400/60 bg-white/[0.02] hover:bg-white/[0.04]"
+                  ? "border-amber-400 bg-amber-500/10"
+                  : "border-dashed border-white/[0.16] hover:border-amber-400/60 bg-white/[0.02] hover:bg-white/[0.04]"
                   }`}
               >
                 <div className="flex items-center justify-center gap-3">
@@ -2570,15 +2632,14 @@ export function ProfileView({
             title: proj.name,
             activeValue: proj.active_value,
             handle: proj.handle,
-            imageUrl: proj.imageUrl,
-            linkUrl: proj.linkUrl,
+            imageUrl: proj.imageUrl || (proj as any).image_path || (proj as any).image_url || '',
+            linkUrl: proj.linkUrl || (proj as any).destination_url || '',
             category: proj.category,
             owner_id: proj.owner_id,
           }))}
           preselectedTargetSlot={targetSlotToBump}
           onRequireAuth={onRequireAuth}
-          onSubmitTopUp={(orderData) => {
-            handleProcessTopUp(orderData);
+          onSubmitTopUp={() => {
             setIsBiddingOpen(false);
             setTargetSlotToBump(null);
           }}

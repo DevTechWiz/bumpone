@@ -54,17 +54,40 @@ export function parsePaymentSucceeded(payload: unknown): ParsePaymentResult {
       : '';
   if (!paymentId) return { ok: false, reason: 'missing_payment_id' };
 
-  const rawAmount = p.amount ?? p.total_amount;
-  if (rawAmount === null || rawAmount === undefined || typeof rawAmount === 'boolean' || typeof rawAmount === 'object') {
-    return { ok: false, reason: 'invalid_amount' };
+  const settlementCurrency =
+    typeof p.settlement_currency === 'string' && p.settlement_currency.length > 0
+      ? p.settlement_currency.toLowerCase()
+      : null;
+  const settlementAmount =
+    p.settlement_amount !== undefined && p.settlement_amount !== null
+      ? Number(p.settlement_amount)
+      : null;
+  const settlementTax =
+    p.settlement_tax !== undefined && p.settlement_tax !== null
+      ? Number(p.settlement_tax)
+      : 0;
+
+  let amountMinor: number;
+  if (settlementCurrency === 'usd' && settlementAmount !== null && Number.isSafeInteger(settlementAmount)) {
+    // When Dodo settles in USD for localized checkouts, the net product amount is settlement_amount - settlement_tax
+    amountMinor = settlementAmount - (Number.isSafeInteger(settlementTax) ? settlementTax : 0);
+  } else {
+    const rawAmount = p.amount ?? p.total_amount;
+    if (rawAmount === null || rawAmount === undefined || typeof rawAmount === 'boolean' || typeof rawAmount === 'object') {
+      return { ok: false, reason: 'invalid_amount' };
+    }
+    amountMinor = Number(rawAmount);
   }
-  const amountMinor = Number(rawAmount);
+
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
     return { ok: false, reason: 'invalid_amount' };
   }
 
-  const currency = typeof p.currency === 'string' && p.currency.length > 0 ? p.currency : null;
-  if (currency && currency.toLowerCase() !== 'usd') {
+  const currency = typeof p.currency === 'string' && p.currency.length > 0 ? p.currency.toLowerCase() : null;
+  if (settlementCurrency && settlementCurrency !== 'usd') {
+    return { ok: false, reason: 'unsupported_currency' };
+  }
+  if (!settlementCurrency && currency && currency !== 'usd') {
     return { ok: false, reason: 'unsupported_currency' };
   }
 
@@ -79,5 +102,15 @@ export function parsePaymentSucceeded(payload: unknown): ParsePaymentResult {
     return { ok: false, reason: 'malformed_metadata' };
   }
 
-  return { ok: true, value: { paymentId, amountMinor, currency, quoteId, projectId, userId } };
+  return {
+    ok: true,
+    value: {
+      paymentId,
+      amountMinor,
+      currency: (settlementCurrency || currency)?.toUpperCase() ?? null,
+      quoteId,
+      projectId,
+      userId,
+    },
+  };
 }

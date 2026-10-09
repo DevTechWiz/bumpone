@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../lib/supabase/admin';
 import { invalidateBoardCache } from '../lib/boardCache';
 
 vi.mock('../lib/supabase/admin', () => ({
-  supabaseAdmin: { rpc: vi.fn() },
+  supabaseAdmin: { rpc: vi.fn(), from: vi.fn() },
 }));
 
 vi.mock('../lib/boardCache', () => ({
@@ -154,5 +154,59 @@ describe('POST /api/webhooks/dodo', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ success: true, ignored: true });
     expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+
+  function mockPaymentEventsLedger(alreadyRecorded: boolean) {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const limit = vi.fn().mockResolvedValue({
+      data: alreadyRecorded ? [{ id: 'evt-row' }] : [],
+      error: null,
+    });
+    const eqSecond = vi.fn().mockReturnValue({ limit });
+    const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
+    const select = vi.fn().mockReturnValue({ eq: eqFirst });
+    const eventsTable = { select, insert };
+    vi.mocked(supabaseAdmin.from).mockImplementation(((table: string) => {
+      if (table === 'payment_events') return eventsTable;
+      throw new Error(`unexpected table touched: ${table}`);
+    }) as any);
+    return { insert, select };
+  }
+
+  it('payment.failed is recorded in the payment_events idempotency ledger', async () => {
+    const ledger = mockPaymentEventsLedger(false);
+
+    const res = await POST(makeRequest({ type: 'payment.failed', data: {} }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ success: true, handled: 'payment_failed' });
+    expect(ledger.select).toHaveBeenCalledTimes(1);
+    expect(ledger.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'dodo', provider_event_id: 'msg_evt_1', event_type: 'payment.failed' })
+    );
+  });
+
+  it('replayed payment.failed (event already recorded) is acknowledged without reprocessing', async () => {
+    const ledger = mockPaymentEventsLedger(true);
+
+    const res = await POST(makeRequest({ type: 'payment.failed', data: {} }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ success: true, already_processed: true });
+    expect(ledger.insert).not.toHaveBeenCalled();
+  });
+
+  it('dispute.opened is recorded and replays bypass processing', async () => {
+    const ledger = mockPaymentEventsLedger(false);
+    let res = await POST(makeRequest({ type: 'dispute.opened', data: {} }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ success: true, handled: 'dispute_opened' });
+    expect(ledger.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'dispute.opened' })
+    );
+
+    vi.mocked(supabaseAdmin.from).mockClear();
+    const replay = mockPaymentEventsLedger(true);
+    res = await POST(makeRequest({ type: 'dispute.opened', data: {} }));
+    expect(await res.json()).toMatchObject({ success: true, already_processed: true });
+    expect(replay.insert).not.toHaveBeenCalled();
   });
 });

@@ -88,7 +88,7 @@ export const BumpNotification: React.FC<BumpNotificationProps> = ({
             <strong className="text-white font-mono">${event.promotedItem.activeValue}</strong>, reaching <strong>Rank #{event.newRank}</strong>.{' '}
             {event.droppedItem && event.droppedItem.id !== event.promotedItem.id ? (
               <span>
-                <strong>{event.droppedItem.title}</strong> was moved to Rank #101 in the Billboard Archive. All top 100 spots remain live on the billboard.
+                <strong>{event.droppedItem.title}</strong> was moved to Rank #101 in the Graveyard. All top 100 spots remain live on the billboard.
               </span>
             ) : null}
           </p>

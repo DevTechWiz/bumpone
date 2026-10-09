@@ -6,7 +6,6 @@ import {
   Radio,
   Archive,
   Search,
-  Compass,
   Volume2,
   VolumeX,
   HelpCircle,
@@ -19,22 +18,21 @@ import { UserMenu } from '../components/UserMenu';
 import type { SlotItem, BumpEvent, Message, FloatingReaction } from '../lib/slotTypes';
 import {
   CATEGORIES,
-  MIN_TOP_UP,
   sortBoard,
-  rankOf,
-  recomputeRank,
   toSlotItem,
   formatNumber,
   type Profile,
 } from '../lib/board';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { safeGetJSON, sessionGetJSON, sessionSetJSON, safeSet } from '../lib/storage';
 import { fetchBoardClient, invalidateClientBoardCache } from '../lib/boardClient';
 import { GridBoard } from '../components/GridBoard';
-import type { TopUpOrder } from '../components/TakeOverModal';
+import type { BumpPendingOrder } from '../components/TakeOverModal';
 import { GridFilterBar, type GridFilterState } from '../components/GridFilterBar';
 import { soundEngine } from '../lib/sound';
 import type { GridOrientation } from '../lib/boardLayout';
+import { getStoredAlertPreferences, showBrowserRankAlert } from '../lib/browserNotifications';
 
 const ProfileView = dynamic(
   () => import('../components/ProfileView').then((m) => m.ProfileView),
@@ -116,32 +114,26 @@ import type { BumpResultData } from '../components/BumpResultModal';
 const STORAGE_KEY_PROFILES = 'bumped_profiles_v2';
 const STORAGE_KEY_OFFBOARD = 'bumped_offboard_v2';
 
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: 'msg-init-1',
-    sender: '@grid_sentinel',
-    avatarColor: 'bg-indigo-500',
-    text: 'LIVE BILLBOARD FEED ACTIVE. Placement value decides billboard rank.',
-    timestamp: Date.now() - 7200000,
-    isOfficial: true,
-  },
-  {
-    id: 'msg-init-2',
-    sender: '@solana_surfer',
-    avatarColor: 'bg-sky-500',
-    text: 'Watching the Center King #1 throne. Who is going to outbid past the sovereign?',
-    slotTag: 1,
-    timestamp: Date.now() - 3600000,
-  },
-  {
-    id: 'msg-init-3',
-    sender: '@neon_hunter',
-    avatarColor: 'bg-rose-500',
-    text: 'Rank #100 is holding the active floor! Incoming placements move spots to the Billboard Archive!',
-    slotTag: 100,
-    timestamp: Date.now() - 1200000,
-  },
-];
+function buildBumpResult(
+  profiles: Profile[],
+  project: Profile,
+  previousRank: number | null,
+  newRank: number
+): BumpResultData {
+  const displacedCount =
+    previousRank === null ? Math.max(0, 101 - newRank) : Math.max(0, previousRank - newRank);
+  const displacedProfiles = sortBoard(profiles)
+    .map((p, i) => ({ rank: i + 1, title: p.name, imageUrl: p.imageUrl, id: p.id }))
+    .filter(
+      (x) =>
+        x.id !== project.id &&
+        x.rank > newRank &&
+        (previousRank === null || x.rank <= previousRank)
+    )
+    .slice(0, 5)
+    .map(({ rank, title, imageUrl }) => ({ rank, title, imageUrl }));
+  return { profile: project, previousRank, newRank, displacedCount, displacedProfiles };
+}
 
 export interface HomePageClientProps {
   initialProfiles?: Profile[];
@@ -173,7 +165,6 @@ export function HomePageClient({
     return !(initialProfiles && initialProfiles.length > 0);
   });
   const [hasMounted, setHasMounted] = useState<boolean>(false);
-  const seqRef = useRef(100000);
 
   useEffect(() => {
     setHasMounted(true);
@@ -225,21 +216,16 @@ export function HomePageClient({
         .finally(() => setIsBoardLoading(false));
     };
 
+    let timer: NodeJS.Timeout | undefined;
     if (initialProfiles && initialProfiles.length > 0) {
-      const timer = setTimeout(fetchLiveBoard, 4000);
-      return () => clearTimeout(timer);
+      timer = setTimeout(fetchLiveBoard, 4000);
     } else {
       fetchLiveBoard();
     }
 
-    // Preload modal bundles after initial view has settled
-    if (typeof window !== 'undefined') {
-      const pTimer = setTimeout(() => {
-        import('../components/TakeOverModal');
-        import('../components/SlotDetailModal');
-      }, 4500);
-      return () => clearTimeout(pTimer);
-    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [initialProfiles]);
 
 
@@ -259,6 +245,79 @@ export function HomePageClient({
   const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
   const [bumpResult, setBumpResult] = useState<BumpResultData | null>(null);
   const slotsRef = useRef<SlotItem[]>([]);
+  const realtimeChannelRef = useRef<any>(null);
+  const lastBroadcastTimeRef = useRef<number>(0);
+
+  const spawnReaction = useCallback(
+    (emoji: string, coords?: { x?: number; y?: number; xRatio?: number }) => {
+      if (typeof window === 'undefined') return;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      let targetX: number;
+      let targetY: number;
+
+      if (typeof coords?.x === 'number' && !isNaN(coords.x)) {
+        targetX = Math.max(20, Math.min(width - 20, coords.x + (Math.random() - 0.5) * 24));
+      } else {
+        const baseRatio =
+          typeof coords?.xRatio === 'number' && !isNaN(coords.xRatio)
+            ? Math.max(0.08, Math.min(0.92, coords.xRatio))
+            : 0.85;
+        targetX = Math.max(24, Math.min(width - 24, baseRatio * width + (Math.random() - 0.5) * 40));
+      }
+
+      if (typeof coords?.y === 'number' && !isNaN(coords.y)) {
+        targetY = Math.max(60, Math.min(height - 20, coords.y - 12 + (Math.random() - 0.5) * 16));
+      } else {
+        // Fallback: start near bottom of viewport
+        targetY = height - 70 + (Math.random() - 0.5) * 20;
+      }
+
+      const newReaction: FloatingReaction = {
+        id: `rx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        emoji,
+        x: targetX,
+        y: targetY,
+      };
+
+      setReactions((prev) => {
+        const next = prev.length > 28 ? prev.slice(-22) : prev;
+        return [...next, newReaction];
+      });
+    },
+    []
+  );
+
+  // docs/13 microinteractions — freshly bumped/inserted tiles show the BUMPED
+  // badge + entrance pop for a few seconds, then settle.
+  const [freshIds, setFreshIds] = useState<Record<string, true>>({});
+  const freshTimersRef = useRef<Record<string, number>>({});
+  const markFresh = useCallback((id?: string | null) => {
+    if (!id) return;
+    const existing = freshTimersRef.current[id];
+    if (existing) window.clearTimeout(existing);
+    freshTimersRef.current[id] = window.setTimeout(() => {
+      delete freshTimersRef.current[id];
+      setFreshIds((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }, 6000);
+    setFreshIds((prev) => (prev[id] ? prev : { ...prev, [id]: true }));
+  }, []);
+
+  useEffect(() => {
+    const timers = freshTimersRef.current;
+    return () => {
+      for (const id of Object.keys(timers)) {
+        window.clearTimeout(timers[id]);
+        delete timers[id];
+      }
+    };
+  }, []);
 
   const isBackdropActive = Boolean(
     selectedSlot ||
@@ -417,7 +476,7 @@ export function HomePageClient({
     setIsMuted(soundEngine.getIsMuted());
   }, []);
   const [bumpHistory, setBumpHistory] = useState<BumpEvent[]>([]);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
   const [filterState, setFilterState] = useState<GridFilterState>({
     searchQuery: '',
@@ -436,12 +495,33 @@ export function HomePageClient({
       const status = params.get('status');
       const target = params.get('target');
 
+      const showPendingBumpResult = (fresh: Profile[]) => {
+        const pending = sessionGetJSON<BumpPendingOrder>('bump_pending');
+        if (!pending) return;
+        if (Date.now() - pending.at > 10 * 60_000) {
+          sessionSetJSON('bump_pending', null);
+          return;
+        }
+        if (!user) return;
+        const proj = pending.projectId
+          ? fresh.find((p) => p.id === pending.projectId)
+          : fresh.find((p) => p.owner_id === user.id && p.name === pending.title);
+        if (!proj || proj.active_value < pending.resultingValue) return;
+        const ordered = sortBoard(fresh);
+        const newRank = ordered.findIndex((p) => p.id === proj.id) + 1;
+        if (newRank < 1) return;
+        setBumpResult((prev) => prev ?? buildBumpResult(ordered, proj, pending.previousRank, newRank));
+        markFresh(proj.id);
+        sessionSetJSON('bump_pending', null);
+      };
+
       if (status === 'success' || status === 'paid') {
         invalidateClientBoardCache();
         fetchBoardClient({ limit: 120, forceFresh: true })
           .then((data) => {
             if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
               setProfiles(data.profiles);
+              showPendingBumpResult(data.profiles);
             }
           })
           .catch(() => { });
@@ -451,11 +531,24 @@ export function HomePageClient({
         });
         setTimeout(() => setPaymentBanner(null), 8000);
       } else if (status === 'pending_payment') {
+        fetchBoardClient({ limit: 120, forceFresh: true })
+          .then((data) => {
+            if (data?.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+              showPendingBumpResult(data.profiles);
+            }
+          })
+          .catch(() => { });
         setPaymentBanner({
           type: 'pending',
           text: 'Checkout initiated. Recomputing live wall position upon Dodo confirmation.',
         });
         setTimeout(() => setPaymentBanner(null), 8000);
+      }
+
+      if (status) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('status');
+        window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search || '') + cleanUrl.hash);
       }
 
       if (target) {
@@ -500,17 +593,19 @@ export function HomePageClient({
         setIsRulesOpen(true);
       }
     }
-  }, [profiles, user]);
+  }, [profiles, user, markFresh]);
 
-  // Load historical War Room battle telemetry and battle comms
-  useEffect(() => {
-    let active = true;
-
+  // Load historical War Room battle telemetry and battle comms. Also re-run on
+  // realtime reconnect (docs/12:83) — the channel status callback calls this.
+  const refreshWarRoom = useCallback(() => {
     fetch('/api/war-room/events')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (active && data?.events && Array.isArray(data.events) && data.events.length > 0) {
-          setBumpHistory(data.events);
+        if (data?.events && Array.isArray(data.events) && data.events.length > 0) {
+          setBumpHistory((prev) => {
+            const seen = new Set(data.events.map((e: any) => e.id));
+            return [...data.events, ...prev.filter((e) => !seen.has(e.id))].slice(0, 50);
+          });
         }
       })
       .catch(() => { });
@@ -518,16 +613,19 @@ export function HomePageClient({
     fetch('/api/war-room/messages')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (active && data?.messages && Array.isArray(data.messages) && data.messages.length > 0) {
-          setMessages(data.messages);
+        if (data?.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages((prev) => {
+            const ids = new Set(data.messages.map((m: any) => m.id));
+            return [...data.messages, ...prev.filter((m) => !ids.has(m.id))];
+          });
         }
       })
       .catch(() => { });
-
-    return () => {
-      active = false;
-    };
   }, []);
+
+  useEffect(() => {
+    refreshWarRoom();
+  }, [refreshWarRoom]);
 
   // Live Board Synchronizer: Supabase Realtime event streaming + Edge SWR Polling fallback
   useEffect(() => {
@@ -552,6 +650,19 @@ export function HomePageClient({
         });
         if (isMounted && data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
           setProfiles(data.profiles);
+          const sorted = sortBoard(data.profiles);
+          if (sorted.length > 100) {
+            const dbOffboard = sorted.slice(100);
+            setOffboard((prev) => {
+              const combined = [...dbOffboard];
+              for (const p of prev) {
+                if (!combined.some((c) => c.id === p.id)) {
+                  combined.push(p);
+                }
+              }
+              return combined.slice(0, 50);
+            });
+          }
           if (!silent) {
             soundEngine.playShove();
           }
@@ -575,31 +686,45 @@ export function HomePageClient({
     const rtTimer: NodeJS.Timeout | null = setTimeout(() => {
       if (!isMounted) return;
       try {
+        let realtimeDropped = false;
         const supabase = createClient();
         realtimeChannel = supabase
-          .channel('board_live_bumps')
+          .channel('board_live_bumps', {
+            config: {
+              broadcast: { self: false },
+            },
+          })
+          .on(
+            'broadcast',
+            { event: 'stream_reaction' },
+            (msg: any) => {
+              if (isMounted && msg?.payload?.emoji) {
+                spawnReaction(msg.payload.emoji, { xRatio: msg.payload.xRatio });
+              }
+            }
+          )
           .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'board_events' },
             (payload: any) => {
               if (isMounted) {
-                fetchBoard(false);
-                if (payload?.new) {
-                  const row = payload.new;
+                const row = payload?.new;
+                if (row) {
                   const newRank = Number(row.new_rank);
                   const prevRank = row.previous_rank != null ? Number(row.previous_rank) : 101;
                   const title = row.project_title_snapshot || 'Contender';
                   const handle = row.project_handle_snapshot || '@unknown';
                   const amount = Math.floor(Number(row.new_active_value_minor || 0) / 100);
 
+                  const existingProfile = profiles.find((p) => p.id === row.project_id);
                   const bumpEvt: BumpEvent = {
                     id: row.id || `bump-${Date.now()}`,
                     timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
                     promotedItem: {
                       id: row.project_id || 'unknown',
                       rank: newRank,
-                      imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80',
-                      linkUrl: 'https://bumpone.lol',
+                      imageUrl: existingProfile?.imageUrl || '',
+                      linkUrl: existingProfile?.linkUrl || 'https://bumpone.lol',
                       title,
                       bidderName: handle.startsWith('@') ? handle : `@${handle}`,
                       activeValue: amount,
@@ -608,7 +733,7 @@ export function HomePageClient({
                     droppedItem: {
                       id: `dropped-${row.id}`,
                       rank: prevRank,
-                      imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80',
+                      imageUrl: '',
                       linkUrl: 'https://bumpone.lol',
                       title: 'Displaced Contender',
                       bidderName: '@displaced',
@@ -619,10 +744,51 @@ export function HomePageClient({
                     newRank: newRank,
                   };
 
-                  setBumpHistory((prev) => [bumpEvt, ...prev.slice(0, 49)]);
+                  // Dedupe by row id (docs/12:60, docs/24:246): a replay or
+                  // reconnect redelivery must not append a second copy.
+                  setBumpHistory((prev) => {
+                    if (prev.some((e) => e.id === bumpEvt.id)) return prev;
+                    return [bumpEvt, ...prev.slice(0, 49)];
+                  });
                   setLatestBumpEvent(bumpEvt);
                   setHighlightedRank(newRank);
                   setTimeout(() => setHighlightedRank(null), 3500);
+                  markFresh(row.project_id);
+
+                  // Trigger native browser notification if enabled
+                  try {
+                    const alertPrefs = getStoredAlertPreferences();
+                    if (alertPrefs.browserAlerts) {
+                      const viewer = userRef.current;
+                      const droppedItem = bumpEvt.droppedItem;
+                      const promotedItem = bumpEvt.promotedItem;
+                      const isMyProject = Boolean(
+                        viewer &&
+                          droppedItem &&
+                          (profilesRef.current.some((p) => p.id === droppedItem.id && p.owner_id === viewer.id) ||
+                            (userAuthHandle && droppedItem.bidderName?.replace(/^@/, '').toLowerCase() === userAuthHandle.toLowerCase()))
+                      );
+                      const isKingDrop = bumpEvt.previousRank === 1 && bumpEvt.newRank !== 1;
+                      const isGraveyardDrop = bumpEvt.newRank > 100;
+
+                      if (isMyProject || (alertPrefs.instantKingAlert && (isKingDrop || isGraveyardDrop))) {
+                        const alertTitle = isGraveyardDrop
+                          ? `🚨 Graveyard Alert: ${droppedItem.title} dropped to #101!`
+                          : isKingDrop
+                          ? `👑 King Overtaken: ${promotedItem.title} took Rank #1!`
+                          : `⚡ Billboard Alert: ${droppedItem.title} displaced to #${bumpEvt.newRank}`;
+
+                        showBrowserRankAlert({
+                          title: alertTitle,
+                          body: `${promotedItem.bidderName} placed $${promotedItem.activeValue}. Tap to inspect billboard.`,
+                          tag: `bump-${bumpEvt.id}`,
+                          onClickUrl: `https://bumpone.lol/?claim=true&slot=${bumpEvt.previousRank || 1}`,
+                        });
+                      }
+                    }
+                  } catch (_err) {
+                    // Non-blocking notification dispatch
+                  }
 
                   if (newRank === 1) {
                     soundEngine.playCoronation();
@@ -631,6 +797,45 @@ export function HomePageClient({
                     soundEngine.playShove();
                     handleTriggerReaction('🔥');
                   }
+                }
+
+                const viewer = userRef.current;
+                const projectId = typeof row?.project_id === 'string' ? row.project_id : undefined;
+                const cached = projectId
+                  ? profilesRef.current.find((p) => p.id === projectId)
+                  : undefined;
+                const mineCandidate =
+                  Boolean(viewer && projectId) && (!cached || cached.owner_id === viewer!.id);
+
+                if (mineCandidate && projectId && viewer) {
+                  (async () => {
+                    try {
+                      const fresh = await fetchBoardClient({ limit: 120, forceFresh: true });
+                      const list = fresh?.profiles;
+                      if (!list || !Array.isArray(list) || list.length === 0) return;
+                      setProfiles(list);
+                      const proj = list.find((p) => p.id === projectId);
+                      if (!proj || proj.owner_id !== viewer.id) return;
+                      const bumpedRank = Number(row.new_rank);
+                      if (!Number.isFinite(bumpedRank) || bumpedRank < 1) return;
+                      const previousRank =
+                        row.previous_rank != null ? Number(row.previous_rank) : null;
+                      const merged: Profile = {
+                        ...proj,
+                        active_value: Math.floor(Number(row.new_active_value_minor || 0) / 100),
+                      };
+                      sessionSetJSON('bump_pending', null);
+                      markFresh(projectId);
+                      setBumpResult(
+                        (prev) =>
+                          prev ?? buildBumpResult(sortBoard(list), merged, previousRank, bumpedRank)
+                      );
+                    } catch {
+                      // board resync happens on the next poll if this refresh fails
+                    }
+                  })();
+                } else {
+                  fetchBoard(false);
                 }
               }
             }
@@ -665,11 +870,24 @@ export function HomePageClient({
             (payload: any) => {
               if (isMounted && payload?.new) {
                 const row = payload.new;
+                // docs/12:66: pending/suspended/rejected/inactive profiles leave
+                // the wall immediately; a re-approved profile returns on the next
+                // poll/reconnect refetch (server truth).
+                const approved =
+                  row.is_active !== false && row.moderation_status === 'approved';
+                if (!approved) {
+                  setProfiles((prev) => prev.filter((item) => item.id !== row.id));
+                  return;
+                }
                 setProfiles((prev) =>
                   prev.map((item) => {
                     if (item.id === row.id) {
                       return {
                         ...item,
+                        active_value:
+                          row.current_active_value_minor != null
+                            ? Math.floor(Number(row.current_active_value_minor) / 100)
+                            : item.active_value,
                         reactions: {
                           fire: Number(row.reactions_fire || 0),
                           eyes: Number(row.reactions_eyes || 0),
@@ -684,7 +902,26 @@ export function HomePageClient({
               }
             }
           )
-          .subscribe();
+          .subscribe((status: string) => {
+            if (!isMounted) return;
+            if (status === 'SUBSCRIBED') {
+              if (realtimeDropped) {
+                // docs/12:83: after a dropped channel reconnects, resync board +
+                // war-room history (supabase-js reconnects automatically).
+                realtimeDropped = false;
+                fetchBoard(true);
+                refreshWarRoom();
+              }
+            } else if (
+              status === 'CHANNEL_ERROR' ||
+              status === 'TIMED_OUT' ||
+              status === 'CLOSED'
+            ) {
+              realtimeDropped = true;
+            }
+          });
+
+        realtimeChannelRef.current = realtimeChannel;
       } catch {
         // Local fallback if Supabase unconfigured
       }
@@ -714,55 +951,93 @@ export function HomePageClient({
           const supabase = createClient();
           supabase.removeChannel(realtimeChannel);
         } catch { }
+        realtimeChannelRef.current = null;
       }
       if (typeof window !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         window.removeEventListener('focus', handleFocus);
       }
     };
-  }, [filterState.category, filterState.timeRange]);
+  }, [filterState.category, filterState.timeRange, markFresh, refreshWarRoom, spawnReaction]);
 
   const handleToggleMute = () => {
     const muted = soundEngine.toggleMute();
     setIsMuted(muted);
   };
 
-  const handleTriggerReaction = (emoji: string, e?: React.MouseEvent) => {
-    const x = e ? e.clientX : (typeof window !== 'undefined' ? window.innerWidth * 0.75 : 600) + (Math.random() - 0.5) * 120;
-    const y = e ? e.clientY : (typeof window !== 'undefined' ? window.innerHeight * 0.85 : 600);
-    const newReaction: FloatingReaction = {
-      id: `rx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      emoji,
-      x,
-      y,
-    };
-    setReactions((prev) => [...prev, newReaction]);
+  const handleTriggerReaction = useCallback(
+    (emoji: string, e?: React.MouseEvent) => {
+      const width = typeof window !== 'undefined' ? window.innerWidth : 1000;
+      let clickX: number | undefined;
+      let clickY: number | undefined;
 
-    // Send reaction to backend ONLY if a specific slot is explicitly hovered or open
-    const targetId = hoveredRank ? slots.find((s) => s.rank === hoveredRank)?.id : selectedSlot?.id;
-    if (targetId && user) {
-      const emojiMap: Record<string, string> = {
-        '🔥': 'fire',
-        '👀': 'eyes',
-        '❤️': 'heart',
-        '😂': 'laugh',
-        '👑': 'fire',
-        '⚔️': 'fire',
-      };
-      const reactionType = emojiMap[emoji] || 'fire';
-      fetch('/api/reactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: targetId, reaction: reactionType }),
-      }).catch(() => { });
-    }
-  };
+      if (e) {
+        const targetEl = e.currentTarget as HTMLElement | null;
+        if (targetEl && typeof targetEl.getBoundingClientRect === 'function') {
+          const rect = targetEl.getBoundingClientRect();
+          clickX = rect.left + rect.width / 2;
+          clickY = rect.top;
+        } else {
+          clickX = e.clientX;
+          clickY = e.clientY;
+        }
+      }
+
+      const effectiveX = clickX ?? width * 0.85;
+      const xRatio = Math.max(0.08, Math.min(0.92, effectiveX / width));
+
+      // 1. Instant local visual spawn starting right from the button (0ms latency)
+      spawnReaction(emoji, { x: clickX, y: clickY, xRatio });
+
+      // 2. Broadcast to all active visitors via Supabase Realtime (throttled at 120ms for smooth bursts)
+      try {
+        const now = Date.now();
+        if (now - lastBroadcastTimeRef.current >= 120 && realtimeChannelRef.current) {
+          lastBroadcastTimeRef.current = now;
+          realtimeChannelRef.current.send({
+            type: 'broadcast',
+            event: 'stream_reaction',
+            payload: { emoji, xRatio },
+          });
+        }
+      } catch {
+        // Fallback silently if offline
+      }
+
+      // 3. Send reaction to backend ONLY if a specific slot is explicitly hovered or open
+      const targetId = hoveredRank ? slotsRef.current.find((s) => s.rank === hoveredRank)?.id : selectedSlot?.id;
+      if (targetId && user) {
+        const emojiMap: Record<string, string> = {
+          '🔥': 'fire',
+          '👀': 'eyes',
+          '❤️': 'heart',
+          '😂': 'laugh',
+          '👑': 'fire',
+          '⚔️': 'fire',
+        };
+        const reactionType = emojiMap[emoji] || 'fire';
+        fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: targetId, reaction: reactionType }),
+        }).catch(() => { });
+      }
+    },
+    [hoveredRank, selectedSlot, user, spawnReaction]
+  );
 
   const handleRemoveReaction = useCallback((id: string) => {
     setReactions((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
   const handleSlotClick = useCallback((slot: SlotItem) => {
+    if (slot.id.startsWith('open-slot-')) {
+      soundEngine.playClick();
+      setSelectedSlot(null);
+      setTargetSlotToBump(slot);
+      setIsTakeOverOpen(true);
+      return;
+    }
     setSelectedSlot(slot);
     if (typeof window !== 'undefined') {
       window.history.pushState(
@@ -778,6 +1053,13 @@ export function HomePageClient({
   }, []);
 
   const handleSelectMiniMapSlot = useCallback((slot: SlotItem) => {
+    if (slot.id.startsWith('open-slot-')) {
+      soundEngine.playClick();
+      setSelectedSlot(null);
+      setTargetSlotToBump(slot);
+      setIsTakeOverOpen(true);
+      return;
+    }
     setSelectedSlot(slot);
     setHighlightedRank(slot.rank);
     setTimeout(() => setHighlightedRank(null), 3000);
@@ -807,9 +1089,38 @@ export function HomePageClient({
   };
 
   // Global top-100 slots derived from canonical ordering.
+  const categoryViewActive = filterState.category !== 'All';
   const slots: SlotItem[] = useMemo(() => {
-    return sortBoard(profiles).slice(0, 100).map((p, i) => toSlotItem(p, i + 1));
-  }, [profiles]);
+    const ordered = sortBoard(profiles).slice(0, 100);
+    const catCounters: Record<string, number> = {};
+    const list: SlotItem[] = ordered.map((p, i) => {
+      catCounters[p.category] = (catCounters[p.category] || 0) + 1;
+      return toSlotItem(
+        p,
+        i + 1,
+        Boolean(freshIds[p.id]),
+        catCounters[p.category],
+        categoryViewActive ? p.peak_rank : undefined
+      );
+    });
+
+    if (!categoryViewActive && list.length < 100) {
+      for (let r = list.length + 1; r <= 100; r++) {
+        list.push({
+          id: `open-slot-${r}`,
+          rank: r,
+          imageUrl: '',
+          linkUrl: '',
+          title: r === 1 ? '👑 Center King #1' : `Open Turf #${r}`,
+          bidderName: 'Available',
+          activeValue: 0,
+          createdAt: 0,
+        });
+      }
+    }
+
+    return list;
+  }, [profiles, freshIds, categoryViewActive]);
 
   useEffect(() => {
     slotsRef.current = slots;
@@ -933,176 +1244,17 @@ export function HomePageClient({
     };
   }, [slots, entryFloor, offboard.length]);
 
-  const recordBump = useCallback((args: {
-    profile: Profile;
-    previousRank: number | null;
-    newRank: number;
-    casualty: Profile | null;
-  }) => {
-    const promotedItem = toSlotItem(args.profile, args.newRank, true);
-    const droppedItem = args.casualty
-      ? toSlotItem(args.casualty, 101)
-      : promotedItem;
-    const bumpEvt: BumpEvent = {
-      id: `bump-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      timestamp: Date.now(),
-      promotedItem,
-      droppedItem,
-      previousRank: args.previousRank ?? 101,
-      newRank: args.newRank,
-    };
-    setLatestBumpEvent(bumpEvt);
-    setBumpHistory((prev) => [bumpEvt, ...prev.slice(0, 49)]);
-    setHighlightedRank(args.newRank);
-    setTimeout(() => setHighlightedRank(null), 3500);
-    if (args.newRank === 1) {
-      soundEngine.playCoronation();
-      handleTriggerReaction('👑');
-    } else if (args.casualty) {
-      soundEngine.playDrop();
-      handleTriggerReaction('⚔️');
-    } else {
-      soundEngine.playShove();
-      handleTriggerReaction('🔥');
-    }
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg-event-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        sender: args.profile.handle,
-        avatarColor: args.newRank === 1 ? 'bg-amber-400' : 'bg-indigo-500',
-        text:
-          args.newRank === 1
-            ? `👑 CROWN CONQUERED! Top-up landed $${args.profile.active_value} active value to seize Center King #1.`
-            : `⚔️ Climbed to Rank #${args.newRank} at $${args.profile.active_value}, shifting competitors outward.`,
-        slotTag: args.newRank,
-        timestamp: Date.now(),
-        isOfficial: true,
-      },
-    ]);
-  }, []);
-
   // Live mirror of profiles for event handlers (avoids stale closures).
   const profilesRef = useRef<Profile[]>(profiles);
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
 
-  // Canonical purchase engine (mock stand-in for provider + webhook):
-  // recompute final position from the amount paid against the live board.
-  // Everyone is retained (infinite ranking); the off-board mirror feeds the drawer.
-  const handleProcessTopUp = useCallback((order: TopUpOrder) => {
-    invalidateClientBoardCache();
-    const prev = profilesRef.current;
-    const topUp = Math.max(MIN_TOP_UP, Math.floor(order.topUp));
-    let working: Profile[];
-    let previousRank: number | null;
-    let base: Profile;
-    const existing = order.projectId
-      ? prev.find((p) => p.id === order.projectId)
-      : order.currentValue > 0
-        ? prev.find((p) => p.active_value === order.currentValue && p.name === order.title)
-        : undefined;
-
-    if (existing) {
-      previousRank = rankOf(prev, existing.id);
-      base = {
-        ...existing,
-        name: order.title,
-        linkUrl: order.linkUrl,
-        imageUrl: order.imageUrl,
-        category: (CATEGORIES as readonly string[]).includes(order.category)
-          ? (order.category as Profile['category'])
-          : existing.category,
-        active_value: existing.active_value + topUp,
-        times_bumped: existing.times_bumped + 1,
-        last_bump_at: Date.now(),
-      };
-      working = prev.map((p) => (p.id === existing.id ? base : p));
-    } else {
-      previousRank = null;
-      const ownerHandle = order.handle.replace('@', '');
-      const ownerName =
-        profile?.display_name ||
-        user?.user_metadata?.custom_claims?.global_name ||
-        user?.user_metadata?.full_name ||
-        user?.user_metadata?.user_name ||
-        order.title ||
-        ownerHandle;
-
-      base = {
-        id: `slot-${Date.now()}`,
-        seq: seqRef.current++,
-        name: order.title,
-        handle: order.handle,
-        category: (CATEGORIES as readonly string[]).includes(order.category) ? (order.category as Profile['category']) : 'AI',
-        active_value: order.currentValue + topUp,
-        imageUrl: order.imageUrl,
-        linkUrl: order.linkUrl,
-        owner_id: user?.id,
-        owner_name: ownerName,
-        owner_handle: ownerHandle,
-        owner_avatar: user?.user_metadata?.avatar_url,
-        peak_rank: 101,
-        times_bumped: 1,
-        times_climbed: 0,
-        views: 0,
-        shares: 0,
-        joined_days_ago: 0,
-        last_bump_at: Date.now(),
-        journey: [],
-        reactions: { fire: 0, eyes: 0, heart: 0, laugh: 0 },
-      };
-      working = [...prev, base];
-    }
-    const newRank = recomputeRank(
-      working.filter((p) => p.id !== base.id),
-      base.active_value,
-      base.seq
-    );
-    const ordered = sortBoard(working);
-    const casualty = ordered.length > 100 ? ordered[100] : null;
-    const finalProfiles = ordered.map((p) => {
-      if (p.id !== base.id) return p;
-      const r = ordered.findIndex((x) => x.id === base.id) + 1;
-      const improved = previousRank !== null && r < previousRank;
-      return {
-        ...p,
-        peak_rank: Math.min(p.peak_rank, r),
-        times_climbed: p.times_climbed + (improved ? 1 : 0),
-        journey: [...p.journey, r],
-      };
-    });
-    setProfiles(finalProfiles);
-    if (casualty) {
-      setOffboard((prevG) =>
-        prevG.some((x) => x.id === casualty.id) ? prevG : [{ ...casualty }, ...prevG].slice(0, 50)
-      );
-    }
-    recordBump({ profile: { ...base }, previousRank, newRank, casualty });
-
-    const displacedCount = previousRank === null
-      ? Math.max(0, 101 - newRank)
-      : Math.max(0, previousRank - newRank);
-
-    const displacedList = ordered
-      .filter((p) => p.id !== base.id)
-      .map((p) => ({
-        rank: ordered.findIndex((x) => x.id === p.id) + 1,
-        title: p.name,
-        imageUrl: p.imageUrl,
-      }))
-      .filter((x) => x.rank > newRank && (previousRank === null || x.rank <= (previousRank || 101)))
-      .slice(0, 5);
-
-    setBumpResult({
-      profile: { ...base, active_value: base.active_value },
-      previousRank,
-      newRank,
-      displacedCount,
-      displacedProfiles: displacedList,
-    });
-  }, [recordBump]);
+  // Mirror of the authed user for handlers registered with stale closures.
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   // Deep linking (?rank=X and ?bid=true).
   useEffect(() => {
@@ -1202,7 +1354,13 @@ export function HomePageClient({
   // Strictly filter to the current authenticated user's own projects (or empty if unauthenticated)
   const existingHandles = useMemo(() => {
     if (!user) return [];
-    return profiles
+    const allUserCandidatePool = [...profiles];
+    for (const off of offboard) {
+      if (!allUserCandidatePool.some((p) => p.id === off.id)) {
+        allUserCandidatePool.push(off);
+      }
+    }
+    return allUserCandidatePool
       .filter((p) => {
         if (p.owner_id && user.id && p.owner_id === user.id) return true;
         if (userAuthHandle && p.handle && p.handle.toLowerCase().replace('@', '') === userAuthHandle) return true;
@@ -1214,12 +1372,12 @@ export function HomePageClient({
         title: p.name,
         activeValue: p.active_value,
         handle: p.handle,
-        imageUrl: p.imageUrl,
-        linkUrl: p.linkUrl,
+        imageUrl: p.imageUrl || (p as any).image_path || (p as any).image_url || '',
+        linkUrl: p.linkUrl || (p as any).destination_url || '',
         category: p.category,
         owner_id: p.owner_id || user.id,
       }));
-  }, [profiles, user, userAuthHandle]);
+  }, [profiles, offboard, user, userAuthHandle]);
 
   return (
     <div className="h-screen w-screen bg-[#121316] text-neutral-100 flex flex-col selection:bg-white/20 selection:text-white relative overflow-hidden">
@@ -1245,20 +1403,25 @@ export function HomePageClient({
 
       {/* Persistent Full-Screen Command Header */}
       <header className="shrink-0 z-40 bg-[#141519]/90 backdrop-blur-xl border-b border-white/[0.08] px-3 sm:px-4 h-13 sm:h-14 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/[0.06] border border-white/[0.14] flex items-center justify-center shadow-inner">
-            <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-200" />
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
+            <Image
+              src="/bumpone-logo.png"
+              alt="BumpOne Logo"
+              width={32}
+              height={32}
+              className="w-full h-full object-contain"
+              priority
+            />
           </div>
-          <div>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white m-0 inline-flex items-center">
-                BumpOne<span className="text-amber-400 font-semibold">.lol</span>
-                <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
-              </h1>
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Top 100
-              </span>
-            </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white m-0 inline-flex items-center">
+              BumpOne<span className="text-amber-400 font-semibold">.lol</span>
+              <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
+            </h1>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Top 100
+            </span>
           </div>
         </div>
 
@@ -1293,9 +1456,9 @@ export function HomePageClient({
               setIsWarRoomOpen(true);
             }}
             className="text-xs py-1 px-2 sm:px-2.5 bg-white/[0.05] border-white/[0.12] text-neutral-200 hover:bg-white/[0.1]"
-            title="Open Live Activity Stream"
+            title="Open War Room Activity Feed"
           >
-            <span className="hidden sm:inline">Activity Feed</span>
+            <span className="hidden sm:inline">War Room</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
           </Button>
 
@@ -1310,7 +1473,7 @@ export function HomePageClient({
               setIsRulesOpen(true);
             }}
             className="hidden lg:inline-flex text-xs py-1"
-            title="Concentric Board Rules & Protocol (?)"
+            title="Billboard Rules & Protocol (?)"
           >
             Rules
           </Button>
@@ -1324,8 +1487,9 @@ export function HomePageClient({
               setIsLeaderboardOpen(true);
             }}
             className="hidden sm:inline-flex text-xs py-1"
+            title="Billboard Leaderboard"
           >
-            Board
+            Leaderboard
           </Button>
 
           <Button
@@ -1337,10 +1501,10 @@ export function HomePageClient({
               setIsGraveyardOpen(true);
             }}
             className="text-xs py-1 px-2.5"
-            title="Directory Archive"
+            title="Billboard Graveyard (#101+)"
           >
-            <span className="hidden xs:inline">Archive</span>{' '}
-            {!hasMounted || isBoardLoading ? (
+            <span className="hidden xs:inline">Graveyard</span>{' '}
+            {!hasMounted && offboard.length === 0 ? (
               <Skeleton variant="rounded" width={14} height={12} className="inline-block ml-1 align-middle" />
             ) : (
               `(${offboard.length})`
@@ -1425,12 +1589,12 @@ export function HomePageClient({
             }}
             className="text-xs font-bold py-1.5 px-3 min-w-[105px]"
           >
-            {!hasMounted || isBoardLoading ? (
+            {slots[0] ? (
+              `BUMP #1 ($${(slots[0]?.activeValue ?? 100) + 10})`
+            ) : (
               <span className="inline-flex items-center gap-1.5">
                 BUMP #1 (<Skeleton variant="text" width={28} height={12} className="inline-block" />)
               </span>
-            ) : (
-              `BUMP #1 ($${(slots[0]?.activeValue ?? 100) + 10})`
             )}
           </Button>
         </div>
@@ -1441,7 +1605,7 @@ export function HomePageClient({
         <div className="flex-1 w-full h-full min-h-0 relative">
           <GridBoard
             slots={slots}
-            isLoading={!hasMounted || isBoardLoading}
+            isLoading={isBoardLoading && slots.length === 0}
             onSlotClick={handleSlotClick}
             highlightedRank={highlightedRank}
             matchingRanks={matchingRanks}
@@ -1482,14 +1646,14 @@ export function HomePageClient({
             <div className="flex items-center gap-2 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               <span className="truncate">
-                <strong>Active Value Protocol:</strong> Top up to climb — your value carries forward. Spots #1–#100 are live on the billboard; listings displaced beyond #100 enter the Billboard Archive.
+                <strong>Active Value Protocol:</strong> Top up to climb — your active value carries forward. Spots #1–#100 are live on the billboard; listings displaced beyond #100 enter the Graveyard.
               </span>
             </div>
           )}
           <div className="shrink-0 pl-2 flex items-center gap-2.5">
             <span className="hidden lg:inline text-neutral-400 font-mono text-[10px]">
               Total Active Value:{' '}
-              {!hasMounted || isBoardLoading ? (
+              {profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={52} height={12} className="inline-block ml-1 align-middle" />
               ) : (
                 <strong className="text-white font-bold">${formatNumber(stats.totalBidsVolume)}</strong>
@@ -1497,7 +1661,7 @@ export function HomePageClient({
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
               Floor{' '}
-              {!hasMounted || isBoardLoading ? (
+              {profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={24} height={12} className="inline-block ml-1 align-middle" />
               ) : (
                 <strong className="text-white font-bold">${entryFloor}</strong>
@@ -1505,7 +1669,7 @@ export function HomePageClient({
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
               King{' '}
-              {!hasMounted || isBoardLoading ? (
+              {profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={28} height={12} className="inline-block ml-1 align-middle" />
               ) : (
                 <strong className="text-amber-200 font-bold">${stats.rank1Bid}</strong>
@@ -1513,7 +1677,7 @@ export function HomePageClient({
             </span>
             <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
               #10{' '}
-              {!hasMounted || isBoardLoading ? (
+              {profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={24} height={12} className="inline-block ml-1 align-middle" />
               ) : (
                 <strong className="text-neutral-200 font-bold">${stats.rank10Bid}</strong>
@@ -1521,7 +1685,7 @@ export function HomePageClient({
             </span>
             <span className="hidden sm:inline font-mono text-[10px] text-rose-300">
               Off-board{' '}
-              {!hasMounted || isBoardLoading ? (
+              {offboard.length === 0 && profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={16} height={12} className="inline-block ml-1 align-middle" />
               ) : (
                 <strong className="font-bold">{offboard.length}</strong>
@@ -1578,7 +1742,7 @@ export function HomePageClient({
       {isTakeOverOpen && (
         <TakeOverModal
           isOpen={isTakeOverOpen}
-          hasBackdrop={false}
+          hasBackdrop={true}
           onClose={() => {
             setIsTakeOverOpen(false);
             setTargetSlotToBump(null);
@@ -1592,16 +1756,25 @@ export function HomePageClient({
               }
             }
           }}
-          onBack={targetSlotToBump ? () => {
-            const slotToRestore = targetSlotToBump;
-            setIsTakeOverOpen(false);
-            setTargetSlotToBump(null);
-            if (typeof window !== 'undefined' && window.history.state?.modal === 'bump') {
-              window.history.back();
-            } else {
-              setSelectedSlot(slotToRestore);
-            }
-          } : undefined}
+          onBack={
+            viewingProfileId
+              ? () => {
+                  setIsTakeOverOpen(false);
+                  setTargetSlotToBump(null);
+                }
+              : targetSlotToBump
+              ? () => {
+                  const slotToRestore = targetSlotToBump;
+                  setIsTakeOverOpen(false);
+                  setTargetSlotToBump(null);
+                  if (typeof window !== 'undefined' && window.history.state?.modal === 'bump') {
+                    window.history.back();
+                  } else {
+                    setSelectedSlot(slotToRestore);
+                  }
+                }
+              : undefined
+          }
           currentSlots={slots}
           entryFloor={entryFloor}
           categories={[...CATEGORIES]}
@@ -1611,8 +1784,7 @@ export function HomePageClient({
             setIsTakeOverOpen(false);
             setIsAuthOpen(true);
           }}
-          onSubmitTopUp={(orderData) => {
-            handleProcessTopUp(orderData);
+          onSubmitTopUp={() => {
             setIsTakeOverOpen(false);
             setTargetSlotToBump(null);
             setSelectedSlot(null);
@@ -1629,14 +1801,26 @@ export function HomePageClient({
           hasBackdrop={false}
           onClose={() => setIsGraveyardOpen(false)}
           bumpedHistory={offboard.slice(0, 50).map((p, idx) => toSlotItem(p, 101 + idx))}
+          isOwner={(item) => existingHandles.some((h) => h.id === item.id)}
           onReclaimTurf={(item) => {
             if (!user) {
               setIsAuthOpen(true);
               return;
             }
-            const match = slots.find((s) => s.id === item.id);
-            setTargetSlotToBump(match ?? null);
+            setTargetSlotToBump(item);
             setIsTakeOverOpen(true);
+          }}
+          onViewProject={(projectId) => {
+            setIsGraveyardOpen(false);
+            setViewingProfileMode('project');
+            setViewingProfileId(projectId);
+            if (typeof window !== 'undefined') {
+              window.history.pushState(
+                { modal: 'project', mode: 'project', profileId: projectId },
+                '',
+                `/project/${projectId}`
+              );
+            }
           }}
         />
       )}
@@ -1725,6 +1909,7 @@ export function HomePageClient({
               setSelectedSlot((prev) => (prev ? { ...prev, reactions: updatedReactions } : null));
             }
           }}
+          onTriggerReaction={handleTriggerReaction}
         />
       )}
 

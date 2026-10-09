@@ -1,11 +1,19 @@
 import Link from "next/link";
-import { ArrowLeft, Compass } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-[#07080b] text-neutral-300 font-sans flex flex-col items-center justify-center p-6 text-center selection:bg-amber-500/30 selection:text-amber-200">
-      <div className="h-16 w-16 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 mb-6">
-        <Compass className="h-8 w-8 animate-pulse" />
+      <div className="h-16 w-16 rounded-2xl bg-gradient-to-b from-white/[0.12] to-white/[0.04] border border-white/[0.16] flex items-center justify-center p-3 mb-6 shadow-xl">
+        <Image
+          src="/bumpone-logo.png"
+          alt="BumpOne Logo"
+          width={40}
+          height={40}
+          className="w-full h-full object-contain"
+          priority
+        />
       </div>
 
       <span className="font-mono text-xs font-semibold text-amber-400 tracking-widest uppercase bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full mb-4">

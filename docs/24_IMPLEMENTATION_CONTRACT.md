@@ -95,12 +95,16 @@ All payments are final. BumpOne does not support application-level refunds becau
 | archived | no | no | terminal, except explicit admin restore |
 
 **Moderation Model (RESOLVED):**
-- **Instant Live Publishing with Post-Moderation**: Upon verified `payment.succeeded` from Dodo Payments, the profile is immediately set to `approved` and appears live on the board.
+- **Moderation-gated publishing (SEC-018)**: New profiles are created with `moderation_status = 'pending'` and `is_active = false`; a verified `payment.succeeded` credits active value but never grants approval. Pending profiles appear on the board only after an administrator approves them (`POST /api/admin/moderate`). Already-approved profiles stay live instantly when bumped, and content edits (title/image/link) re-pend the profile for review (`020_harden_production_residual_controls.sql`, `021_moderation_status_default_pending.sql`).
 - When an admin suspends a profile via `/admin`, `is_active` becomes `false`, `moderation_status = 'suspended'`, and the profile is removed from the active board. Ranks below shift up by 1 to fill the vacant slot.
 
 ### Purchase lifecycle
 
-`draft → quoted → checkout_open → payment_processing → paid → ranking_processed`
+`checkout_open → paid | expired | cancelled`
+
+(`purchase_quote_status` enum, `001_initial_schema.sql`: quotes are created
+directly as `checkout_open`, consumed as `paid` by `process_dodo_purchase`, or
+lapse to `expired`/`cancelled`.)
 
 Terminal states: `expired`, `cancelled`, `payment_failed`, `processing_failed`, `disputed`, `administratively_cancelled`.
 

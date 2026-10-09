@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { allowRequest } from '@/lib/rateLimit';
-import { clientIp, PRIVATE_NO_STORE } from '@/lib/requestGuard';
+import { clientIp, PRIVATE_NO_STORE, newRequestId } from '@/lib/requestGuard';
 import { safeExternalUrl } from '@/lib/urls';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,6 +53,7 @@ export async function GET(
           current_rank,
           current_active_value_minor,
           total_paid_minor,
+          views_count,
           reactions_fire,
           reactions_eyes,
           reactions_heart,
@@ -69,6 +70,11 @@ export async function GET(
           .or(`handle.eq.@${plainHandle},handle.eq.${plainHandle}`)
           .order('current_rank', { ascending: true });
       }
+
+      query = query.order('event_sequence', {
+        ascending: true,
+        referencedTable: 'board_events',
+      });
 
       const { data: projectList, error } = await query.limit(1);
       const project = projectList && projectList.length > 0 ? projectList[0] : null;
@@ -104,6 +110,94 @@ export async function GET(
 
         const activeValue = Math.floor(Number((project as any).current_active_value_minor || 0) / 100);
 
+        const currentRank =
+          (project as any).current_rank != null ? Number((project as any).current_rank) : null;
+
+        // Passport metrics (docs/01 Rule 25): derive the journey from the
+        // project's own board_events so peak/times/timeline reflect server truth.
+        const events = Array.isArray((project as any).board_events)
+          ? [...(project as any).board_events].sort(
+              (a: any, b: any) => Number(a?.event_sequence || 0) - Number(b?.event_sequence || 0)
+            )
+          : [];
+        const journeyRanks = events
+          .map((e: any) => Number(e?.new_rank))
+          .filter((r: number) => Number.isFinite(r) && r > 0);
+        if (events.length > 0 && events[0]?.previous_rank != null) {
+          const firstPrev = Number(events[0].previous_rank);
+          if (Number.isFinite(firstPrev) && firstPrev > 0) journeyRanks.unshift(firstPrev);
+        }
+        const timesBumped = events.length;
+        const timesClimbed = events.filter((e: any) => {
+          const prev = e?.previous_rank != null ? Number(e.previous_rank) : null;
+          const next = Number(e?.new_rank);
+          return prev !== null && Number.isFinite(next) && next < prev;
+        }).length;
+        const peakRank =
+          journeyRanks.length > 0
+            ? Math.min(...journeyRanks)
+            : currentRank !== null
+              ? currentRank
+              : 0;
+        const journey =
+          journeyRanks.length > 0
+            ? journeyRanks
+            : currentRank !== null
+              ? [currentRank]
+              : [];
+
+        // Unique passport visits: 1 view per IP per profile per hour (docs/16).
+        let viewsCount = Number((project as any).views_count || 0);
+        if (isVisible) {
+          try {
+            if (allowRequest(`profile_view:${(project as any).id}:${clientIp(request)}`, 1, 3_600_000)) {
+              const { data: viewRow } = await supabaseAdmin
+                .from('projects')
+                .select('views_count')
+                .eq('id', (project as any).id)
+                .maybeSingle();
+              const nextViews = Number((viewRow as any)?.views_count || 0) + 1;
+              const { error: viewError } = await supabaseAdmin
+                .from('projects')
+                .update({ views_count: nextViews })
+                .eq('id', (project as any).id);
+              if (!viewError) viewsCount = nextViews;
+            }
+          } catch (viewErr) {
+            console.warn('Profile view count skipped:', viewErr);
+          }
+        }
+
+        // Unranked projects (#101+) still show their exact standing: rank is
+        // 1 + profiles ahead by value, tie-broken by ranking_sequence.
+        let exactRank = currentRank;
+        if (exactRank === null && isVisible) {
+          try {
+            const myVal = Number((project as any).current_active_value_minor || 0);
+            const mySeq = Number((project as any).ranking_sequence || 0);
+            const [ahead, tied] = await Promise.all([
+              supabaseAdmin
+                .from('projects')
+                .select('id', { count: 'exact', head: true })
+                .eq('moderation_status', 'approved')
+                .eq('is_active', true)
+                .gt('current_active_value_minor', myVal),
+              supabaseAdmin
+                .from('projects')
+                .select('id', { count: 'exact', head: true })
+                .eq('moderation_status', 'approved')
+                .eq('is_active', true)
+                .eq('current_active_value_minor', myVal)
+                .lt('ranking_sequence', mySeq),
+            ]);
+            if (!ahead.error && !tied.error) {
+              exactRank = 1 + Number(ahead.count || 0) + Number(tied.count || 0);
+            }
+          } catch (rankErr) {
+            console.warn('Exact rank computation skipped:', rankErr);
+          }
+        }
+
         return NextResponse.json(
           {
             id: project.id,
@@ -114,7 +208,12 @@ export async function GET(
             total_paid: Math.round(Number(project.total_paid_minor || 0) / 100),
             imageUrl: project.image_path,
             linkUrl: safeExternalUrl(project.destination_url),
-            rank: project.current_rank,
+            rank: exactRank,
+            views: viewsCount,
+            peak_rank: peakRank,
+            times_bumped: timesBumped,
+            times_climbed: timesClimbed,
+            journey,
             reactions,
             board_events: (project as any).board_events || [],
           },
@@ -127,7 +226,8 @@ export async function GET(
 
     return NextResponse.json({ error: 'Profile not found' }, { status: 404, headers: PRIVATE_NO_STORE });
   } catch (err: any) {
-    console.error('Error fetching profile:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500, headers: PRIVATE_NO_STORE });
+    const requestId = newRequestId();
+    console.error('Error fetching profile:', requestId, err);
+    return NextResponse.json({ error: 'Internal server error', request_id: requestId }, { status: 500, headers: PRIVATE_NO_STORE });
   }
 }

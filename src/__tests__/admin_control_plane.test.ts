@@ -34,7 +34,7 @@ type QueryResult = { data: any; error: any; count?: number | null };
 // the configured result, mirroring supabase-js's PostgrestBuilder.
 function makeBuilder(result: QueryResult) {
   const builder: any = {};
-  for (const m of ['select', 'eq', 'insert', 'update', 'upsert', 'delete']) {
+  for (const m of ['select', 'eq', 'neq', 'ilike', 'or', 'order', 'not', 'lte', 'gt', 'in', 'is', 'insert', 'update', 'upsert', 'delete']) {
     builder[m] = vi.fn(() => builder);
   }
   builder.maybeSingle = vi.fn(() => Promise.resolve(result));
@@ -250,6 +250,7 @@ describe('GET /api/admin/overview', () => {
     projects: { data: null, error: null, count: 3 },
     reports: { data: null, error: null, count: 1 },
     payments: { data: [{ amount_minor: 1500 }], error: null },
+    purchase_quotes: { data: null, error: null, count: 0 },
     system_state: { data: { purchases_paused: true }, error: null },
   });
 

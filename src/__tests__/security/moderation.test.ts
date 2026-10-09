@@ -146,7 +146,7 @@ describe('Pending-project profile visibility (SEC-006 / SEC-018)', () => {
 });
 
 describe('Public board query contract (SEC-006 / SEC-018)', () => {
-  it('restricts the board to approved, active, ranked projects', async () => {
+  it('restricts the board to approved, active projects', async () => {
     const board = makeBuilder({ data: [], error: null });
     vi.mocked(supabaseAdmin.from).mockReturnValue(board);
 
@@ -154,7 +154,10 @@ describe('Public board query contract (SEC-006 / SEC-018)', () => {
     expect(res.status).toBe(200);
     expect(board.eq).toHaveBeenCalledWith('is_active', true);
     expect(board.eq).toHaveBeenCalledWith('moderation_status', 'approved');
-    expect(board.not).toHaveBeenCalledWith('current_rank', 'is', null);
+    // docs/04:259-263: rows beyond the global top 100 (null current_rank) are
+    // still served for the Directory Archive — no rank-null exclusion may return.
+    expect(board.not).not.toHaveBeenCalled();
+    expect(board.order).toHaveBeenCalledWith('current_active_value_minor', { ascending: false });
   });
 });
 

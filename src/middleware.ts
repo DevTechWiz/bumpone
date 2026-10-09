@@ -72,6 +72,12 @@ export async function middleware(request: NextRequest) {
   const withHeaders = (res: NextResponse): NextResponse => applySecurityHeaders(res, csp);
 
   const { pathname } = request.nextUrl;
+
+  // SEO & crawler endpoints bypass: avoid Supabase auth overhead on search engine crawls
+  if (pathname === '/sitemap.xml' || pathname === '/robots.txt') {
+    return withHeaders(supabaseResponse);
+  }
+
   const isAdminApi = pathname === '/api/admin' || pathname.startsWith('/api/admin/');
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/');
 
@@ -144,6 +150,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /*
+     * Match all request paths except:
+     * - _next/static, _next/image (Next.js assets)
+     * - favicon.ico, sitemap.xml, robots.txt (crawler & metadata files)
+     * - static image/media files (.svg, .png, .jpg, .webp, etc.)
+     */
+    '/((?!_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

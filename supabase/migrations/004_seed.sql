@@ -28,23 +28,29 @@ $$ language plpgsql security definer set search_path = public;
 -- ==============================================================================
 insert into categories (name, slug, display_order) values
   ('AI', 'ai', 1),
-  ('Apps', 'apps', 2),
-  ('Websites', 'websites', 3),
-  ('Creators', 'creators', 4),
-  ('Games', 'games', 5),
-  ('Design', 'design', 6),
-  ('Tech', 'tech', 7)
+  ('SaaS', 'saas', 2),
+  ('Apps', 'apps', 3),
+  ('Dev Tools', 'dev-tools', 4),
+  ('Websites', 'websites', 5),
+  ('Crypto & Web3', 'crypto', 6),
+  ('Design', 'design', 7),
+  ('Productivity', 'productivity', 8),
+  ('Creators', 'creators', 9),
+  ('Games', 'games', 10),
+  ('FinTech', 'fintech', 11),
+  ('E-Commerce', 'ecommerce', 12),
+  ('Marketing', 'marketing', 13),
+  ('Community', 'community', 14),
+  ('Tech', 'tech', 15)
 on conflict (slug) do update set
   name = excluded.name,
   display_order = excluded.display_order;
 
 -- ==============================================================================
--- PART 2: Bootstrap Genesis Board (Initial 100 Slots)
--- As documented in docs/03_PRICING_SYSTEM.md and docs/21_LAUNCH_PLAN.md,
--- BumpOne launches with an initial 100-slot Genesis board (#1 = $100 down to #100 = $1).
--- Note: total_paid_minor is strictly set to 0 (no fake payments recorded in ledger).
--- Once filled, every subsequent takeover requires target + $10 top-up.
+-- PART 2: Bootstrap Genesis Board (Disabled for Production Launch)
+-- Kept here for optional local dev seeding if explicitly required.
 -- ==============================================================================
+/*
 do $$
 declare
   cat_ai uuid;
@@ -153,8 +159,7 @@ begin
 
     -- Seed initial War Room messages
     insert into messages (author_name, author_handle, avatar_color, text, slot_tag, is_official) values
-      ('System', '@bumpone', '#06b6d4', 'The 100-slot grid is live! Top up your project bid to displace rivals and capture #1.', 1, true),
-      ('Apex AI', '@apex_ai', '#8b5cf6', 'Rank #1 secured for now. Who has the courage to bump us?', 1, false),
-      ('Hyperdrive', '@sabor_dao', '#10b981', 'Preparing top-up... Slot #1 belongs to the DAO.', 2, false);
+      ('System', '@bumpone', '#06b6d4', 'The 100-slot grid is live! Top up your project bid to displace rivals and capture #1.', 1, true);
   end if;
 end $$;
+*/

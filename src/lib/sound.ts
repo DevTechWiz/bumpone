@@ -2,15 +2,17 @@
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
-  private isMuted: boolean = false;
+  // docs/13: sound is optional and defaults to muted; the first localStorage
+  // write happens only when the user explicitly toggles.
+  private isMuted: boolean = true;
 
   constructor() {
     // Defer localStorage read: this module is also evaluated during SSR prerender.
     if (typeof window !== 'undefined') {
       try {
         const saved = window.localStorage.getItem('bumped_sound_muted');
-        if (saved === 'true') {
-          this.isMuted = true;
+        if (saved === 'false') {
+          this.isMuted = false;
         }
       } catch {
         // ignore

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Mail,
   Clock,
@@ -11,19 +12,51 @@ import {
   ShieldCheck,
   ArrowLeft,
   CreditCard,
+  Loader2,
 } from "lucide-react";
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [honeypot, setHoneypot] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !message) return;
-    setSubmitted(true);
+    if (!name.trim() || !email.trim() || !message.trim()) return;
+
+    setLoading(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          subject: subject.trim() || "General Inquiry",
+          message: message.trim(),
+          _hp: honeypot,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to submit message. Please try emailing us directly.");
+      }
+
+      setSubmitted(true);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "An unexpected error occurred. Please reach out via support@bumpone.lol.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,9 +73,16 @@ export default function ContactPage() {
               <span>Showcase</span>
             </Link>
 
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="h-8 w-8 rounded-lg bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 font-mono font-black text-sm group-hover:scale-105 transition-transform">
-                B
+            <Link href="/" className="flex items-center gap-1.5 sm:gap-2 group">
+              <div className="h-8 w-8 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Image
+                  src="/bumpone-logo.png"
+                  alt="BumpOne"
+                  width={32}
+                  height={32}
+                  className="w-full h-full object-contain"
+                  priority
+                />
               </div>
               <span className="font-bold text-white tracking-tight text-sm sm:text-base">
                 BumpOne<span className="text-amber-400">.lol</span>
@@ -176,17 +216,38 @@ export default function ContactPage() {
             Fill in the details below and our team will get back to you within 24 hours.
           </p>
 
+          {errorMsg && (
+            <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 text-xs text-rose-300 flex items-center justify-between">
+              <span>{errorMsg}</span>
+              <a href="mailto:support@bumpone.lol" className="underline font-semibold ml-2 hover:text-white shrink-0">
+                Email directly
+              </a>
+            </div>
+          )}
+
           {submitted ? (
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
               <h3 className="text-lg font-bold text-white mb-1">Message Sent Successfully!</h3>
               <p className="text-sm text-neutral-300">
-                Thank you for contacting us. Our operations team will respond to{" "}
+                Thank you for contacting us. Our operations team has received your ticket and will respond to{" "}
                 <span className="text-amber-400 font-mono">{email}</span> within 24 business hours.
               </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Hidden bot honeypot */}
+              <input
+                type="text"
+                name="_hp"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                className="hidden"
+                aria-hidden="true"
+              />
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-mono text-neutral-400 mb-1.5">
@@ -243,10 +304,20 @@ export default function ContactPage() {
 
               <button
                 type="submit"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-400 px-6 py-3 font-semibold text-neutral-950 text-sm hover:bg-amber-300 transition-colors shadow-lg shadow-amber-400/20"
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-400 px-6 py-3 font-semibold text-neutral-950 text-sm hover:bg-amber-300 transition-colors shadow-lg shadow-amber-400/20 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               >
-                <Send className="h-4 w-4" />
-                Submit Message
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Submit Message
+                  </>
+                )}
               </button>
             </form>
           )}

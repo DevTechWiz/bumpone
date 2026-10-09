@@ -59,7 +59,7 @@ const TIER_OPTIONS: TierOptionDef[] = [
   },
   {
     key: 'king',
-    label: 'King Citadel',
+    label: 'King',
     shortLabel: 'King #1',
     range: '#1',
     icon: <Crown className="w-3.5 h-3.5 text-amber-400" />,
@@ -67,16 +67,16 @@ const TIER_OPTIONS: TierOptionDef[] = [
   },
   {
     key: 'champion',
-    label: 'Champions',
-    shortLabel: 'Champions',
+    label: 'Champion',
+    shortLabel: 'Champion',
     range: '#2–5',
     icon: <span className="text-xs">💎</span>,
     colorClass: 'text-purple-300',
   },
   {
     key: 'elite',
-    label: 'Inner Elites',
-    shortLabel: 'Elites',
+    label: 'Elite',
+    shortLabel: 'Elite',
     range: '#6–15',
     icon: <Sparkles className="w-3.5 h-3.5 text-sky-400" />,
     colorClass: 'text-sky-300',
@@ -91,8 +91,8 @@ const TIER_OPTIONS: TierOptionDef[] = [
   },
   {
     key: 'contender',
-    label: 'Contenders',
-    shortLabel: 'Contenders',
+    label: 'Contender',
+    shortLabel: 'Contender',
     range: '#41–100',
     icon: <Zap className="w-3.5 h-3.5 text-zinc-300" />,
     colorClass: 'text-zinc-300',
@@ -264,7 +264,7 @@ const GridFilterBarComponent: React.FC<GridFilterBarProps> = ({
         </button>
 
         {isCategoryMenuOpen && (
-          <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#16171d]/98 backdrop-blur-2xl border border-white/[0.14] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-150">
+          <div className="absolute right-0 top-full mt-1.5 w-48 max-h-72 overflow-y-auto bg-[#16171d]/98 backdrop-blur-2xl border border-white/[0.14] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-150 scrollbar-thin">
             <button
               type="button"
               onClick={() => {

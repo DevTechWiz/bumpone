@@ -51,7 +51,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <>
       {hasBackdrop && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 bg-[#0d0e12]/85 backdrop-blur-md animate-in fade-in duration-200"
           onClick={onClose}
         />
       )}

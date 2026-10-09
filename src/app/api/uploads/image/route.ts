@@ -3,7 +3,7 @@ import { uploadImageToR2 } from '@/lib/r2';
 import { readImageDimensions } from '@/lib/imageDimensions';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { allowRequest } from '@/lib/rateLimit';
-import { bodyTooLarge } from '@/lib/requestGuard';
+import { bodyTooLarge, newRequestId } from '@/lib/requestGuard';
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 // Multipart envelope headroom over the 5MB file cap; anything larger is
@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
       try {
         const image = sharp(inputBuffer, { limitInputPixels: 2560 * 2560 });
         const metadata = await image.metadata();
-        if (!metadata.width || !metadata.height || metadata.width < 64 || metadata.height < 64 || metadata.width > 4096 || metadata.height > 4096) {
-          return NextResponse.json({ error: 'Image dimensions must be between 64px and 4096px.' }, { status: 400 });
+        if (!metadata.width || !metadata.height || metadata.width < 400 || metadata.height < 400 || metadata.width > 2560 || metadata.height > 2560) {
+          return NextResponse.json({ error: 'Image dimensions must be between 400px and 2560px.' }, { status: 400 });
         }
         processedBuffer = await image
           .resize(500, 500, {
@@ -114,12 +114,12 @@ export async function POST(request: NextRequest) {
       const dims = readImageDimensions(inputBuffer);
       if (
         !dims ||
-        dims.width < 64 ||
-        dims.height < 64 ||
-        dims.width > 4096 ||
-        dims.height > 4096
+        dims.width < 400 ||
+        dims.height < 400 ||
+        dims.width > 2560 ||
+        dims.height > 2560
       ) {
-        return NextResponse.json({ error: 'Image dimensions must be between 64px and 4096px.' }, { status: 400 });
+        return NextResponse.json({ error: 'Image dimensions must be between 400px and 2560px.' }, { status: 400 });
       }
     }
 
@@ -137,7 +137,8 @@ export async function POST(request: NextRequest) {
       format,
     });
   } catch (err: any) {
-    console.error('Error processing image upload:', err);
-    return NextResponse.json({ error: 'Failed to process and upload image' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Error processing image upload:', requestId, err);
+    return NextResponse.json({ error: 'Failed to process and upload image', request_id: requestId }, { status: 500 });
   }
 }

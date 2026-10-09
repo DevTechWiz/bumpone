@@ -76,11 +76,18 @@ Admin must be able to:
 
 - hide profile
 - suspend profile
-- remove image
-- disable destination link
 - suspend project (chargeback handling)
 - inspect purchase
 - inspect reports
+
+> **Not implemented:** "remove image" and "disable destination link" are not
+> part of the shipped admin surface. The contract defines only
+> `GET /api/admin/overview`, `POST /api/admin/moderate`, and
+> `POST /api/admin/emergency` ([24_IMPLEMENTATION_CONTRACT.md](24_IMPLEMENTATION_CONTRACT.md)),
+> and `enforce_project_metadata_fields` (`018_harden_identity_boundary.sql`)
+> requires `destination_url` to stay a non-null `https://` URL. Image and link
+> changes go through the owner-facing project update endpoint
+> (`POST /api/project/update`).
 
 ---
 

@@ -136,31 +136,31 @@ export const RulesModal: React.FC<RulesModalProps> = ({
             <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-rose-200 flex items-center gap-1.5 text-xs">
-                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Billboard Floor (#51–#100)
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Billboard Floor (#41–#100)
                 </span>
                 <span className="font-mono text-[9px] text-rose-300 bg-rose-500/10 px-1.5 py-0.5 rounded">Floor Zone</span>
               </div>
               <p className="text-[10px] text-slate-300 leading-normal">
-                All 100 spots on the billboard are active. If an incoming higher placement shifts your card beyond #100, it moves into the Billboard Archive.
+                All 100 spots on the billboard are live. If an incoming higher bump shifts your card beyond #100, it moves into the Graveyard.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Section 4: Live Activity & Billboard Archive */}
+        {/* Section 4: War Room & Billboard Graveyard */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1">
             <div className="flex items-center gap-1.5 text-white font-bold text-xs">
-              <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> Live Billboard Activity
+              <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> War Room Live Stream
             </div>
             <p className="text-[10px] text-neutral-400 leading-normal">
-              Spectate live rank upgrades, top-tier placements, and visibility updates as they happen with real-time audio and community stream.
+              Spectate live bumps, rank upgrades, and real-time community stream as creators vie for billboard placement.
             </p>
           </div>
 
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1">
             <div className="flex items-center gap-1.5 text-white font-bold text-xs">
-              <Archive className="w-3.5 h-3.5 text-neutral-400" /> Billboard Archive
+              <Archive className="w-3.5 h-3.5 text-neutral-400" /> Billboard Graveyard
             </div>
             <p className="text-[10px] text-neutral-400 leading-normal">
               Displaced past #100? Your card is never deleted. Your active value stays saved—top up at least ${MIN_TOP_UP} to restore active billboard placement.

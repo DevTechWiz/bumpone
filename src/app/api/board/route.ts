@@ -11,7 +11,7 @@ import {
   type BoardCacheEntry,
 } from '@/lib/boardCache';
 import { allowRequest } from '@/lib/rateLimit';
-import { clientIp } from '@/lib/requestGuard';
+import { clientIp, newRequestId } from '@/lib/requestGuard';
 import { safeExternalUrl } from '@/lib/urls';
 import { isPurchasesPaused } from '@/lib/pauseState';
 
@@ -95,24 +95,33 @@ async function fetchAndCacheBoard(
         users(id, handle, display_name, avatar_url, bio)
       `;
 
+    const isCategoryView = Boolean(category && category !== 'All');
+
     let query = supabaseAdmin
       .from('projects')
       .select(selectFieldsProject)
       .eq('is_active', true)
-      .eq('moderation_status', 'approved')
-      .not('current_rank', 'is', null)
-      .lte('current_rank', limit);
+      .eq('moderation_status', 'approved');
 
-    if (category && category !== 'All') {
-      query = query.eq('categories.name', category);
+    if (isCategoryView) {
+      // docs/04:236-263: category ranking = filter by category, sort by Active
+      // Value, computed at query time. Top-100 visibility applies to each
+      // category view INDEPENDENTLY — profiles with a null global current_rank
+      // stay visible in their category, so no global-rank predicate may run here.
+      query = query.eq('categories.name', category as string);
     }
 
-    if (sort === 'popular') {
-      query = query.order('total_reactions', { ascending: false }).order('current_active_value_minor', { ascending: false });
-    } else if (sort === 'trending') {
-      query = query.order('updated_at', { ascending: false }).order('current_active_value_minor', { ascending: false });
-    } else {
+    if (!isCategoryView || sort === 'power') {
+      // Global membership = top `limit` by Active Value with the same tiebreak
+      // recalculate_board_ranks uses (value DESC, ranking_sequence ASC): ranks
+      // 1..100 plus the archive tail when limit > 100. Archived rows carry a
+      // null current_rank by design and feed the Directory Archive (the client
+      // slices profiles beyond index 100 into `offboard`).
       query = query.order('current_active_value_minor', { ascending: false }).order('ranking_sequence', { ascending: true });
+    } else if (sort === 'popular') {
+      query = query.order('total_reactions', { ascending: false }).order('current_active_value_minor', { ascending: false });
+    } else {
+      query = query.order('updated_at', { ascending: false }).order('current_active_value_minor', { ascending: false });
     }
 
     const [projectResult, purchasesPaused] = await Promise.all([
@@ -181,6 +190,8 @@ async function fetchAndCacheBoard(
           const sumB = (b.reactions.fire || 0) + (b.reactions.eyes || 0) + (b.reactions.heart || 0) + (b.reactions.laugh || 0);
           return sumB - sumA || b.active_value - a.active_value;
         });
+      } else if (sort === 'trending') {
+        profiles.sort((a, b) => b.last_bump_at - a.last_bump_at || b.active_value - a.active_value || a.seq - b.seq);
       }
 
       const payload = {
@@ -250,7 +261,7 @@ export async function GET(request: NextRequest) {
         status: 304,
         headers: {
           'ETag': cached.etag,
-          'Cache-Control': 'public, max-age=5, s-maxage=15, stale-while-revalidate=60',
+          'Cache-Control': 'public, max-age=5, s-maxage=5, stale-while-revalidate=10',
           'X-Cache': 'HIT-304',
         },
       });
@@ -261,7 +272,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'ETag': cached.etag,
-        'Cache-Control': 'public, max-age=5, s-maxage=15, stale-while-revalidate=60',
+        'Cache-Control': 'public, max-age=5, s-maxage=5, stale-while-revalidate=10',
         'X-Cache': 'HIT',
       },
     });
@@ -281,7 +292,7 @@ export async function GET(request: NextRequest) {
         status: 304,
         headers: {
           'ETag': entry.etag,
-          'Cache-Control': 'public, max-age=5, s-maxage=15, stale-while-revalidate=60',
+          'Cache-Control': 'public, max-age=5, s-maxage=5, stale-while-revalidate=10',
           'X-Cache': 'MISS-304',
         },
       });
@@ -292,13 +303,14 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'ETag': entry.etag,
-        'Cache-Control': 'public, max-age=5, s-maxage=15, stale-while-revalidate=60',
+        'Cache-Control': 'public, max-age=5, s-maxage=5, stale-while-revalidate=10',
         'X-Cache': 'MISS',
       },
     });
   } catch (err: any) {
-    console.error('Error fetching board:', err);
-    return NextResponse.json({ error: 'Failed to fetch board' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Error fetching board:', requestId, err);
+    return NextResponse.json({ error: 'Failed to fetch board', request_id: requestId }, { status: 500 });
   } finally {
     clearInFlightFetch(cacheKey);
   }

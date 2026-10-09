@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { ImageResponse } from 'next/og';
 
 export const alt = 'BumpOne.lol - The 100-Slot Digital Billboard & Attention Grid';
@@ -8,6 +10,12 @@ export const size = {
 export const contentType = 'image/png';
 
 export default async function Image() {
+  const iconBuffer = fs.readFileSync(path.join(process.cwd(), 'public', 'bumpone-icon.png'));
+  const iconArrayBuffer = iconBuffer.buffer.slice(
+    iconBuffer.byteOffset,
+    iconBuffer.byteOffset + iconBuffer.byteLength
+  );
+
   return new ImageResponse(
     (
       <div
@@ -68,7 +76,7 @@ export default async function Image() {
               textTransform: 'uppercase',
             }}
           >
-            Live Attention Grid &bull; 100 Slots
+            Live Attention Grid • 100 Slots
           </span>
         </div>
 
@@ -77,14 +85,24 @@ export default async function Image() {
           style={{
             display: 'flex',
             alignItems: 'center',
+            gap: 16,
             fontSize: 72,
             fontWeight: 900,
             letterSpacing: -2,
             marginBottom: 16,
           }}
         >
-          <span style={{ color: '#FFFFFF' }}>BumpOne</span>
-          <span style={{ color: '#F59E0B' }}>.lol</span>
+          {/* Official Logo */}
+          <img
+            src={iconArrayBuffer as any}
+            width="64"
+            height="64"
+            style={{ borderRadius: 16 }}
+          />
+          <div style={{ display: 'flex' }}>
+            <span style={{ color: '#FFFFFF' }}>BumpOne</span>
+            <span style={{ color: '#F59E0B' }}>.lol</span>
+          </div>
         </div>
 
         {/* Subtitle / Tagline */}

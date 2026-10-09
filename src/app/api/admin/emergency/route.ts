@@ -3,10 +3,9 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/adminAuth';
 import { allowRequest } from '@/lib/rateLimit';
-import { readJsonWithLimit } from '@/lib/requestGuard';
+import { readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { stripControlChars } from '@/lib/textSanitize';
 import { securityLog } from '@/lib/securityLogger';
-import { invalidatePauseStateCache } from '@/lib/pauseState';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin();
@@ -44,10 +43,10 @@ export async function POST(request: NextRequest) {
     updated_by: auth.user.id,
   });
   if (stateError) {
-    console.error('emergency pause state update failed:', stateError.message);
-    return NextResponse.json({ error: 'Unable to change purchase state' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('emergency pause state update failed:', requestId, stateError.message);
+    return NextResponse.json({ error: 'Unable to change purchase state', request_id: requestId }, { status: 500 });
   }
-  invalidatePauseStateCache();
 
   const { error: auditError } = await supabaseAdmin.from('admin_audit_log').insert({
     admin_user_id: auth.user.id,
@@ -64,6 +63,12 @@ export async function POST(request: NextRequest) {
   }
 
   securityLog.killswitchChange(auth.user.id, parsed.data.paused, parsed.data.reason);
+  securityLog.adminAction(
+    parsed.data.paused ? 'purchases_paused' : 'purchases_resumed',
+    auth.user.id,
+    'global',
+    { reason: parsed.data.reason }
+  );
 
   return NextResponse.json({ success: true, purchases_paused: parsed.data.paused });
 }

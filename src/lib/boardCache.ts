@@ -9,7 +9,7 @@ export interface BoardCacheEntry {
 }
 
 export const boardMemoryCache = new Map<string, BoardCacheEntry>();
-export const CACHE_TTL_MS = 15000; // 15 seconds fresh TTL
+export const CACHE_TTL_MS = 5000; // 5 seconds fresh TTL (docs/24:260 contract)
 
 // SEC-009: bounded key space. Even with validated sort/category params the
 // cache must never grow without limit inside a long-lived isolate.

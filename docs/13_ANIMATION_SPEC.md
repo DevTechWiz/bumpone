@@ -1,5 +1,19 @@
 # BumpOne.lol — Animation Specification
 
+> **Implementation notes:** Shipped — wall-rearrange position transitions
+> (`GridCell`: left/top/width/height over 700ms, within the 600–1200ms target;
+> hover stays 180ms), new-tile entrance pop + BUMPED badge (`isNew` wiring in
+> `HomePageClient`), global reduced-motion kill-switch (`globals.css`),
+> result-screen entrance (Modal zoom/fade) with rank + displaced count-up
+> animations (`BumpResultModal`), share-card scale/fade entrance with
+> staggered share options (`ShareCardModal`), bump-event toast entrance
+> (`BumpNotification`), reaction press feedback (`active:scale-95` +
+> `ReactionCanvas` bursts), and default-muted optional sound (`sound.ts`).
+> **Not implemented:** per-tile exit animation when a profile leaves the top
+> 100 (the tile unmounts instantly), and continuous active-value counter
+> animation on tiles (tile values update instantly; the result screen animates
+> its own figures).
+
 ## Animation Is Core Product Behavior
 
 The bump should feel satisfying.

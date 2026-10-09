@@ -14,6 +14,7 @@ export interface SlotDetailModalProps {
   onRequireAuth?: () => void;
   hasBackdrop?: boolean;
   onUpdateReactions?: (slotId: string, reactions: { fire: number; eyes: number; heart: number; laugh: number }) => void;
+  onTriggerReaction?: (emoji: string, e?: React.MouseEvent) => void;
 }
 
 // Client-side cache for user reactions so they highlight instantly (0ms) on card click
@@ -29,6 +30,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   onRequireAuth,
   hasBackdrop = true,
   onUpdateReactions,
+  onTriggerReaction,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -96,8 +98,18 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
     };
   }, [slot?.id, user]);
 
-  const handleReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh') => {
+  const handleReaction = async (type: 'fire' | 'eyes' | 'heart' | 'laugh', e?: React.MouseEvent) => {
     soundEngine.playClick();
+    const emojiMap: Record<string, string> = {
+      fire: '🔥',
+      eyes: '👀',
+      heart: '❤️',
+      laugh: '😂',
+    };
+    if (emojiMap[type]) {
+      onTriggerReaction?.(emojiMap[type], e);
+    }
+
     if (!user) {
       if (onRequireAuth) {
         onRequireAuth();
@@ -176,8 +188,9 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
   };
 
   const isKing = slot.rank === 1;
-  const isElite = slot.rank >= 2 && slot.rank <= 13;
-  const isLord = slot.rank >= 14 && slot.rank <= 40;
+  const isChampion = slot.rank >= 2 && slot.rank <= 5;
+  const isElite = slot.rank >= 6 && slot.rank <= 15;
+  const isLord = slot.rank >= 16 && slot.rank <= 40;
 
   const rawHandle = (slot.owner_handle || slot.bidderName || '').replace(/^@/, '').trim();
   const rawName = slot.owner_name?.trim();
@@ -208,8 +221,9 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
 
   const slotSubtitle = (() => {
     if (slot.rank === 1) return 'Current Supreme King of the Board';
-    if (slot.rank <= 13) return 'Inner Ring Elite Spot (High Attention)';
-    if (slot.rank <= 40) return 'Mid-Board Tier Spot (Ranks 14–40)';
+    if (slot.rank <= 5) return 'Champion Tier Spot (High Attention)';
+    if (slot.rank <= 15) return 'Elite Tier Spot (High Attention)';
+    if (slot.rank <= 40) return 'Mid-Board Tier Spot (Ranks 16–40)';
     if (slot.rank <= 100) return 'Active Grid Spot (Ranks 41–100)';
     return 'Archived Slot (Bump to Restore Placement)';
   })();
@@ -348,7 +362,7 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
                 <button
                   key={type}
                   type="button"
-                  onClick={() => handleReaction(type as any)}
+                  onClick={(e) => handleReaction(type as any, e)}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                     isActive
                       ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20 scale-105'
@@ -392,14 +406,16 @@ export const SlotDetailModal: React.FC<SlotDetailModalProps> = ({
             <div className="font-semibold text-white text-sm mt-1">
               {isKing
                 ? '👑 King of the Grid'
-                : isElite
-                  ? '⚡ Top 10 Spot'
-                  : isLord
-                    ? '🛡️ Top 40 Spot'
-                    : '🌟 Active on Grid'}
+                : isChampion
+                  ? '⚡ Top 5 Spot'
+                  : isElite
+                    ? '💎 Top 15 Spot'
+                    : isLord
+                      ? '🛡️ Top 40 Spot'
+                      : '🌟 Active on Grid'}
             </div>
             <span className="text-[10px] text-slate-300 mt-0.5 block truncate">
-              Active Value: <strong className="text-white font-mono font-semibold">${slot.activeValue.toLocaleString()}</strong> &bull; {isKing ? 'Center King' : isElite ? 'Top 10 Spot' : 'Active Spot'}
+              Active Value: <strong className="text-white font-mono font-semibold">${slot.activeValue.toLocaleString()}</strong> &bull; {isKing ? 'Center King' : isChampion || isElite ? 'Top 15 Spot' : 'Active Spot'}
             </span>
           </div>
         </div>

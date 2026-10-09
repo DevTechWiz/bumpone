@@ -11,3 +11,14 @@ export function stripControlChars(value: string): string {
     ''
   );
 }
+
+/**
+ * Sanitizes plain text input by stripping control chars, trimming whitespace,
+ * and limiting length.
+ */
+export function sanitizePlainText(value: string, maxLength?: number): string {
+  if (typeof value !== 'string') return '';
+  const cleaned = stripControlChars(value).trim();
+  return maxLength && maxLength > 0 ? cleaned.slice(0, maxLength) : cleaned;
+}
+

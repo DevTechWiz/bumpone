@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/adminAuth';
 import { allowRequest } from '@/lib/rateLimit';
-import { readJsonWithLimit } from '@/lib/requestGuard';
+import { readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { stripControlChars } from '@/lib/textSanitize';
 import { securityLog } from '@/lib/securityLogger';
 
@@ -37,7 +37,11 @@ export async function POST(request: NextRequest) {
     .update({ moderation_status: input.data.status, is_active: input.data.status === 'approved' })
     .eq('id', input.data.projectId)
     .select('id');
-  if (error) return NextResponse.json({ error: 'Unable to update project' }, { status: 500 });
+  if (error) {
+    const requestId = newRequestId();
+    console.error('Project moderation update failed:', requestId, error.message);
+    return NextResponse.json({ error: 'Unable to update project', request_id: requestId }, { status: 500 });
+  }
   // No rows updated = unknown project id. Fail before ranks/audit so the log
   // never records an action against a project that does not exist.
   if (!updated?.length) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
@@ -60,6 +64,12 @@ export async function POST(request: NextRequest) {
     input.data.projectId,
     input.data.status,
     input.data.reason
+  );
+  securityLog.adminAction(
+    `project_${input.data.status}`,
+    auth.user.id,
+    input.data.projectId,
+    { reason: input.data.reason }
   );
 
   return NextResponse.json({ success: true });

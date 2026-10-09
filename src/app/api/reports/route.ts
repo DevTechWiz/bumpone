@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import crypto from 'crypto';
 import { allowRequest } from '@/lib/rateLimit';
-import { clientIp, readJsonWithLimit, PRIVATE_NO_STORE } from '@/lib/requestGuard';
+import { clientIp, readJsonWithLimit, PRIVATE_NO_STORE, newRequestId } from '@/lib/requestGuard';
 import { ReportSchema } from '@/lib/contentSchemas';
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -65,8 +65,9 @@ export async function POST(request: NextRequest) {
       });
 
       if (err1) {
-        console.error('Error inserting report:', err1);
-        return NextResponse.json({ error: 'Failed to record report' }, { status: 500 });
+        const requestId = newRequestId();
+        console.error('Error inserting report:', requestId, err1);
+        return NextResponse.json({ error: 'Failed to record report', request_id: requestId }, { status: 500 });
       }
     }
 
@@ -75,7 +76,8 @@ export async function POST(request: NextRequest) {
       message: 'Report submitted successfully. Our moderation team will review this slot.',
     });
   } catch (err: any) {
-    console.error('Report submission error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Report submission error:', requestId, err);
+    return NextResponse.json({ error: 'Internal server error', request_id: requestId }, { status: 500 });
   }
 }

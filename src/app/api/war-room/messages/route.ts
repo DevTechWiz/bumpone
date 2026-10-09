@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { allowRequest, allowRequestDistributed } from '@/lib/rateLimit';
-import { clientIp, readJsonWithLimit } from '@/lib/requestGuard';
+import { clientIp, readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { messageSchema } from '@/lib/contentSchemas';
 import { securityLog } from '@/lib/securityLogger';
 
@@ -39,8 +39,9 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     if (error) {
-      console.error('Error fetching war room messages:', error);
-      return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });
+      const requestId = newRequestId();
+      console.error('Error fetching war room messages:', requestId, error);
+      return NextResponse.json({ error: 'Failed to fetch messages', request_id: requestId }, { status: 500 });
     }
 
     const messages = (data || []).reverse().map((row) => ({
@@ -57,8 +58,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ messages });
   } catch (err: any) {
-    console.error('Failed to load war room messages:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Failed to load war room messages:', requestId, err);
+    return NextResponse.json({ error: 'Internal server error', request_id: requestId }, { status: 500 });
   }
 }
 
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       securityLog.authzFailure('war_room_post_unauthenticated', undefined, ip);
       return NextResponse.json(
-        { error: 'Sign in to send messages in the Live Showcase Feed.' },
+        { error: 'Sign in to send shoutouts in the War Room.' },
         { status: 401 }
       );
     }
@@ -142,8 +144,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError || !inserted) {
-      console.error('Failed to insert war room message:', insertError);
-      return NextResponse.json({ error: 'Failed to record transmission' }, { status: 500 });
+      const requestId = newRequestId();
+      console.error('Failed to insert war room message:', requestId, insertError);
+      return NextResponse.json({ error: 'Failed to record transmission', request_id: requestId }, { status: 500 });
     }
 
     const message = {
@@ -158,7 +161,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, message });
   } catch (err: any) {
-    console.error('Error posting war room message:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const requestId = newRequestId();
+    console.error('Error posting war room message:', requestId, err);
+    return NextResponse.json({ error: 'Internal server error', request_id: requestId }, { status: 500 });
   }
 }

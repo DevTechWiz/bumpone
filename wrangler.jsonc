@@ -3,7 +3,7 @@
   "name": "bumpone-web",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-01-01",
-  "workers_dev": true,
+  "workers_dev": false,
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -34,8 +34,12 @@
     "NEXT_PUBLIC_APP_URL": "https://bumpone.lol",
     "APP_URL": "https://bumpone.lol",
     "NEXT_PUBLIC_R2_PUBLIC_URL": "https://assets.bumpone.lol",
-    "DODO_PAYMENTS_ENVIRONMENT": "test_mode",
+    "DODO_PAYMENTS_ENVIRONMENT": "live_mode",
     "DODO_PRODUCT_ID": "pdt_0NowwCBxH2gSEio45FSUM",
-    "R2_BUCKET_NAME": "bumpone-assets"
+    "R2_BUCKET_NAME": "bumpone-assets",
+    "ADMIN_EMAILS": "devendra.tampula@gmail.com",
+    "RESEND_FROM_EMAIL": "BumpOne Support <support@bumpone.lol>",
+    "SUPPORT_INBOX_EMAIL": "support@bumpone.lol"
   }
 }
+

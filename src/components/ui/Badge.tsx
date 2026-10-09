@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Crown, Sparkles, Shield } from 'lucide-react';
+import { Crown, Sparkles, Shield, Target } from 'lucide-react';
 import { getRankTier, type RankTier } from '@/lib/slotTypes';
 
 export type { RankTier };
@@ -14,6 +14,7 @@ export interface BadgeProps {
   color?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'gold' | 'platinum';
   className?: string;
   children?: ReactNode;
+  compact?: boolean;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
@@ -24,18 +25,19 @@ export const Badge: React.FC<BadgeProps> = ({
   color = 'default',
   className = '',
   children,
+  compact = false,
 }) => {
-  // Rank Badges in luxury cosmic style
+  // Rank Badges in luxury cosmic style with dynamic tier-proportional typography
   if (variant === 'rank' && typeof rank === 'number') {
     const tier = getRankTier(rank);
 
     if (tier === 'king') {
       return (
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-amber-500/15 text-amber-200 border border-amber-400/50 shadow-sm shadow-amber-500/20 backdrop-blur-md select-none ${className}`}
+          className={`inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs sm:text-sm font-black tracking-wide bg-amber-500/20 text-amber-200 border border-amber-400/60 shadow-md shadow-amber-500/25 backdrop-blur-md select-none ${className}`}
         >
-          <Crown className="w-3 h-3 text-amber-400 fill-amber-400/80" />
-          <span>#1 KING</span>
+          <Crown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 fill-amber-400/80" />
+          <span>{compact ? '#1' : '#1 KING'}</span>
         </span>
       );
     }
@@ -43,9 +45,13 @@ export const Badge: React.FC<BadgeProps> = ({
     if (tier === 'champion') {
       return (
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-tight bg-purple-500/20 text-purple-200 border border-purple-400/60 shadow-sm shadow-purple-500/25 backdrop-blur-md select-none ${className}`}
+          className={`inline-flex items-center justify-center gap-1 sm:gap-1.5 ${
+            compact
+              ? 'px-2 py-0.5 text-[11px] sm:text-xs'
+              : 'px-2.5 py-0.5 sm:px-3 sm:py-1 text-xs sm:text-sm'
+          } rounded-full font-bold tracking-tight bg-purple-500/20 text-purple-200 border border-purple-400/60 shadow-sm shadow-purple-500/25 backdrop-blur-md select-none ${className}`}
         >
-          <span>💎 #{rank} CHAMPION</span>
+          <span>💎 #{rank}{compact ? '' : ' CHAMPION'}</span>
         </span>
       );
     }
@@ -53,10 +59,14 @@ export const Badge: React.FC<BadgeProps> = ({
     if (tier === 'elite') {
       return (
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-tight bg-sky-500/15 text-sky-200 border border-sky-400/40 backdrop-blur-md select-none ${className}`}
+          className={`inline-flex items-center justify-center gap-1 sm:gap-1.5 ${
+            compact
+              ? 'px-1.5 py-0.5 text-[10px] sm:text-[10.5px]'
+              : 'px-2.5 py-0.5 sm:px-3 sm:py-1 text-xs sm:text-sm'
+          } rounded-full font-semibold tracking-tight bg-sky-500/15 text-sky-200 border border-sky-400/40 backdrop-blur-md select-none ${className}`}
         >
-          <Sparkles className="w-2.5 h-2.5 text-sky-300" />
-          <span>#{rank} ELITE</span>
+          <Sparkles className={`${compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} text-sky-300`} />
+          <span>#{rank}{compact ? '' : ' ELITE'}</span>
         </span>
       );
     }
@@ -64,20 +74,28 @@ export const Badge: React.FC<BadgeProps> = ({
     if (tier === 'vanguard') {
       return (
         <span
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium tracking-tight bg-emerald-500/15 text-emerald-200 border border-emerald-400/30 backdrop-blur-md select-none ${className}`}
+          className={`inline-flex items-center justify-center gap-1 sm:gap-1.5 ${
+            compact
+              ? 'px-1.5 py-0.5 text-[8.5px] sm:text-[9.5px]'
+              : 'px-2.5 py-0.5 sm:px-3 sm:py-1 text-xs sm:text-sm font-semibold'
+          } rounded-full tracking-tight bg-emerald-500/15 text-emerald-200 border border-emerald-400/30 backdrop-blur-md select-none ${className}`}
         >
-          <Shield className="w-2.5 h-2.5 text-emerald-300" />
-          <span>#{rank}</span>
+          <Shield className={`${compact ? 'w-2 h-2 sm:w-2.5 sm:h-2.5' : 'w-3.5 h-3.5'} text-emerald-300`} />
+          <span>#{rank}{compact ? '' : ' VANGUARD'}</span>
         </span>
       );
     }
 
-
     return (
       <span
-        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium bg-black/60 text-zinc-400 border border-white/[0.08] backdrop-blur-md select-none ${className}`}
+        className={`inline-flex items-center justify-center gap-1 sm:gap-1.5 ${
+          compact
+            ? 'px-1 py-0.2 sm:px-1.5 sm:py-0.5 text-[7px] sm:text-[8px] bg-black/70 text-zinc-400 border-white/[0.08]'
+            : 'px-2.5 py-0.5 sm:px-3 sm:py-1 text-xs sm:text-sm font-mono font-bold bg-zinc-800/90 text-zinc-300 border border-zinc-600/60 shadow-sm shadow-black/40'
+        } rounded-md border backdrop-blur-md select-none ${className}`}
       >
-        <span>#{rank}</span>
+        {!compact && <Target className="w-3.5 h-3.5 text-zinc-400 shrink-0" />}
+        <span>#{rank}{compact ? '' : ' CONTENDER'}</span>
       </span>
     );
   }

@@ -27,9 +27,12 @@ function Invoke-Step {
 # ------------------------------------------------------------------------------
 & docker rm -f $container
 Write-Host "==> starting $image" -ForegroundColor Cyan
+# Host port 25432: 55432 falls inside Windows' dynamic Hyper-V/WinNAT port
+# exclusion ranges on some machines ("forbidden by its access permissions").
+# Tests run via docker exec; the mapping is only for -Keep manual inspection.
 & docker run -d --name $container `
   -e POSTGRES_PASSWORD=test -e POSTGRES_DB=bumpone `
-  -p 55432:5432 $image postgres -c max_connections=300 | Out-Null
+  -p 25432:5432 $image postgres -c max_connections=300 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'docker run failed' }
 
 $ready = $false

@@ -191,7 +191,7 @@ describe('GET /api/board limit clamping', () => {
     ['in-range limit', '7', 7],
   ];
 
-  it.each(limitCases)('%s → query limit and rank ceiling clamped to %i', async (_label, rawLimit, expected) => {
+  it.each(limitCases)('%s → query limit clamped to %i (value-ordered membership)', async (_label, rawLimit, expected) => {
     mockTables(vi.mocked(supabaseAdmin.from), {
       projects: { data: [], error: null },
       system_state: { data: null, error: null },
@@ -203,6 +203,10 @@ describe('GET /api/board limit clamping', () => {
 
     expect(res.status).toBe(200);
     expect(builders.projects.limit.mock.calls.flat()).toContain(expected);
-    expect(builders.projects.lte).toHaveBeenCalledWith('current_rank', expected);
+    // docs/04:259-263 + Directory Archive: membership is the top `limit` by
+    // Active Value — no global-rank ceiling may be applied.
+    expect(builders.projects.lte).not.toHaveBeenCalled();
+    expect(builders.projects.not).not.toHaveBeenCalled();
+    expect(builders.projects.order).toHaveBeenCalledWith('current_active_value_minor', { ascending: false });
   });
 });

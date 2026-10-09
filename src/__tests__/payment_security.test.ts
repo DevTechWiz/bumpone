@@ -67,7 +67,7 @@ describe('parsePaymentSucceeded (webhook payload validation)', () => {
     if (result.ok) expect(result.value.amountMinor).toBe(2500);
   });
 
-  it('rejects explicitly non-USD currencies', () => {
+  it('rejects explicitly non-USD currencies when settlement currency is absent or non-USD', () => {
     expect(parsePaymentSucceeded({ payment_id: 'pay_1', amount: 1000, currency: 'eur' })).toEqual({
       ok: false,
       reason: 'unsupported_currency',
@@ -76,6 +76,26 @@ describe('parsePaymentSucceeded (webhook payload validation)', () => {
       ok: false,
       reason: 'unsupported_currency',
     });
+    expect(parsePaymentSucceeded({ payment_id: 'pay_1', amount: 1000, settlement_currency: 'EUR' })).toEqual({
+      ok: false,
+      reason: 'unsupported_currency',
+    });
+  });
+
+  it('accepts multi-currency customer payments settling in USD with net calculation', () => {
+    const result = parsePaymentSucceeded({
+      payment_id: 'pay_multi_1',
+      total_amount: 2493869,
+      currency: 'INR',
+      settlement_currency: 'USD',
+      settlement_amount: 24780,
+      settlement_tax: 3780,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.amountMinor).toBe(21000);
+      expect(result.value.currency).toBe('USD');
+    }
   });
 
   it('rejects malformed UUIDs in metadata (would otherwise crash PostgREST)', () => {

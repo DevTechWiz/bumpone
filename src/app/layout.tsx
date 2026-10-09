@@ -88,12 +88,13 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/bumpone-icon.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [
-      { url: "/apple-icon.svg", type: "image/svg+xml" },
+      { url: "/bumpone-icon.png", sizes: "180x180", type: "image/png" },
     ],
-    shortcut: ["/icon.svg"],
+    shortcut: ["/favicon.ico"],
   },
   manifest: "/manifest.webmanifest",
   robots: {
@@ -143,13 +144,13 @@ const jsonLd = {
       "url": "https://bumpone.lol",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://bumpone.lol/icon.svg",
-        "width": 512,
-        "height": 512,
+        "url": "https://bumpone.lol/bumpone-logo.png",
+        "width": 1024,
+        "height": 1024,
         "caption": "BumpOne Logo",
       },
       "sameAs": [
-        "https://x.com/bumpone",
+        "https://x.com/bumpone_lol",
         "https://github.com/DevTechWiz/bumpone",
       ],
       "contactPoint": {
@@ -182,8 +183,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://images.unsplash.com" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://images.unsplash.com" />
+        <link rel="preconnect" href="https://assets.bumpone.lol" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://assets.bumpone.lol" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

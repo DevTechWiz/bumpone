@@ -11,20 +11,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  * creation would fail anyway on its first write, and pre-019 behavior
  * (env-only) is preserved for ordinary visitors.
  */
-let cachedPauseState: { paused: boolean; timestamp: number } | null = null;
-const PAUSE_STATE_CACHE_TTL_MS = 10_000; // 10 seconds microcache
-
-export function invalidatePauseStateCache(): void {
-  cachedPauseState = null;
-}
-
 export async function isPurchasesPaused(): Promise<boolean> {
   if (process.env.PURCHASES_PAUSED === 'true') return true;
-
-  const now = Date.now();
-  if (cachedPauseState && now - cachedPauseState.timestamp < PAUSE_STATE_CACHE_TTL_MS) {
-    return cachedPauseState.paused;
-  }
 
   try {
     const { data, error } = await supabaseAdmin
@@ -36,9 +24,7 @@ export async function isPurchasesPaused(): Promise<boolean> {
       console.error('pause state read failed:', error.message);
       return false;
     }
-    const paused = Boolean(data?.purchases_paused);
-    cachedPauseState = { paused, timestamp: now };
-    return paused;
+    return Boolean(data?.purchases_paused);
   } catch (err) {
     console.error('pause state read threw:', err);
     return false;

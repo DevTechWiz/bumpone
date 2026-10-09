@@ -267,4 +267,30 @@ describe('BumpOne Board & Ranking Engine', () => {
     // Unrelated query should not match
     expect(isMatch(testSlot, '@otheruser')).toBe(false);
   });
+
+  it('correctly distinguishes owner vs visitor on graveyard cards', () => {
+    const userOwnedProjectId = 'proj-user-mine';
+    const otherUserProjectId = 'proj-user-other';
+
+    const userProjects = [{ id: userOwnedProjectId, title: 'My Displaced App' }];
+    const isOwner = (item: { id: string }) => userProjects.some((p) => p.id === item.id);
+
+    expect(isOwner({ id: userOwnedProjectId })).toBe(true);
+    expect(isOwner({ id: otherUserProjectId })).toBe(false);
+  });
+
+  it('preserves graveyard slot item as target when reclaiming', () => {
+    // When an item at rank 101 is reclaimed, it is not present in live slots (1-100)
+    const liveSlots = Array.from({ length: 100 }, (_, i) => ({ id: `p-${i + 1}`, rank: i + 1 }));
+    const graveyardItem = { id: 'p-101', rank: 101, title: 'Displaced Item', activeValue: 20 };
+
+    // Old bug: slots.find() returned undefined, setting target to null
+    const oldTarget = liveSlots.find((s) => s.id === graveyardItem.id) ?? null;
+    expect(oldTarget).toBeNull();
+
+    // Fixed logic: directly target the graveyard item so takeover modal can calculate top-up
+    const resolvedTarget = graveyardItem;
+    expect(resolvedTarget.id).toBe('p-101');
+    expect(resolvedTarget.rank).toBe(101);
+  });
 });

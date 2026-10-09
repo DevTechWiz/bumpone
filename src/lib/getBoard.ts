@@ -51,7 +51,6 @@ export async function getBoardProfiles(limit: number = 120): Promise<Profile[]> 
       .select(selectFields)
       .eq('is_active', true)
       .eq('moderation_status', 'approved')
-      .not('current_rank', 'is', null)
       .order('current_active_value_minor', { ascending: false })
       .order('ranking_sequence', { ascending: true })
       .limit(limit);

@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { supabaseAdmin } from './supabase/admin';
 import type { Profile, Category } from './board';
 import { safeExternalUrl } from './urls';
@@ -7,7 +8,7 @@ import { safeExternalUrl } from './urls';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HANDLE_RE = /^[a-z0-9_]{1,30}$/;
 
-export async function getProject(id: string): Promise<Profile | null> {
+export const getProject = cache(async function getProject(id: string): Promise<Profile | null> {
   if (!id) return null;
 
   try {
@@ -108,4 +109,4 @@ export async function getProject(id: string): Promise<Profile | null> {
     console.warn('Could not load project on server:', e);
     return null;
   }
-}
+});

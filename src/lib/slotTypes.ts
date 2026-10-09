@@ -27,6 +27,10 @@ export interface SlotItem {
   owner_handle?: string;
   owner_avatar?: string;
   category?: string;
+  /** Rank within the profile's own category among the visible top 100 (docs/06 hover). */
+  categoryRank?: number;
+  /** Global rank, passed only in category views (docs/06:382). */
+  globalRank?: number;
   reactions?: Record<string, number>;
 }
 
@@ -37,6 +41,7 @@ export interface BumpEvent {
   droppedItem: SlotItem;
   previousRank: number;
   newRank: number;
+  profilesDisplaced?: number;
 }
 
 export interface BoardStats {

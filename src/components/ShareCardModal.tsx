@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Crown, Sparkles, ExternalLink, Code2, Share2 } from "lucide-react";
+import Image from "next/image";
+import { Check, Copy, ExternalLink, Code2, Share2 } from "lucide-react";
 import { Modal } from "./ui/Modal";
 import { money } from "@/lib/board";
 
@@ -21,7 +22,16 @@ export interface ShareCardProps {
   onClose?: () => void;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://bumpone.lol";
+function getPublicBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("localhost")) {
+    return window.location.origin;
+  }
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (envUrl && !envUrl.includes("localhost")) {
+    return envUrl;
+  }
+  return "https://bumpone.lol";
+}
 
 export const ShareCard: React.FC<ShareCardProps> = ({
   project,
@@ -34,11 +44,12 @@ export const ShareCard: React.FC<ShareCardProps> = ({
   const activeValue = Math.floor(Number(project.current_active_value_minor || 0) / 100);
   const isKing = rank === 1;
 
-  const canonicalShareUrl = `${BASE_URL}/share/${project.id}`;
+  const publicBaseUrl = getPublicBaseUrl();
+  const canonicalShareUrl = `${publicBaseUrl}/share/${project.id}`;
 
   const tweetText = isKing
-    ? `👑 We just conquered Rank #1 Center King on @bumpone! Displaced the board — check out the live attention grid:`
-    : `🔥 ${project.title} is holding Rank #${rank} on @bumpone! Check out the live indie attention grid:`;
+    ? `👑 We just conquered Rank #1 Center King on @bumpone_lol! Displaced the board — check out the live attention grid:`
+    : `🔥 ${project.title} is holding Rank #${rank} on @bumpone_lol! Check out the live indie attention grid:`;
 
   const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(canonicalShareUrl)}`;
 
@@ -60,7 +71,7 @@ export const ShareCard: React.FC<ShareCardProps> = ({
       className={`w-full max-w-[540px] text-center relative overflow-hidden ${
         isModal
           ? "p-4 sm:p-5"
-          : "rounded-[24px] border border-white/[0.14] p-8 sm:p-10 shadow-2xl shadow-black/80 backdrop-blur-xl"
+          : "rounded-[24px] border border-white/[0.14] p-8 sm:p-10 shadow-2xl shadow-black/80 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-500"
       }`}
       style={
         isModal
@@ -80,7 +91,13 @@ export const ShareCard: React.FC<ShareCardProps> = ({
 
       <div className="relative z-10">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-[11px] font-mono font-bold tracking-widest text-amber-400 uppercase">
-          {isKing ? <Crown className="w-3.5 h-3.5 text-amber-400" /> : <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
+          <Image
+            src="/bumpone-logo.png"
+            alt="BumpOne"
+            width={14}
+            height={14}
+            className="w-3.5 h-3.5 object-contain"
+          />
           {isKing ? "👑 REIGNING KING #1" : `RANK #${rank}`} • BUMPONE.LOL
         </div>
 
@@ -105,8 +122,8 @@ export const ShareCard: React.FC<ShareCardProps> = ({
           {money(activeValue)} active attention value
         </p>
 
-        {/* 1-Click Viral Actions */}
-        <div className="mt-5 flex flex-col gap-2">
+        {/* 1-Click Viral Actions — share options rise in after the card (docs/13:129-135) */}
+        <div className="mt-5 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200 fill-mode-both">
           <a
             href={twitterShareUrl}
             target="_blank"
@@ -167,8 +184,10 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
 
   if (!isOpen || !project) return null;
 
-  const projectUrl = `${BASE_URL}/project/${project.id}`;
-  const badgeUrl = `${BASE_URL}/api/badge?id=${project.id}`;
+  const publicBaseUrl = getPublicBaseUrl();
+  const projectUrl = `${publicBaseUrl}/project/${project.id}`;
+  const badgeUrl = `${publicBaseUrl}/api/badge?id=${project.id}`;
+  const previewBadgeUrl = `/api/badge?id=${project.id}`;
 
   const markdownSnippet = `[![Ranked on BumpOne](${badgeUrl})](${projectUrl})`;
   const htmlSnippet = `<a href="${projectUrl}"><img src="${badgeUrl}" alt="Ranked on BumpOne" /></a>`;
@@ -233,7 +252,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
                 Live SVG Preview
               </span>
               <img
-                src={badgeUrl}
+                src={previewBadgeUrl}
                 alt="Ranked on BumpOne"
                 className="h-8 w-auto drop-shadow-lg"
               />

@@ -15,10 +15,13 @@ import {
   ShieldCheck,
   AtSign,
   ChevronDown,
+  Target,
+  Flame,
 } from 'lucide-react';
 import { Modal, Input, Button, Badge, getRankTier } from './ui';
 import { SlotItem } from '../lib/slotTypes';
 import { MIN_TOP_UP } from '../lib/board';
+import { sessionSetJSON } from '../lib/storage';
 import { useAuth } from '../lib/useAuth';
 import { processImageForUpload } from '../lib/imageOptimization';
 
@@ -32,9 +35,19 @@ export interface TopUpOrder {
   topUp: number;
   resultingValue: number;
   currentValue: number;
+  previousRank?: number | null;
   aspectRatio?: number;
   naturalWidth?: number;
   naturalHeight?: number;
+}
+
+export interface BumpPendingOrder {
+  projectId?: string;
+  title: string;
+  handle: string;
+  previousRank: number | null;
+  resultingValue: number;
+  at: number;
 }
 
 export interface TakeOverModalProps {
@@ -75,7 +88,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   categories,
   existingHandles,
   preselectedTargetSlot,
-  onSubmitTopUp: _onSubmitTopUp,
+  onSubmitTopUp,
   hasBackdrop = true,
 }) => {
   const { user, profile } = useAuth();
@@ -188,45 +201,64 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setMode('existing');
           setHolderId(preselectedTargetSlot.id);
           const holderObj = existingHandles.find((h) => h.id === preselectedTargetSlot.id);
+          const slotMatch = currentSlots.find((s) => s.id === preselectedTargetSlot.id);
           if (holderObj) {
             setTitle(holderObj.title || '');
-            if (holderObj.imageUrl) {
-              setImageUrl(holderObj.imageUrl);
-              measureImageDimensions(holderObj.imageUrl);
+            const img = holderObj.imageUrl || (holderObj as any).image_path || (holderObj as any).image_url || slotMatch?.imageUrl || preselectedTargetSlot.imageUrl || '';
+            setImageUrl(img);
+            setImageError(false);
+            if (img) {
+              measureImageDimensions(img);
             } else {
-              setImageUrl('');
               setImageDimensions({});
             }
-            setLinkUrl(holderObj.linkUrl || '');
+            setLinkUrl(holderObj.linkUrl || (holderObj as any).destination_url || slotMatch?.linkUrl || preselectedTargetSlot.linkUrl || '');
             if (holderObj.category) setCategory(holderObj.category);
             if (holderObj.handle) setCreatorHandle(holderObj.handle.replace(/^@/, ''));
           }
-          setTopUpStr(String(MIN_TOP_UP));
+          if (preselectedTargetSlot.rank > 100) {
+            const currentVal = holderObj?.activeValue ?? preselectedTargetSlot.activeValue;
+            const floorTarget = currentSlots.length < 100 ? 0 : Math.max(MIN_TOP_UP, entryFloor);
+            const neededToEnter = Math.max(MIN_TOP_UP, floorTarget - currentVal + 10);
+            setTopUpStr(String(neededToEnter));
+          } else {
+            setTopUpStr(String(MIN_TOP_UP));
+          }
         } else if (existingHandles.length > 0) {
           // Rival slot clicked: user owns projects, allow them to outbid with their first project
           setMode('existing');
           const firstProj = existingHandles[0];
+          const slotMatch = currentSlots.find((s) => s.id === firstProj.id);
           setHolderId(firstProj.id);
           setTitle(firstProj.title || '');
-          if (firstProj.imageUrl) {
-            setImageUrl(firstProj.imageUrl);
-            measureImageDimensions(firstProj.imageUrl);
+          const img = firstProj.imageUrl || (firstProj as any).image_path || (firstProj as any).image_url || slotMatch?.imageUrl || '';
+          setImageUrl(img);
+          setImageError(false);
+          if (img) {
+            measureImageDimensions(img);
           } else {
-            setImageUrl('');
             setImageDimensions({});
           }
-          setLinkUrl(firstProj.linkUrl || '');
+          setLinkUrl(firstProj.linkUrl || (firstProj as any).destination_url || slotMatch?.linkUrl || '');
           if (firstProj.category) setCategory(firstProj.category);
           if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
-          const needed = Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) - firstProj.activeValue + 10);
+          const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
+          const needed = isTargetEmpty
+            ? MIN_TOP_UP
+            : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue - firstProj.activeValue + 10);
           setTopUpStr(String(needed));
         } else {
           // No projects owned yet: bid a new project to pass the target
           setMode('new');
-          setTopUpStr(String(Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) + 10)));
+          const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
+          const needed = isTargetEmpty
+            ? MIN_TOP_UP
+            : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue + 10);
+          setTopUpStr(String(needed));
           setTitle('');
           setLinkUrl('');
           setImageUrl('');
+          setImageError(false);
           setImageDimensions({});
           const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
           setCreatorHandle(defaultH.replace(/^@/, ''));
@@ -238,20 +270,23 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setTitle('');
           setLinkUrl('');
           setImageUrl('');
+          setImageError(false);
           setImageDimensions({});
         } else {
           setMode('existing');
           const firstProj = existingHandles[0];
+          const slotMatch = currentSlots.find((s) => s.id === firstProj.id);
           setHolderId(firstProj.id);
           setTitle(firstProj.title || '');
-          if (firstProj.imageUrl) {
-            setImageUrl(firstProj.imageUrl);
-            measureImageDimensions(firstProj.imageUrl);
+          const img = firstProj.imageUrl || (firstProj as any).image_path || (firstProj as any).image_url || slotMatch?.imageUrl || '';
+          setImageUrl(img);
+          setImageError(false);
+          if (img) {
+            measureImageDimensions(img);
           } else {
-            setImageUrl('');
             setImageDimensions({});
           }
-          setLinkUrl(firstProj.linkUrl || '');
+          setLinkUrl(firstProj.linkUrl || (firstProj as any).destination_url || slotMatch?.linkUrl || '');
           if (firstProj.category) setCategory(firstProj.category);
           if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
         }
@@ -281,27 +316,36 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     }
   }, [profile, mode, creatorHandle]);
 
+  useEffect(() => {
+    setImageError(false);
+  }, [imageUrl, holderId]);
+
   const holder = existingHandles.find((h) => h.id === holderId) ?? null;
 
   const handleSelectHolder = (newHolderId: string) => {
     setHolderId(newHolderId);
     setErrorMsg(null);
+    setImageError(false);
     const selected = existingHandles.find((h) => h.id === newHolderId);
+    const slotMatch = currentSlots.find((s) => s.id === newHolderId);
     if (selected) {
       setTitle(selected.title || '');
-      if (selected.imageUrl) {
-        setImageUrl(selected.imageUrl);
-        measureImageDimensions(selected.imageUrl);
+      const img = selected.imageUrl || (selected as any).image_path || (selected as any).image_url || slotMatch?.imageUrl || '';
+      setImageUrl(img);
+      setImageError(false);
+      if (img) {
+        measureImageDimensions(img);
       } else {
-        setImageUrl('');
         setImageDimensions({});
       }
-      setLinkUrl(selected.linkUrl || '');
+      setLinkUrl(selected.linkUrl || (selected as any).destination_url || slotMatch?.linkUrl || '');
       if (selected.category) setCategory(selected.category);
       if (selected.handle) setCreatorHandle(selected.handle.replace(/^@/, ''));
       if (preselectedTargetSlot) {
         const needed = Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) - selected.activeValue + 10);
         setTopUpStr(String(needed));
+      } else {
+        setTopUpStr(String(MIN_TOP_UP));
       }
     }
   };
@@ -310,6 +354,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     if (newMode === mode) return;
     setMode(newMode);
     setErrorMsg(null);
+    setImageError(false);
     if (newMode === 'new') {
       setTitle('');
       setLinkUrl('');
@@ -319,29 +364,39 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
       setCreatorHandle(defaultH.replace(/^@/, ''));
       if (preselectedTargetSlot) {
-        setTopUpStr(String(Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) + 10)));
+        const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
+        const needed = isTargetEmpty
+          ? MIN_TOP_UP
+          : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue + 10);
+        setTopUpStr(String(needed));
       } else {
-        const floorNeeded = currentSlots.length < 100 ? MIN_TOP_UP : Math.max(MIN_TOP_UP, entryFloor) + 10;
+        const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
+        const floorNeeded = occupiedCount < 100 ? MIN_TOP_UP : Math.max(MIN_TOP_UP, entryFloor) + 10;
         setTopUpStr(String(floorNeeded));
       }
     } else if (existingHandles.length > 0) {
       const initialHolder = holderId ? existingHandles.find((h) => h.id === holderId) : existingHandles[0];
       const targetHolder = initialHolder || existingHandles[0];
+      const slotMatch = currentSlots.find((s) => s.id === targetHolder.id);
       if (targetHolder) {
         setHolderId(targetHolder.id);
         setTitle(targetHolder.title || '');
-        if (targetHolder.imageUrl) {
-          setImageUrl(targetHolder.imageUrl);
-          measureImageDimensions(targetHolder.imageUrl);
+        const img = targetHolder.imageUrl || (targetHolder as any).image_path || (targetHolder as any).image_url || slotMatch?.imageUrl || '';
+        setImageUrl(img);
+        setImageError(false);
+        if (img) {
+          measureImageDimensions(img);
         } else {
-          setImageUrl('');
           setImageDimensions({});
         }
-        setLinkUrl(targetHolder.linkUrl || '');
+        setLinkUrl(targetHolder.linkUrl || (targetHolder as any).destination_url || slotMatch?.linkUrl || '');
         if (targetHolder.category) setCategory(targetHolder.category);
         if (targetHolder.handle) setCreatorHandle(targetHolder.handle.replace(/^@/, ''));
         if (preselectedTargetSlot) {
-          const needed = Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) - targetHolder.activeValue + 10);
+          const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
+          const needed = isTargetEmpty
+            ? MIN_TOP_UP
+            : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue - targetHolder.activeValue + 10);
           setTopUpStr(String(needed));
         }
       }
@@ -384,15 +439,6 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   // Only new project bids displace the current occupant of #100 off the board into #101 (existing top-ups reorder internally)
   const _willDisplaceOccupantOf100 = mode === 'new' && victimSlot100 && projectedRank && projectedRank <= 100;
 
-  const handleQuickPreset = (targetAmount: number, isUnfilled100 = false) => {
-    if (isUnfilled100) {
-      setTopUpStr(String(MIN_TOP_UP));
-      return;
-    }
-    const baseline = Math.max(MIN_TOP_UP, targetAmount);
-    setTopUpStr(String(Math.max(MIN_TOP_UP, baseline - currentValue + 10)));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (parsedTopUp < MIN_TOP_UP) {
@@ -407,7 +453,8 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setErrorMsg('Please enter a project or product name.');
       return;
     }
-    if (!imageUrl.trim()) {
+    const effectiveImageUrl = (imageUrl || displayImageUrl).trim();
+    if (!effectiveImageUrl) {
       setErrorMsg(mode === 'new' ? 'Please upload your project logo or artwork.' : 'Project artwork is missing.');
       return;
     }
@@ -437,6 +484,14 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
     const calculatedTargetRank = Math.min(100, Math.max(1, projectedRank || 100));
 
+    const previousRank =
+      mode === 'existing' && holder
+        ? (() => {
+            const idx = currentSlots.findIndex((s) => s.id === holder.id);
+            return idx >= 0 ? idx + 1 : null;
+          })()
+        : null;
+
     setIsSubmitting(true);
     setErrorMsg(null);
 
@@ -445,7 +500,8 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       topUp: parsedTopUp,
       resultingValue,
       currentValue,
-      imageUrl: imageUrl.trim(),
+      previousRank,
+      imageUrl: effectiveImageUrl,
       linkUrl: finalUrl,
       title: title.trim(),
       handle: effectiveHandle,
@@ -468,7 +524,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           title: orderData.title,
           handle: effectiveHandle,
           linkUrl: orderData.linkUrl,
-          imageUrl: orderData.imageUrl,
+          imageUrl: effectiveImageUrl,
           category: orderData.category,
         }),
       });
@@ -491,6 +547,15 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
             checkoutUrl.protocol === 'https:' ||
             checkoutUrl.origin === window.location.origin
           ) {
+            sessionSetJSON('bump_pending', {
+              projectId: orderData.projectId,
+              title: orderData.title,
+              handle: orderData.handle,
+              previousRank: orderData.previousRank ?? null,
+              resultingValue: orderData.resultingValue,
+              at: Date.now(),
+            } satisfies BumpPendingOrder);
+            onSubmitTopUp?.(orderData);
             window.location.href = checkoutUrl.href;
             return;
           }
@@ -510,28 +575,332 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     }
   };
 
+  const currentSlotMatch = currentSlots.find((s) => s.id === (holder?.id || holderId));
+  const currentRank = mode === 'existing' && holder
+    ? (currentSlotMatch?.rank ?? (preselectedTargetSlot && preselectedTargetSlot.id === holder.id ? preselectedTargetSlot.rank : null))
+    : null;
+
+  const isKingHolder = currentRank === 1;
+  const isTop5Holder = currentRank != null && currentRank >= 2 && currentRank <= 5;
+  const isTop10Holder = currentRank != null && currentRank >= 6 && currentRank <= 10;
+
+  const displayImageUrl =
+    imageUrl ||
+    holder?.imageUrl ||
+    (holder as any)?.image_path ||
+    (holder as any)?.image_url ||
+    currentSlotMatch?.imageUrl ||
+    (preselectedTargetSlot && (preselectedTargetSlot.id === holderId || preselectedTargetSlot.id === holder?.id) ? preselectedTargetSlot.imageUrl : '');
+
   const kingSlot = currentSlots[0];
+  const top5Slot = currentSlots[4] || currentSlots[currentSlots.length - 1];
   const top10Slot = currentSlots[9] || currentSlots[currentSlots.length - 1];
-  const top40Slot = currentSlots[39] || currentSlots[currentSlots.length - 1];
+
+  const kingNeeded = kingSlot
+    ? Math.max(MIN_TOP_UP, kingSlot.activeValue - currentValue + 10)
+    : MIN_TOP_UP;
+
+  const top5Needed = top5Slot
+    ? Math.max(MIN_TOP_UP, top5Slot.activeValue - currentValue + 10)
+    : MIN_TOP_UP;
+
+  const top10Needed = top10Slot
+    ? Math.max(MIN_TOP_UP, top10Slot.activeValue - currentValue + 10)
+    : MIN_TOP_UP;
+
+  const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
+  const floorNeeded = occupiedCount < 100
+    ? MIN_TOP_UP
+    : Math.max(MIN_TOP_UP * 2, Math.max(MIN_TOP_UP, entryFloor) - currentValue + 10);
 
   const isTargetMine = Boolean(
     preselectedTargetSlot && existingHandles.some((h) => h.id === preselectedTargetSlot.id)
   );
 
+  const isTargetEmpty = Boolean(
+    preselectedTargetSlot && (!preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-'))
+  );
+
+  const targetSlotNeeded = preselectedTargetSlot
+    ? isTargetEmpty
+      ? MIN_TOP_UP
+      : isTargetMine
+        ? preselectedTargetSlot.rank > 100
+          ? Math.max(MIN_TOP_UP, (occupiedCount < 100 ? 0 : Math.max(MIN_TOP_UP, entryFloor)) - currentValue + 10)
+          : MIN_TOP_UP
+        : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue - currentValue + 10)
+    : null;
+
+  interface PresetItem {
+    id: string;
+    label: string;
+    subtitle: string;
+    amount: number;
+    badgeText?: string;
+    theme: 'emerald' | 'gold' | 'purple' | 'sky' | 'rose' | 'default';
+    icon: 'crown' | 'sparkles' | 'target' | 'flame' | 'shield';
+    hintText?: string;
+  }
+
+  const presets: PresetItem[] = React.useMemo(() => {
+    if (isKingHolder) {
+      // King #1: Crown Defense & Lead Expansion Presets
+      return [
+        {
+          id: 'defend-10',
+          label: '+$10 Boost',
+          subtitle: 'Streak Defend',
+          amount: 10,
+          badgeText: 'MIN',
+          theme: 'gold',
+          icon: 'crown',
+          hintText: 'Hold lead',
+        },
+        {
+          id: 'defend-25',
+          label: '+$25 Shield',
+          subtitle: 'Fortify Lead',
+          amount: 25,
+          badgeText: 'SAFE',
+          theme: 'emerald',
+          icon: 'shield',
+          hintText: '+25 cushion',
+        },
+        {
+          id: 'defend-50',
+          label: '+$50 Guard',
+          subtitle: 'Dominance Push',
+          amount: 50,
+          badgeText: 'HEAVY',
+          theme: 'purple',
+          icon: 'sparkles',
+          hintText: 'Crush rivals',
+        },
+        {
+          id: 'defend-100',
+          label: '+$100 Vault',
+          subtitle: 'Sovereign Lock',
+          amount: 100,
+          badgeText: '3×3 KING',
+          theme: 'gold',
+          icon: 'crown',
+          hintText: 'Unbreakable',
+        },
+      ];
+    }
+
+    if (isTop5Holder) {
+      // Top 5 Champion: Defend Anchor or Overtake King #1
+      const kingOvertake = kingSlot ? Math.max(MIN_TOP_UP, kingSlot.activeValue - currentValue + 10) : 20;
+      const amtKing = kingOvertake <= 10 ? 20 : kingOvertake;
+      const amtShield = amtKing === 25 ? 35 : 25;
+      const amtSurge = amtKing === 50 ? 60 : 50;
+
+      return [
+        {
+          id: 'top5-10',
+          label: '+$10 Advance',
+          subtitle: 'Maintain Anchor',
+          amount: 10,
+          badgeText: '2×2',
+          theme: 'purple',
+          icon: 'sparkles',
+          hintText: 'Stay in Top 5',
+        },
+        {
+          id: 'top5-king',
+          label: 'King #1 Crown',
+          subtitle: 'Claim Throne',
+          amount: amtKing,
+          badgeText: '3×3',
+          theme: 'gold',
+          icon: 'crown',
+          hintText: 'Center Stage',
+        },
+        {
+          id: 'top5-25',
+          label: '+$25 Shield',
+          subtitle: 'Fortify Rank',
+          amount: amtShield,
+          badgeText: 'BOOST',
+          theme: 'emerald',
+          icon: 'shield',
+          hintText: 'Solid buffer',
+        },
+        {
+          id: 'top5-50',
+          label: '+$50 Surge',
+          subtitle: 'Power Leap',
+          amount: amtSurge,
+          badgeText: 'POWER',
+          theme: 'sky',
+          icon: 'sparkles',
+          hintText: 'Surge ahead',
+        },
+      ];
+    }
+
+    if (isTop10Holder) {
+      // Top 10 Elite: Break into Top 5 or take King #1
+      const top5Overtake = top5Slot ? Math.max(MIN_TOP_UP, top5Slot.activeValue - currentValue + 10) : 20;
+      const amtTop5 = top5Overtake <= 10 ? 20 : top5Overtake;
+      const kingOvertake = kingSlot ? Math.max(amtTop5 + 10, kingSlot.activeValue - currentValue + 10) : amtTop5 + 20;
+      const amtSurge = (amtTop5 === 50 || kingOvertake === 50) ? 75 : 50;
+
+      return [
+        {
+          id: 'top10-10',
+          label: '+$10 Advance',
+          subtitle: 'Climb Elite',
+          amount: 10,
+          badgeText: 'ELITE',
+          theme: 'sky',
+          icon: 'sparkles',
+          hintText: 'Advance row',
+        },
+        {
+          id: 'top10-top5',
+          label: 'Top 5 Champion',
+          subtitle: 'Champion Anchor',
+          amount: amtTop5,
+          badgeText: '2×2',
+          theme: 'purple',
+          icon: 'sparkles',
+          hintText: '2×2 spotlight',
+        },
+        {
+          id: 'top10-king',
+          label: 'King #1 Crown',
+          subtitle: 'Claim Throne',
+          amount: kingOvertake,
+          badgeText: '3×3',
+          theme: 'gold',
+          icon: 'crown',
+          hintText: 'Center Stage',
+        },
+        {
+          id: 'top10-50',
+          label: '+$50 Surge',
+          subtitle: 'Power Leap',
+          amount: amtSurge,
+          badgeText: 'POWER',
+          theme: 'emerald',
+          icon: 'shield',
+          hintText: 'Massive push',
+        },
+      ];
+    }
+
+    // Challenger (Rank > 10, Graveyard, or New Project)
+    let p1Amount = floorNeeded;
+    let p1Label = occupiedCount < 100 ? 'Claim Slot' : 'Beat #100';
+    let p1Subtitle = occupiedCount < 100 ? 'Open Turf' : 'Billboard Floor';
+    let p1Theme: PresetItem['theme'] = 'default';
+    let p1Icon: PresetItem['icon'] = 'shield';
+    let p1Badge = occupiedCount < 100 ? 'OPEN' : 'FLOOR';
+    let p1Hint = 'Live Wall';
+
+    if (preselectedTargetSlot && !isTargetMine && preselectedTargetSlot.rank > 1 && targetSlotNeeded != null) {
+      p1Amount = targetSlotNeeded;
+      p1Label = isTargetEmpty ? `Claim #${preselectedTargetSlot.rank}` : `Beat #${preselectedTargetSlot.rank}`;
+      p1Subtitle = isTargetEmpty ? 'Open Turf' : preselectedTargetSlot.title;
+      p1Theme = 'emerald';
+      p1Icon = isTargetEmpty ? 'shield' : 'target';
+      p1Badge = isTargetEmpty ? 'OPEN' : 'TARGET';
+      p1Hint = isTargetEmpty ? '$10 Claim' : '+10 outbid';
+    } else if (isTargetMine && preselectedTargetSlot && preselectedTargetSlot.rank > 100 && targetSlotNeeded != null) {
+      p1Amount = targetSlotNeeded;
+      p1Label = 'Live Wall';
+      p1Subtitle = 'Reclaim Turf';
+      p1Theme = 'rose';
+      p1Icon = 'flame';
+      p1Badge = 'GRAVE';
+      p1Hint = 'Beat #100';
+    }
+
+    const p2Amount = Math.max(p1Amount + 10, top10Needed);
+    const p3Amount = Math.max(p2Amount + 10, top5Needed);
+    const p4Amount = Math.max(p3Amount + 10, kingNeeded);
+
+    return [
+      {
+        id: 'challenger-target',
+        label: p1Label,
+        subtitle: p1Subtitle,
+        amount: p1Amount,
+        badgeText: p1Badge,
+        theme: p1Theme,
+        icon: p1Icon,
+        hintText: p1Hint,
+      },
+      {
+        id: 'challenger-top10',
+        label: 'Top 10',
+        subtitle: 'Elite Tier',
+        amount: p2Amount,
+        badgeText: 'ELITE',
+        theme: 'sky',
+        icon: 'sparkles',
+        hintText: 'Hot Row',
+      },
+      {
+        id: 'challenger-top5',
+        label: 'Top 5',
+        subtitle: 'Champion Anchor',
+        amount: p3Amount,
+        badgeText: '2×2',
+        theme: 'purple',
+        icon: 'sparkles',
+        hintText: 'High Rank',
+      },
+      {
+        id: 'challenger-king',
+        label: 'King #1',
+        subtitle: 'Center Stage',
+        amount: p4Amount,
+        badgeText: '3×3',
+        theme: 'gold',
+        icon: 'crown',
+        hintText: 'Top Views',
+      },
+    ];
+  }, [
+    isKingHolder,
+    isTop5Holder,
+    isTop10Holder,
+    kingSlot,
+    top5Slot,
+    currentValue,
+    floorNeeded,
+    currentSlots.length,
+    preselectedTargetSlot,
+    isTargetMine,
+    targetSlotNeeded,
+    top10Needed,
+    top5Needed,
+    kingNeeded,
+  ]);
+
   const modalTitle = isTargetMine
-    ? `Top Up "${preselectedTargetSlot?.title}" (Rank #${preselectedTargetSlot?.rank})`
+    ? preselectedTargetSlot && preselectedTargetSlot.rank > 100
+      ? `Reclaim "${preselectedTargetSlot?.title}" to Billboard`
+      : `Top Up "${preselectedTargetSlot?.title}" (Rank #${preselectedTargetSlot?.rank})`
     : preselectedTargetSlot
       ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
       : mode === 'existing' && holder
         ? `Bump "${holder.title}"`
-        : 'Book Billboard Spot';
+        : 'Bump Billboard Spot';
 
   const modalSubtitle = isTargetMine
-    ? `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
+    ? preselectedTargetSlot && preselectedTargetSlot.rank > 100
+      ? `Top up active value to restore your project into the live top 100 billboard. Your preserved active value is $${preselectedTargetSlot.activeValue}.`
+      : `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
     : preselectedTargetSlot
       ? `Place at least $${Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) + 10} to claim Billboard Rank #${preselectedTargetSlot.rank}.`
       : mode === 'existing' && holder
-        ? `Top up active value to propel "${holder.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
+        ? isKingHolder
+          ? `Defend and cement your #1 King spot on the billboard. Minimum top-up $${MIN_TOP_UP}.`
+          : `Top up active value to propel "${holder.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
         : `Minimum entry is $${MIN_TOP_UP}. To bump any filled slot, add at least +$${MIN_TOP_UP}.`;
 
   return (
@@ -552,10 +921,10 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           </div>
           <div className="space-y-2 max-w-md mx-auto">
             <h3 className="text-lg font-bold text-white tracking-tight">
-              Sign In to Book or Boost Billboard Spot
+              Sign In to Bump or Boost Billboard Spot
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              You must be signed in with your account to book billboard spots, lock in your creator handle, and carry forward active value.
+              You must be signed in with your account to bump billboard spots, lock in your creator handle, and carry forward active value.
             </p>
           </div>
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -642,69 +1011,188 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
             </div>
           )}
 
-          {/* Quick Targets in dark glass */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300 uppercase tracking-wider">
-              Quick Rank Targets
-            </label>
+          {/* Arena Ambition Presets with FOMO & Target Restoration */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                Arena Ambition Presets
+              </label>
+              {preselectedTargetSlot && !isTargetMine ? (
+                <span className="text-[11px] text-emerald-400 font-mono font-medium flex items-center gap-1 truncate max-w-[220px]" title={`#${preselectedTargetSlot.rank} ${preselectedTargetSlot.title}`}>
+                  <Target className="w-3 h-3 shrink-0" />
+                  Target: #{preselectedTargetSlot.rank} {preselectedTargetSlot.title}
+                </span>
+              ) : isTargetMine && preselectedTargetSlot && preselectedTargetSlot.rank > 100 ? (
+                <span className="text-[11px] text-rose-300 font-mono font-medium flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-rose-400 shrink-0" />
+                  Graveyard #{preselectedTargetSlot.rank}
+                </span>
+              ) : null}
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickPreset(currentSlots.length < 100 ? 0 : Math.max(MIN_TOP_UP, entryFloor), currentSlots.length < 100)}
-                className="p-2.5 rounded-xl bg-black/40 border border-white/[0.08] hover:border-white/[0.2] text-left transition-all cursor-pointer"
-              >
-                <span className="block text-[10px] text-slate-400 font-medium">
-                  {currentSlots.length < 100 ? 'Enter Billboard (#100)' : 'Bump #100 Spot'}
-                </span>
-                <span className="block text-sm font-mono font-semibold text-white">
-                  ${currentSlots.length < 100 ? MIN_TOP_UP : Math.max(MIN_TOP_UP * 2, Math.max(MIN_TOP_UP, entryFloor) - currentValue + 10)}
-                </span>
-              </button>
-
-              {top40Slot && (
-                <button
-                  type="button"
-                  onClick={() => handleQuickPreset(top40Slot.activeValue)}
-                  className="p-2.5 rounded-xl bg-black/40 border border-zinc-600/40 hover:border-zinc-400/60 text-left transition-all cursor-pointer"
-                >
-                  <span className="block text-[10px] text-zinc-300 font-medium flex items-center gap-1">
-                    <Shield className="w-2.5 h-2.5" /> Top 40 Spot
-                  </span>
-                  <span className="block text-sm font-mono font-semibold text-zinc-200">
-                    ${Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, top40Slot.activeValue) - currentValue + 10)}
-                  </span>
-                </button>
-              )}
-
-              {top10Slot && (
-                <button
-                  type="button"
-                  onClick={() => handleQuickPreset(top10Slot.activeValue)}
-                  className="p-2.5 rounded-xl bg-black/40 border border-white/[0.12] hover:border-white/[0.25] text-left transition-all cursor-pointer"
-                >
-                  <span className="block text-[10px] text-slate-300 font-medium flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" /> Top 10 Spot
-                  </span>
-                  <span className="block text-sm font-mono font-semibold text-slate-200">
-                    ${Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, top10Slot.activeValue) - currentValue + 10)}
-                  </span>
-                </button>
-              )}
-
-              {kingSlot && (
-                <button
-                  type="button"
-                  onClick={() => handleQuickPreset(kingSlot.activeValue)}
-                  className="p-2.5 rounded-xl bg-black/40 border border-amber-400/30 hover:border-amber-400/60 text-left transition-all cursor-pointer"
-                >
-                  <span className="block text-[10px] text-amber-300 font-medium flex items-center gap-1">
-                    <Crown className="w-2.5 h-2.5" /> Bump #1 Crown
-                  </span>
-                  <span className="block text-sm font-mono font-semibold text-amber-200">
-                    ${Math.max(MIN_TOP_UP, Math.max(MIN_TOP_UP, kingSlot.activeValue) - currentValue + 10)}
-                  </span>
-                </button>
-              )}
+              {presets.map((p) => {
+                const isActive = parsedTopUp === p.amount;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setTopUpStr(String(p.amount));
+                      setErrorMsg(null);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col justify-between hover:scale-[1.02] active:scale-[0.98] ${
+                      isActive
+                        ? p.theme === 'gold'
+                          ? 'bg-gradient-to-br from-amber-500/30 via-black/85 to-yellow-950/40 border-amber-400 ring-2 ring-amber-400/90 shadow-xl shadow-amber-500/25'
+                          : p.theme === 'purple'
+                            ? 'bg-gradient-to-br from-purple-500/25 via-black/85 to-purple-950/40 border-purple-400 ring-2 ring-purple-400/90 shadow-xl shadow-purple-500/25'
+                            : p.theme === 'sky'
+                              ? 'bg-sky-950/40 border-sky-400 ring-2 ring-sky-400/80 shadow-lg shadow-sky-500/20'
+                              : p.theme === 'emerald'
+                                ? 'bg-emerald-950/40 border-emerald-400 ring-2 ring-emerald-400/80 shadow-lg shadow-emerald-500/20'
+                                : p.theme === 'rose'
+                                  ? 'bg-rose-950/40 border-rose-400 ring-2 ring-rose-400/80 shadow-lg shadow-rose-500/20'
+                                  : 'bg-white/[0.12] border-white ring-2 ring-white/80 shadow-lg'
+                        : p.theme === 'gold'
+                          ? 'bg-gradient-to-br from-amber-500/10 via-black/60 to-yellow-950/20 border-amber-400/35 hover:border-amber-400/70 hover:shadow-lg hover:shadow-amber-500/15'
+                          : p.theme === 'purple'
+                            ? 'bg-gradient-to-br from-purple-500/10 via-black/60 to-purple-950/20 border-purple-400/30 hover:border-purple-400/70 hover:shadow-lg hover:shadow-purple-500/15'
+                            : p.theme === 'emerald'
+                              ? 'bg-emerald-950/15 border-emerald-500/30 hover:border-emerald-400/60'
+                              : p.theme === 'rose'
+                                ? 'bg-rose-950/15 border-rose-500/30 hover:border-rose-400/60'
+                                : 'bg-black/40 border-white/[0.08] hover:border-white/[0.25]'
+                    }`}
+                  >
+                    {p.theme === 'gold' && (
+                      <div className="absolute -top-8 -right-8 w-20 h-20 bg-amber-500/15 rounded-full blur-lg pointer-events-none" />
+                    )}
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <span
+                          className={`text-[10px] font-mono font-bold flex items-center gap-1 uppercase tracking-wide ${
+                            p.theme === 'gold'
+                              ? 'text-amber-300'
+                              : p.theme === 'purple'
+                                ? 'text-purple-300'
+                                : p.theme === 'sky'
+                                  ? 'text-sky-300'
+                                  : p.theme === 'emerald'
+                                    ? 'text-emerald-300'
+                                    : p.theme === 'rose'
+                                      ? 'text-rose-300'
+                                      : 'text-slate-300'
+                          }`}
+                        >
+                          {p.icon === 'crown' && (
+                            <Crown className="w-3 h-3 text-amber-400 fill-amber-400/50 shrink-0" />
+                          )}
+                          {p.icon === 'sparkles' && (
+                            <Sparkles
+                              className={`w-3 h-3 shrink-0 ${
+                                p.theme === 'purple' ? 'text-purple-400' : 'text-sky-400'
+                              }`}
+                            />
+                          )}
+                          {p.icon === 'target' && (
+                            <Target className="w-3 h-3 text-emerald-400 shrink-0" />
+                          )}
+                          {p.icon === 'flame' && (
+                            <Flame className="w-3 h-3 text-rose-400 shrink-0" />
+                          )}
+                          {p.icon === 'shield' && (
+                            <Shield className="w-3 h-3 text-slate-400 shrink-0" />
+                          )}
+                          {p.label}
+                        </span>
+                        {isActive ? (
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
+                              p.theme === 'gold'
+                                ? 'bg-amber-400'
+                                : p.theme === 'purple'
+                                  ? 'bg-purple-400'
+                                  : p.theme === 'sky'
+                                    ? 'bg-sky-400'
+                                    : p.theme === 'emerald'
+                                      ? 'bg-emerald-400'
+                                      : p.theme === 'rose'
+                                        ? 'bg-rose-400'
+                                        : 'bg-white'
+                            }`}
+                          />
+                        ) : p.badgeText ? (
+                          <span
+                            className={`text-[9px] font-mono px-1 py-0.2 rounded border font-bold shrink-0 ${
+                              p.theme === 'gold'
+                                ? 'bg-amber-400/20 text-amber-200 border-amber-400/40'
+                                : p.theme === 'purple'
+                                  ? 'bg-purple-400/20 text-purple-200 border-purple-400/40'
+                                  : p.theme === 'sky'
+                                    ? 'bg-sky-400/15 text-sky-200 border-sky-400/30'
+                                    : p.theme === 'emerald'
+                                      ? 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30'
+                                      : p.theme === 'rose'
+                                        ? 'bg-rose-400/15 text-rose-300 border-rose-400/30'
+                                        : 'bg-white/[0.08] text-neutral-300 border-white/[0.12]'
+                            }`}
+                          >
+                            {p.badgeText}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div
+                        className={`text-[11px] font-medium truncate ${
+                          p.theme === 'gold' ? 'text-amber-100/90' : 'text-slate-200'
+                        }`}
+                        title={p.subtitle}
+                      >
+                        {p.subtitle}
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <span
+                        className={`text-base font-mono font-bold ${
+                          p.theme === 'gold'
+                            ? 'text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-400 font-black'
+                            : p.theme === 'purple'
+                              ? 'text-purple-200'
+                              : p.theme === 'sky'
+                                ? 'text-slate-100'
+                                : p.theme === 'emerald'
+                                  ? 'text-emerald-200'
+                                  : p.theme === 'rose'
+                                    ? 'text-rose-200'
+                                    : 'text-white'
+                        }`}
+                      >
+                        ${p.amount}
+                      </span>
+                      {p.hintText && (
+                        <span
+                          className={`text-[9px] font-mono ${
+                            p.theme === 'gold'
+                              ? 'text-amber-300/90'
+                              : p.theme === 'purple'
+                                ? 'text-purple-300/80'
+                                : p.theme === 'sky'
+                                  ? 'text-sky-300/80'
+                                  : p.theme === 'emerald'
+                                    ? 'text-emerald-400/90'
+                                    : p.theme === 'rose'
+                                      ? 'text-rose-300/80'
+                                      : 'text-slate-400'
+                          }`}
+                        >
+                          {p.hintText}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -746,48 +1234,67 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           {/* Live Rank Projection Calculator Box */}
           {projectedRank && (
             <div
-              className={`p-3.5 rounded-xl border transition-colors ${tierProjected === 'king'
-                ? 'bg-amber-950/20 border-amber-400/40 text-amber-200'
-                : tierProjected === 'champion'
-                  ? 'bg-purple-950/20 border-purple-400/40 text-purple-200'
-                  : tierProjected === 'elite'
-                    ? 'bg-sky-950/20 border-sky-400/40 text-sky-200'
-                    : tierProjected === 'vanguard'
-                      ? 'bg-emerald-950/20 border-emerald-400/30 text-emerald-200'
-                      : tierProjected === 'contender'
-                        ? 'bg-black/40 border-white/[0.08] text-neutral-300'
-                        : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
-                }`}
+              className={`p-3.5 sm:p-4 rounded-xl border transition-all ${
+                tierProjected === 'king'
+                  ? 'bg-amber-950/25 border-amber-400/40 text-amber-200 shadow-md shadow-amber-950/30'
+                  : tierProjected === 'champion'
+                    ? 'bg-purple-950/25 border-purple-400/40 text-purple-200 shadow-md shadow-purple-950/30'
+                    : tierProjected === 'elite'
+                      ? 'bg-sky-950/25 border-sky-400/40 text-sky-200 shadow-md shadow-sky-950/20'
+                      : tierProjected === 'vanguard'
+                        ? 'bg-emerald-950/25 border-emerald-400/30 text-emerald-200 shadow-md shadow-emerald-950/20'
+                        : tierProjected === 'contender'
+                          ? 'bg-zinc-900/80 border-zinc-700/60 text-zinc-300 shadow-md shadow-black/40'
+                          : 'bg-rose-950/25 border-rose-500/30 text-rose-300'
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 sm:gap-2.5">
                   <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">
                     Projected Outcome:
                   </span>
                   {projectedRank <= 100 ? (
-                    <Badge variant="rank" rank={projectedRank} className="backdrop-blur-none shadow-none" />
+                    <Badge variant="rank" rank={projectedRank} className="shadow-md" />
                   ) : (
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-rose-950/40 text-rose-300 border border-rose-500/30">
+                    <span className="px-2.5 py-1 rounded-md text-xs sm:text-sm font-mono font-bold bg-rose-950/40 text-rose-300 border border-rose-500/30">
                       Rank #{projectedRank} (Archived)
                     </span>
                   )}
                 </div>
-                <span className="text-xs font-mono font-medium text-neutral-300">
+                <span className="text-xs sm:text-sm font-mono font-semibold text-neutral-300">
                   {tierProjected === 'king' && '👑 #1 King Spot'}
                   {tierProjected === 'champion' && '💎 Top 5 Champion Spot'}
                   {tierProjected === 'elite' && '⚡ Top 10 Spot'}
                   {tierProjected === 'vanguard' && '🛡️ Top 40 Spot'}
-                  {tierProjected === 'contender' && '🎯 Active Spot'}
+                  {tierProjected === 'contender' && '🎯 Contender Spot (Base Tier)'}
                   {tierProjected === 'dropped' && 'Rank #101+ (Archived) — below live top 100 showcase'}
                 </span>
               </div>
 
               {projectedRank <= 100 && (
-                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-                  At <strong>${resultingValue}</strong> active value, you bump to <strong>Rank #{projectedRank}</strong> (recomputed at payment).
+                <p className="text-xs sm:text-[13px] text-slate-300 mt-2.5 leading-relaxed">
+                  At <strong className="text-white font-mono font-bold">${resultingValue}</strong> active value, you{' '}
+                  {isKingHolder && projectedRank === 1 ? 'defend & fortify' : 'conquer'}{' '}
+                  <strong
+                    className={`font-mono font-bold ${
+                      tierProjected === 'king'
+                        ? 'text-amber-300'
+                        : tierProjected === 'champion'
+                          ? 'text-purple-300'
+                          : tierProjected === 'elite'
+                            ? 'text-sky-300'
+                            : tierProjected === 'vanguard'
+                              ? 'text-emerald-300'
+                              : 'text-zinc-200'
+                    }`}
+                  >
+                    Rank #{projectedRank}
+                  </strong>{' '}
+                  {isKingHolder && projectedRank === 1 ? '(Crown Defended)' : '(recomputed at payment)'}.
                   {bumpedVictim && (
                     <span>
-                      {' '}You shift <strong>{bumpedVictim.title}</strong> down to #{projectedRank + 1}.
+                      {' '}You displace <strong className="text-white font-medium">{bumpedVictim.title}</strong> down to{' '}
+                      <span className="font-mono text-neutral-300">#{projectedRank + 1}</span>.
                     </span>
                   )}
                 </p>
@@ -823,7 +1330,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               }}
               className={`p-3.5 rounded-xl border transition-all ${isDragging
                 ? 'bg-indigo-500/10 border-indigo-400'
-                : imageUrl
+                : displayImageUrl
                   ? 'bg-black/40 border-white/[0.14]'
                   : 'bg-black/30 border-dashed border-white/[0.2] hover:border-white/[0.35]'
                 }`}
@@ -831,17 +1338,17 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-14 h-14 rounded-xl bg-slate-900 overflow-hidden shrink-0 border border-white/[0.12] flex items-center justify-center relative shadow-inner">
-                    {!imageError && imageUrl ? (
+                    {!imageError && displayImageUrl ? (
                       <>
                         <img
-                          src={imageUrl}
+                          src={displayImageUrl}
                           alt=""
                           aria-hidden="true"
                           className="absolute inset-0 w-full h-full object-cover filter blur-md opacity-40 scale-125 pointer-events-none"
                           referrerPolicy="no-referrer"
                         />
                         <img
-                          src={imageUrl}
+                          src={displayImageUrl}
                           alt="Project Logo"
                           onError={() => setImageError(true)}
                           className="relative z-10 max-h-full max-w-full object-contain p-1"
@@ -859,11 +1366,11 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                       <span className="font-semibold text-white block">
                         {isUploading
                           ? 'Uploading to Cloudflare CDN…'
-                          : imageUrl
+                          : displayImageUrl
                             ? 'Project Logo Ready'
                             : 'Upload Project Logo'}
                       </span>
-                      {imageUrl && (
+                      {displayImageUrl && (
                         <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                           ✓ Ready
                         </span>
@@ -874,6 +1381,8 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                         <span className="text-emerald-400 font-mono">
                           {imageDimensions.width}&times;{imageDimensions.height}px ({imageDimensions.aspectRatio}:1)
                         </span>
+                      ) : displayImageUrl ? (
+                        mode === 'existing' ? 'Live board artwork loaded' : 'Logo loaded. Click replace to swap'
                       ) : (
                         'Upload high-res JPG, PNG, or WebP'
                       )}
@@ -896,13 +1405,13 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
 
                 <Button
                   type="button"
-                  variant={imageUrl ? 'secondary' : 'primary'}
+                  variant={displayImageUrl ? 'secondary' : 'primary'}
                   size="sm"
                   leftIcon={<Upload className="w-3.5 h-3.5" />}
                   onClick={() => fileInputRef.current?.click()}
                   className="text-xs py-1.5 shrink-0"
                 >
-                  {imageUrl ? 'Replace Logo' : 'Upload Logo'}
+                  {displayImageUrl ? 'Replace Logo' : 'Upload Logo'}
                 </Button>
               </div>
             </div>

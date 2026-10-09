@@ -39,7 +39,10 @@ export async function createDodoCheckoutSession(params: CreateCheckoutParams): P
   checkoutUrl: string;
 }> {
   const client = getDodoClient();
-  const productId = params.productId || process.env.DODO_PRODUCT_ID || 'p_bumped_top_up';
+  const productId = params.productId || process.env.DODO_PRODUCT_ID;
+  if (!productId) {
+    throw new Error('DODO_PRODUCT_ID is not configured');
+  }
 
   if (!client) {
     if (process.env.NODE_ENV === 'production') {
