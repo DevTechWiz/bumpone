@@ -35,7 +35,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const redirectUrl = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider === 'x' ? 'twitter' : provider,
+        provider: provider as any,
         options: {
           redirectTo: redirectUrl,
           queryParams: provider === 'google' ? {
