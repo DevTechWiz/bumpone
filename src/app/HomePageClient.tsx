@@ -10,6 +10,8 @@ import {
   VolumeX,
   HelpCircle,
   User as UserIcon,
+  Menu,
+  X,
 } from 'lucide-react';
 import { Button, Skeleton } from '../components/ui';
 import { useAuth } from '../lib/useAuth';
@@ -25,7 +27,7 @@ import {
 } from '../lib/board';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import { safeGetJSON, sessionGetJSON, sessionSetJSON, safeSet } from '../lib/storage';
+import { safeGetJSON, safeSetJSON, sessionGetJSON, sessionSetJSON, safeSet } from '../lib/storage';
 import { fetchBoardClient, invalidateClientBoardCache } from '../lib/boardClient';
 import { GridBoard } from '../components/GridBoard';
 import type { BumpPendingOrder } from '../components/TakeOverModal';
@@ -168,28 +170,30 @@ export function HomePageClient({
 
   useEffect(() => {
     setHasMounted(true);
-    // 1. Session cache: instant 0ms restoration when navigating back from profiles
-    const cachedSession = sessionGetJSON<Profile[]>('bumped_board_cache');
-    if (cachedSession && Array.isArray(cachedSession) && cachedSession.length > 0) {
-      setProfiles(cachedSession);
-      setIsBoardLoading(false);
-    } else {
-      const saved = safeGetJSON<Profile[]>(STORAGE_KEY_PROFILES);
-      if (saved && Array.isArray(saved) && saved.length > 0 && typeof saved[0].active_value === 'number') {
-        setProfiles(saved);
+    // Only fall back to client storage if initialProfiles was not provided from the server
+    if (initialProfiles === undefined) {
+      const cachedSession = sessionGetJSON<Profile[]>('bumped_board_cache');
+      if (cachedSession && Array.isArray(cachedSession) && cachedSession.length > 0) {
+        setProfiles(cachedSession);
         setIsBoardLoading(false);
+      } else {
+        const saved = safeGetJSON<Profile[]>(STORAGE_KEY_PROFILES);
+        if (saved && Array.isArray(saved) && saved.length > 0 && typeof saved[0].active_value === 'number') {
+          setProfiles(saved);
+          setIsBoardLoading(false);
+        }
+      }
+      const savedOffboard = safeGetJSON<Profile[]>(STORAGE_KEY_OFFBOARD);
+      if (Array.isArray(savedOffboard) && savedOffboard.length > 0) {
+        setOffboard(savedOffboard);
       }
     }
-    const savedOffboard = safeGetJSON<Profile[]>(STORAGE_KEY_OFFBOARD);
-    if (Array.isArray(savedOffboard) && savedOffboard.length > 0) {
-      setOffboard(savedOffboard);
-    }
 
-    // If initialProfiles is provided from SSR, delay background sync to keep main thread completely idle
+    // Live background sync: server is always the authoritative source of truth
     const fetchLiveBoard = () => {
       fetchBoardClient({ limit: 120 })
         .then((data) => {
-          if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          if (data && Array.isArray(data.profiles)) {
             setProfiles(() => {
               const next = [...data.profiles];
               if (initialProject && !next.some((p) => p.id === initialProject.id)) {
@@ -197,6 +201,9 @@ export function HomePageClient({
               }
               return next;
             });
+            safeSetJSON(STORAGE_KEY_PROFILES, data.profiles);
+            sessionSetJSON('bumped_board_cache', data.profiles);
+
             const sorted = sortBoard(data.profiles);
             if (sorted.length > 100) {
               const dbOffboard = sorted.slice(100);
@@ -209,6 +216,9 @@ export function HomePageClient({
                 }
                 return combined.slice(0, 50);
               });
+            } else {
+              setOffboard([]);
+              safeSetJSON(STORAGE_KEY_OFFBOARD, []);
             }
           }
         })
@@ -226,7 +236,7 @@ export function HomePageClient({
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [initialProfiles]);
+  }, [initialProfiles, initialProject]);
 
 
   // 2. UI and modal state (mirrors reference App).
@@ -247,6 +257,18 @@ export function HomePageClient({
   const slotsRef = useRef<SlotItem[]>([]);
   const realtimeChannelRef = useRef<any>(null);
   const lastBroadcastTimeRef = useRef<number>(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen]);
 
   const spawnReaction = useCallback(
     (emoji: string, coords?: { x?: number; y?: number; xRatio?: number }) => {
@@ -1403,6 +1425,7 @@ export function HomePageClient({
 
       {/* Persistent Full-Screen Command Header */}
       <header className="shrink-0 z-40 bg-[#141519]/90 backdrop-blur-xl border-b border-white/[0.08] px-3 sm:px-4 h-13 sm:h-14 flex items-center justify-between gap-2">
+        {/* Brand Left */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
             <Image
@@ -1419,22 +1442,22 @@ export function HomePageClient({
               BumpOne<span className="text-amber-400 font-semibold">.lol</span>
               <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
             </h1>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
+            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Top 100
             </span>
           </div>
         </div>
 
-        {/* Center: Search & Filter Toolbar */}
-        <div className="flex-1 flex items-center justify-center px-2 min-w-0">
+        {/* Center: Search & Filter Toolbar (Desktop >= 1580px only) */}
+        <div className="hidden min-[1580px]:flex flex-1 items-center justify-center px-2 min-w-0">
           <GridFilterBar
             filterState={filterState}
             onFilterChange={setFilterState}
           />
         </div>
 
-        {/* Right: Actions, Simulator & Take Over */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Desktop Controls (>= 1580px only) */}
+        <div className="hidden min-[1580px]:flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={handleToggleMute}
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${isMuted
@@ -1455,14 +1478,12 @@ export function HomePageClient({
               soundEngine.playClick();
               setIsWarRoomOpen(true);
             }}
-            className="text-xs py-1 px-2 sm:px-2.5 bg-white/[0.05] border-white/[0.12] text-neutral-200 hover:bg-white/[0.1]"
+            className="text-xs py-1 px-2.5 bg-white/[0.05] border-white/[0.12] text-neutral-200 hover:bg-white/[0.1]"
             title="Open War Room Activity Feed"
           >
-            <span className="hidden sm:inline">War Room</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span>War Room</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5" />
           </Button>
-
-
 
           <Button
             variant="outline"
@@ -1472,7 +1493,7 @@ export function HomePageClient({
               soundEngine.playClick();
               setIsRulesOpen(true);
             }}
-            className="hidden lg:inline-flex text-xs py-1"
+            className="inline-flex text-xs py-1"
             title="Billboard Rules & Protocol (?)"
           >
             Rules
@@ -1486,7 +1507,7 @@ export function HomePageClient({
               soundEngine.playClick();
               setIsLeaderboardOpen(true);
             }}
-            className="hidden sm:inline-flex text-xs py-1"
+            className="inline-flex text-xs py-1"
             title="Billboard Leaderboard"
           >
             Leaderboard
@@ -1503,7 +1524,7 @@ export function HomePageClient({
             className="text-xs py-1 px-2.5"
             title="Billboard Graveyard (#101+)"
           >
-            <span className="hidden xs:inline">Graveyard</span>{' '}
+            <span>Graveyard</span>{' '}
             {!hasMounted && offboard.length === 0 ? (
               <Skeleton variant="rounded" width={14} height={12} className="inline-block ml-1 align-middle" />
             ) : (
@@ -1598,7 +1619,256 @@ export function HomePageClient({
             )}
           </Button>
         </div>
+
+        {/* Mobile / Tablet Header Right (< 1580px: BUMP #1 + Menu) */}
+        <div className="flex min-[1580px]:hidden items-center gap-1.5 shrink-0">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Zap className="w-3.5 h-3.5" />}
+            onClick={() => {
+              soundEngine.playClick();
+              if (slots[0]) {
+                setTargetSlotToBump(slots[0]);
+              }
+              if (!user) {
+                setIsAuthOpen(true);
+                return;
+              }
+              setIsTakeOverOpen(true);
+            }}
+            className="text-xs font-bold py-1 px-2.5 whitespace-nowrap"
+          >
+            {slots[0] ? (
+              <span>BUMP #1 <span className="font-mono text-[11px] opacity-90 font-normal">(${ (slots[0]?.activeValue ?? 100) + 10})</span></span>
+            ) : (
+              <span>BUMP #1</span>
+            )}
+          </Button>
+
+          <button
+            onClick={() => {
+              soundEngine.playClick();
+              setIsMobileMenuOpen(true);
+            }}
+            className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.12] text-white hover:bg-white/[0.1] cursor-pointer transition-colors"
+            title="Open Menu"
+            aria-label="Open Navigation Menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
       </header>
+
+      {/* Mobile / Tablet Slide-Over Drawer (< 1580px) */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 min-[1580px]:hidden" role="dialog" aria-modal="true">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+
+          {/* Slide-out Sheet */}
+          <div className="fixed inset-y-0 right-0 w-[85%] max-w-sm bg-[#141519] border-l border-white/[0.12] shadow-2xl flex flex-col z-50 animate-in slide-in-from-right duration-200 ease-out">
+            {/* Drawer Top */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08] bg-[#101115]">
+              <div className="flex items-center gap-2">
+                <Image
+                  src="/bumpone-logo.png"
+                  alt="BumpOne"
+                  width={24}
+                  height={24}
+                  className="w-6 h-6 object-contain"
+                />
+                <span className="font-extrabold text-white text-sm">
+                  BumpOne<span className="text-amber-400">.lol</span>
+                </span>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors"
+                aria-label="Close menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Account Status / Profile */}
+              <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+                {authLoading ? (
+                  <Skeleton variant="rounded-lg" width="100%" height={32} />
+                ) : user ? (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 truncate">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                          {(profile?.handle || user.email || 'U')[0].toUpperCase()}
+                        </div>
+                        <span className="text-xs font-semibold text-white truncate">
+                          {profile?.handle ? `@${profile.handle}` : user.email}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.08] text-neutral-300 shrink-0">
+                        {existingHandles.length} slot{existingHandles.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-white/[0.06]">
+                      <button
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          setViewingProfileMode('user');
+                          setViewingProfileId('self');
+                          if (typeof window !== 'undefined') {
+                            window.history.pushState({ viewingProfile: true, profileId: 'self' }, '', '/profile');
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs text-neutral-200 font-medium text-center cursor-pointer transition-colors"
+                      >
+                        My Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          signOut();
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-xs text-rose-300 font-medium text-center cursor-pointer transition-colors"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold text-white">Join Billboard</div>
+                      <div className="text-[11px] text-neutral-400">Claim & bump slots</div>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<UserIcon className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsAuthOpen(true);
+                      }}
+                      className="text-xs py-1 px-3"
+                    >
+                      Sign In
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Search & Filters */}
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-2">
+                  Search & Filters
+                </div>
+                <GridFilterBar
+                  filterState={filterState}
+                  onFilterChange={setFilterState}
+                  className="w-full flex-wrap gap-2"
+                />
+              </div>
+
+              {/* Navigation Items */}
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-2">
+                  Live Features
+                </div>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setIsMobileMenuOpen(false);
+                      setIsWarRoomOpen(true);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Radio className="w-4 h-4 text-zinc-300" />
+                      <span>War Room Feed</span>
+                    </div>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setIsMobileMenuOpen(false);
+                      setIsLeaderboardOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
+                  >
+                    <Search className="w-4 h-4 text-slate-400" />
+                    <span>Top 100 Leaderboard</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setIsMobileMenuOpen(false);
+                      setIsGraveyardOpen(true);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Archive className="w-4 h-4 text-slate-400" />
+                      <span>Graveyard (#101+)</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-neutral-400">({offboard.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setIsMobileMenuOpen(false);
+                      setIsRulesOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
+                  >
+                    <HelpCircle className="w-4 h-4 text-slate-400" />
+                    <span>Billboard Rules & Protocol</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sound Setting */}
+              <div className="pt-2 border-t border-white/[0.08]">
+                <button
+                  onClick={() => {
+                    handleToggleMute();
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+                    <span>Sound Effects</span>
+                  </div>
+                  <span className={`text-[11px] font-mono ${isMuted ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {isMuted ? 'Muted' : 'Active'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Pinned Bottom Menu Footer */}
+            <div className="w-full px-4 py-3 border-t border-white/[0.08] bg-[#101115] flex items-center justify-between text-[11px] text-neutral-400 font-mono shrink-0">
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Terms</a>
+              <span>&bull;</span>
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Privacy</a>
+              <span>&bull;</span>
+              <a href="/refund" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Refunds</a>
+              <span>&bull;</span>
+              <a href="/contact" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Contact</a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Full-Screen Layout */}
       <main className="flex-1 w-full h-full min-h-0 px-2 sm:px-3 pt-1.5 pb-1.5 flex flex-col relative z-10 overflow-hidden gap-1">
@@ -1614,7 +1884,7 @@ export function HomePageClient({
             onOrientationChange={handleOrientationChange}
           />
 
-          <div className="hidden md:block">
+          <div className="hidden xl:block">
             <RadarMiniMap
               slots={slots}
               orientation={gridOrientation}
@@ -1627,63 +1897,46 @@ export function HomePageClient({
           </div>
         </div>
 
-        {/* Bottom Floating Coordinate & Status HUD — pr reserved for RadarMiniMap on desktop */}
-        <div className="shrink-0 px-3 py-1 pr-3 md:pr-[260px] rounded-xl bg-[#141519]/90 backdrop-blur-md border border-white/[0.08] flex items-center justify-between text-[10px] sm:text-[11px] text-neutral-300 shadow-lg">
-          {hoveredSlot ? (
-            <div className="flex items-center gap-2 truncate font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0 animate-ping" />
-              <span className="text-zinc-200 font-bold">
-                [#{hoveredSlot.rank} &bull; {gridOrientation}]
-              </span>
-              <span className="text-white font-sans font-semibold">
-                Rank #{hoveredSlot.rank} {hoveredSlot.title}
-              </span>
-              <span className="text-neutral-400 hidden md:inline">
-                Held by <strong className="text-neutral-200">{hoveredSlot.bidderName}</strong> at <strong className="text-emerald-400 font-mono">${hoveredSlot.activeValue}</strong> active value
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 truncate">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              <span className="truncate">
-                <strong>Active Value Protocol:</strong> Top up to climb — your active value carries forward. Spots #1–#100 are live on the billboard; listings displaced beyond #100 enter the Graveyard.
-              </span>
-            </div>
-          )}
-          <div className="shrink-0 pl-2 flex items-center gap-2.5">
-            <span className="hidden lg:inline text-neutral-400 font-mono text-[10px]">
-              Total Active Value:{' '}
+        {/* Bottom Floating Coordinate & Status HUD — xl:pr reserved for RadarMiniMap on large desktop */}
+        <div className="shrink-0 px-2.5 sm:px-3 py-1 sm:py-1.5 xl:pr-[250px] rounded-xl bg-[#141519]/90 backdrop-blur-md border border-white/[0.08] flex items-center justify-between text-[10px] sm:text-[11px] text-neutral-300 shadow-lg min-w-0 gap-2">
+          {/* Left Hover Telemetry: hidden on small screens/mobile (< lg) since hover interactions do not exist on touch devices */}
+          <div className="hidden lg:flex items-center min-w-0 truncate">
+            {hoveredSlot ? (
+              <div className="flex items-center gap-1.5 sm:gap-2 truncate font-mono min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0 animate-ping" />
+                <span className="text-zinc-200 font-bold shrink-0">
+                  [#{hoveredSlot.rank}]
+                </span>
+                <span className="text-white font-sans font-semibold truncate">
+                  {hoveredSlot.title}
+                </span>
+                <span className="text-neutral-400 hidden xl:inline truncate">
+                  &bull; Held by <strong className="text-neutral-200">{hoveredSlot.bidderName}</strong> at <strong className="text-emerald-400 font-mono">${hoveredSlot.activeValue}</strong>
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 sm:gap-2 truncate min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span className="truncate text-neutral-300">
+                  <strong className="text-white font-medium">Active Value Protocol:</strong>{' '}
+                  <span className="hidden xl:inline">Top up to climb &bull; your value carries forward. </span>
+                  Spots #1–100 live on billboard.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Right Metrics: stretches across full width with balanced spacing on small screens (< lg) */}
+          <div className="w-full lg:w-auto flex items-center justify-between lg:justify-end gap-2 sm:gap-4 shrink-0">
+            <span className="text-neutral-400 font-mono text-[10px] shrink-0">
+              Total <span className="hidden sm:inline">Active </span>Value:{' '}
               {profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={52} height={12} className="inline-block ml-1 align-middle" />
               ) : (
                 <strong className="text-white font-bold">${formatNumber(stats.totalBidsVolume)}</strong>
               )}
             </span>
-            <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
-              Floor{' '}
-              {profiles.length === 0 ? (
-                <Skeleton variant="rounded" width={24} height={12} className="inline-block ml-1 align-middle" />
-              ) : (
-                <strong className="text-white font-bold">${entryFloor}</strong>
-              )}
-            </span>
-            <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
-              King{' '}
-              {profiles.length === 0 ? (
-                <Skeleton variant="rounded" width={28} height={12} className="inline-block ml-1 align-middle" />
-              ) : (
-                <strong className="text-amber-200 font-bold">${stats.rank1Bid}</strong>
-              )}
-            </span>
-            <span className="hidden sm:inline text-neutral-400 font-mono text-[10px]">
-              #10{' '}
-              {profiles.length === 0 ? (
-                <Skeleton variant="rounded" width={24} height={12} className="inline-block ml-1 align-middle" />
-              ) : (
-                <strong className="text-neutral-200 font-bold">${stats.rank10Bid}</strong>
-              )}
-            </span>
-            <span className="hidden sm:inline font-mono text-[10px] text-rose-300">
+            <span className="font-mono text-[10px] text-rose-300 shrink-0">
               Off-board{' '}
               {offboard.length === 0 && profiles.length === 0 ? (
                 <Skeleton variant="rounded" width={16} height={12} className="inline-block ml-1 align-middle" />
@@ -1691,19 +1944,19 @@ export function HomePageClient({
                 <strong className="font-bold">{offboard.length}</strong>
               )}
             </span>
-            <div className="hidden lg:flex items-center gap-2 border-l border-white/[0.1] pl-2.5 text-[9px] text-neutral-400 font-mono">
+            <div className="flex items-center gap-1.5 sm:gap-2 border-l border-white/[0.1] pl-2 text-[9px] text-neutral-400 font-mono shrink-0">
               <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Terms
               </a>
-              <span>•</span>
+              <span>&bull;</span>
               <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Privacy
               </a>
-              <span>•</span>
+              <span>&bull;</span>
               <a href="/refund" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Refunds
               </a>
-              <span>•</span>
+              <span>&bull;</span>
               <a href="/contact" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Contact
               </a>

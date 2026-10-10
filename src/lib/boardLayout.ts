@@ -117,25 +117,25 @@ export function computeBoardLayout(
   // 2. Batch 2: Ranks 2 - 5 (4 slots) - 4 Cardinal Champions (2x2 blocks flanking #1)
   const batch2Blocks = isLandscape
     ? [
-        // Left Champion (#2)
-        [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
-        // Right Champion (#3)
-        [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
-        // Top Champion (#4)
-        [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
-        // Bottom Champion (#5)
-        [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
-      ]
+      // Left Champion (#2)
+      [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
+      // Right Champion (#3)
+      [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
+      // Top Champion (#4)
+      [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
+      // Bottom Champion (#5)
+      [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
+    ]
     : [
-        // Top Champion (#2)
-        [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
-        // Bottom Champion (#3)
-        [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
-        // Left Champion (#4) - distinct cols (centerC - 3, centerC - 2) so zero overlap with King
-        [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
-        // Right Champion (#5) - distinct cols (centerC + 2, centerC + 3) so zero overlap with King
-        [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
-      ];
+      // Top Champion (#2)
+      [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
+      // Bottom Champion (#3)
+      [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
+      // Left Champion (#4) - distinct cols (centerC - 3, centerC - 2) so zero overlap with King
+      [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
+      // Right Champion (#5) - distinct cols (centerC + 2, centerC + 3) so zero overlap with King
+      [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
+    ];
 
   let curRank = 2;
   for (const block of batch2Blocks) {
@@ -164,31 +164,31 @@ export function computeBoardLayout(
   // 3. Batch 3: Ranks 6 - 15 (10 slots) - Elite Council (2-cell cards in inner rings with balanced aspect ratios)
   const batch3Candidates = isLandscape
     ? [
-        // Elite (#6..#15): 1-column wide x 2-rows tall vertical cards (prevents excessive width)
-        [{ r: centerR - 3, c: centerC - 3 }, { r: centerR - 2, c: centerC - 3 }],
-        [{ r: centerR - 3, c: centerC - 2 }, { r: centerR - 2, c: centerC - 2 }],
-        [{ r: centerR - 3, c: centerC + 1 }, { r: centerR - 2, c: centerC + 1 }],
-        [{ r: centerR - 3, c: centerC + 2 }, { r: centerR - 2, c: centerC + 2 }],
-        [{ r: centerR - 3, c: centerC + 3 }, { r: centerR - 2, c: centerC + 3 }],
-        [{ r: centerR + 2, c: centerC - 3 }, { r: centerR + 3, c: centerC - 3 }],
-        [{ r: centerR + 2, c: centerC - 2 }, { r: centerR + 3, c: centerC - 2 }],
-        [{ r: centerR + 2, c: centerC + 1 }, { r: centerR + 3, c: centerC + 1 }],
-        [{ r: centerR + 2, c: centerC + 2 }, { r: centerR + 3, c: centerC + 2 }],
-        [{ r: centerR + 2, c: centerC + 3 }, { r: centerR + 3, c: centerC + 3 }],
-      ]
+      // Elite (#6..#15): 1-column wide x 2-rows tall vertical cards (prevents excessive width)
+      [{ r: centerR - 3, c: centerC - 3 }, { r: centerR - 2, c: centerC - 3 }],
+      [{ r: centerR - 3, c: centerC - 2 }, { r: centerR - 2, c: centerC - 2 }],
+      [{ r: centerR - 3, c: centerC + 1 }, { r: centerR - 2, c: centerC + 1 }],
+      [{ r: centerR - 3, c: centerC + 2 }, { r: centerR - 2, c: centerC + 2 }],
+      [{ r: centerR - 3, c: centerC + 3 }, { r: centerR - 2, c: centerC + 3 }],
+      [{ r: centerR + 2, c: centerC - 3 }, { r: centerR + 3, c: centerC - 3 }],
+      [{ r: centerR + 2, c: centerC - 2 }, { r: centerR + 3, c: centerC - 2 }],
+      [{ r: centerR + 2, c: centerC + 1 }, { r: centerR + 3, c: centerC + 1 }],
+      [{ r: centerR + 2, c: centerC + 2 }, { r: centerR + 3, c: centerC + 2 }],
+      [{ r: centerR + 2, c: centerC + 3 }, { r: centerR + 3, c: centerC + 3 }],
+    ]
     : [
-        // In portrait orientation, use balanced pairs (horizontal near center rows, vertical near top/bottom)
-        [{ r: centerR - 4, c: centerC - 2 }, { r: centerR - 3, c: centerC - 2 }],
-        [{ r: centerR - 4, c: centerC + 2 }, { r: centerR - 3, c: centerC + 2 }],
-        [{ r: centerR + 3, c: centerC - 2 }, { r: centerR + 4, c: centerC - 2 }],
-        [{ r: centerR + 3, c: centerC + 2 }, { r: centerR + 4, c: centerC + 2 }],
-        [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }],
-        [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }],
-        [{ r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
-        [{ r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
-        [{ r: centerR + 1, c: centerC - 3 }, { r: centerR + 1, c: centerC - 2 }],
-        [{ r: centerR + 1, c: centerC + 2 }, { r: centerR + 1, c: centerC + 3 }],
-      ];
+      // In portrait orientation, use balanced pairs (horizontal near center rows, vertical near top/bottom)
+      [{ r: centerR - 4, c: centerC - 2 }, { r: centerR - 3, c: centerC - 2 }],
+      [{ r: centerR - 4, c: centerC + 2 }, { r: centerR - 3, c: centerC + 2 }],
+      [{ r: centerR + 3, c: centerC - 2 }, { r: centerR + 4, c: centerC - 2 }],
+      [{ r: centerR + 3, c: centerC + 2 }, { r: centerR + 4, c: centerC + 2 }],
+      [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }],
+      [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }],
+      [{ r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
+      [{ r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
+      [{ r: centerR + 1, c: centerC - 3 }, { r: centerR + 1, c: centerC - 2 }],
+      [{ r: centerR + 1, c: centerC + 2 }, { r: centerR + 1, c: centerC + 3 }],
+    ];
 
   for (const pair of batch3Candidates) {
     if (curRank > 15) break;
