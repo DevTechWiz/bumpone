@@ -71,14 +71,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Dispatch background alert if Resend is enabled
-    sendContactNotification({
+    // Dispatch alert if Resend is enabled (awaited so edge/serverless workers do not abort in-flight HTTP)
+    await sendContactNotification({
       name: cleanName,
       email: email.toLowerCase(),
       subject: cleanSubject,
       message: cleanMessage,
       messageId: data.id,
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('[Contact] Background notification dispatch error:', err);
+    });
 
     return NextResponse.json({
       success: true,

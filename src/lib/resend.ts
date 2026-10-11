@@ -98,14 +98,20 @@ export async function sendContactNotification(params: {
   const resend = getResendClient();
   if (!resend) return;
 
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'BumpOne Support <support@bumpone.lol>';
+  const notifyEmail = process.env.SUPPORT_INBOX_EMAIL || 'support@bumpone.lol';
+
   try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: [NOTIFY_EMAIL],
+    const { data, error } = await resend.emails.send({
+      from: fromEmail,
+      to: [notifyEmail],
       replyTo: params.email,
       subject: `[BumpOne Support] New Inquiry: ${params.subject} (from ${params.name})`,
       text: `New support ticket received:\n\nFrom: ${params.name} <${params.email}>\nSubject: ${params.subject}\nTicket ID: ${params.messageId}\n\nMessage:\n${params.message}\n\nView and reply in admin dashboard: https://bumpone.lol/admin`,
     });
+    if (error) {
+      console.warn('[Resend] Contact notification error:', error.message);
+    }
   } catch (err) {
     console.warn('[Resend] Failed to send contact notification email:', err);
   }
