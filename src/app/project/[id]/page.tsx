@@ -88,7 +88,7 @@ export default async function ProjectShowcasePage({
       {projectJsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(projectJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(projectJsonLd).replace(/</g, '\\u003c') }}
         />
       )}
       <HomePageClient

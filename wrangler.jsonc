@@ -37,8 +37,8 @@
     "DODO_PAYMENTS_ENVIRONMENT": "live_mode",
     "DODO_PRODUCT_ID": "pdt_0NpN6wMWmRcjASc4ZdBbK",
     "R2_BUCKET_NAME": "bumpone-assets",
-    "ADMIN_EMAILS": "devendra.tampula@gmail.com",
+    "ADMIN_EMAILS": "devendra.tampula@gmail.com,bumpone.lol@gmail.com",
     "RESEND_FROM_EMAIL": "BumpOne Support <support@bumpone.lol>",
-    "SUPPORT_INBOX_EMAIL": "support@bumpone.lol"
+    "SUPPORT_INBOX_EMAIL": "bumpone.lol@gmail.com"
   }
 }

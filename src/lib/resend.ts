@@ -9,7 +9,6 @@ export function getResendClient(): Resend | null {
 }
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'BumpOne Support <support@bumpone.lol>';
-const NOTIFY_EMAIL = process.env.SUPPORT_INBOX_EMAIL || 'support@bumpone.lol';
 
 export interface SendReplyParams {
   to: string;
@@ -102,7 +101,7 @@ export async function sendContactNotification(params: {
   const notifyEmail = process.env.SUPPORT_INBOX_EMAIL || 'support@bumpone.lol';
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { error } = await resend.emails.send({
       from: fromEmail,
       to: [notifyEmail],
       replyTo: params.email,

@@ -44,6 +44,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "playwright-core": "^1.64.0",
     "potrace": "^2.1.8",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.23.15",

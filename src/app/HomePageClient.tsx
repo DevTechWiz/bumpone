@@ -1871,8 +1871,8 @@ export function HomePageClient({
       )}
 
       {/* Main Full-Screen Layout */}
-      <main className="flex-1 w-full h-full min-h-0 px-2 sm:px-3 pt-1.5 pb-1.5 flex flex-col relative z-10 overflow-hidden gap-1">
-        <div className="flex-1 w-full h-full min-h-0 relative">
+      <main className="flex-1 w-full min-h-0 px-2 sm:px-3 pt-1.5 pb-1.5 flex flex-col relative z-10 overflow-hidden gap-1">
+        <div className="flex-1 w-full min-h-0 relative">
           <GridBoard
             slots={slots}
             isLoading={isBoardLoading && slots.length === 0}

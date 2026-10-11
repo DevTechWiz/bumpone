@@ -89,7 +89,23 @@ export function computeBoardLayout(
 
   const grid: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
 
-  // 1. Batch 1: Hero King #1 (3 cols x 3 rows in center)
+  interface RawBlock {
+    minC: number;
+    maxC: number;
+    minR: number;
+    maxR: number;
+    w: number;
+    h: number;
+    x: number;
+    y: number;
+    area: number;
+    dist: number;
+    tierHint?: 'king' | 'champion' | 'elite';
+  }
+
+  const rawBlocks: RawBlock[] = [];
+
+  // 1. Center Hero King #1 (3 cols x 3 rows in center)
   const hMinC = centerC - 1, hMaxC = centerC + 1;
   const hMinR = centerR - 1, hMaxR = centerR + 1;
   for (let r = hMinR; r <= hMaxR; r++) {
@@ -97,74 +113,68 @@ export function computeBoardLayout(
       grid[r][c] = 1;
     }
   }
-  const heroX = colX[hMinC], heroY = rowY[hMinR];
   let heroW = 0, heroH = 0;
   for (let c = hMinC; c <= hMaxC; c++) heroW += colW[c];
   for (let r = hMinR; r <= hMaxR; r++) heroH += rowH[r];
 
-  slots[1] = {
-    rank: 1,
-    tier: getRankTier(1),
-    x: heroX,
-    y: heroY,
+  rawBlocks.push({
+    minC: hMinC,
+    maxC: hMaxC,
+    minR: hMinR,
+    maxR: hMaxR,
+    x: colX[hMinC],
+    y: rowY[hMinR],
     w: heroW,
     h: heroH,
     area: heroW * heroH,
-    batch: 1,
-    batchName: 'KING',
-  };
+    dist: 0,
+    tierHint: 'king',
+  });
 
-  // 2. Batch 2: Ranks 2 - 5 (4 slots) - 4 Cardinal Champions (2x2 blocks flanking #1)
+  // 2. Champions: 4 Cardinal 2x2 anchors flanking #1
   const batch2Blocks = isLandscape
     ? [
-      // Left Champion (#2)
       [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
-      // Right Champion (#3)
       [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
-      // Top Champion (#4)
       [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
-      // Bottom Champion (#5)
       [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
     ]
     : [
-      // Top Champion (#2)
       [{ r: centerR - 3, c: centerC - 1 }, { r: centerR - 3, c: centerC }, { r: centerR - 2, c: centerC - 1 }, { r: centerR - 2, c: centerC }],
-      // Bottom Champion (#3)
       [{ r: centerR + 2, c: centerC - 1 }, { r: centerR + 2, c: centerC }, { r: centerR + 3, c: centerC - 1 }, { r: centerR + 3, c: centerC }],
-      // Left Champion (#4) - distinct cols (centerC - 3, centerC - 2) so zero overlap with King
       [{ r: centerR - 1, c: centerC - 3 }, { r: centerR - 1, c: centerC - 2 }, { r: centerR, c: centerC - 3 }, { r: centerR, c: centerC - 2 }],
-      // Right Champion (#5) - distinct cols (centerC + 2, centerC + 3) so zero overlap with King
       [{ r: centerR - 1, c: centerC + 2 }, { r: centerR - 1, c: centerC + 3 }, { r: centerR, c: centerC + 2 }, { r: centerR, c: centerC + 3 }],
     ];
 
-  let curRank = 2;
   for (const block of batch2Blocks) {
     const minC = Math.min(...block.map((c) => c.c)), maxC = Math.max(...block.map((c) => c.c));
     const minR = Math.min(...block.map((c) => c.r)), maxR = Math.max(...block.map((c) => c.r));
-    for (const cell of block) grid[cell.r][cell.c] = curRank;
+    for (const cell of block) grid[cell.r][cell.c] = 2;
     const x = colX[minC], y = rowY[minR];
     let w = 0, h = 0;
     for (let c = minC; c <= maxC; c++) w += colW[c];
     for (let r = minR; r <= maxR; r++) h += rowH[r];
+    const centerX = x + w / 2, centerY = y + h / 2;
+    const dist = Math.hypot((centerY - height / 2) / height, (centerX - width / 2) / width);
 
-    slots[curRank] = {
-      rank: curRank,
-      tier: getRankTier(curRank),
+    rawBlocks.push({
+      minC,
+      maxC,
+      minR,
+      maxR,
       x,
       y,
       w,
       h,
       area: w * h,
-      batch: 2,
-      batchName: 'CHAMPION',
-    };
-    curRank++;
+      dist,
+      tierHint: 'champion',
+    });
   }
 
-  // 3. Batch 3: Ranks 6 - 15 (10 slots) - Elite Council (2-cell cards in inner rings with balanced aspect ratios)
+  // 3. Elite Council (10 slots) in the inner concentric ring
   const batch3Candidates = isLandscape
     ? [
-      // Elite (#6..#15): 1-column wide x 2-rows tall vertical cards (prevents excessive width)
       [{ r: centerR - 3, c: centerC - 3 }, { r: centerR - 2, c: centerC - 3 }],
       [{ r: centerR - 3, c: centerC - 2 }, { r: centerR - 2, c: centerC - 2 }],
       [{ r: centerR - 3, c: centerC + 1 }, { r: centerR - 2, c: centerC + 1 }],
@@ -177,7 +187,6 @@ export function computeBoardLayout(
       [{ r: centerR + 2, c: centerC + 3 }, { r: centerR + 3, c: centerC + 3 }],
     ]
     : [
-      // In portrait orientation, use balanced pairs (horizontal near center rows, vertical near top/bottom)
       [{ r: centerR - 4, c: centerC - 2 }, { r: centerR - 3, c: centerC - 2 }],
       [{ r: centerR - 4, c: centerC + 2 }, { r: centerR - 3, c: centerC + 2 }],
       [{ r: centerR + 3, c: centerC - 2 }, { r: centerR + 4, c: centerC - 2 }],
@@ -190,8 +199,9 @@ export function computeBoardLayout(
       [{ r: centerR + 1, c: centerC + 2 }, { r: centerR + 1, c: centerC + 3 }],
     ];
 
+  let eliteCount = 0;
   for (const pair of batch3Candidates) {
-    if (curRank > 15) break;
+    if (eliteCount >= 10) break;
     let ok = true;
     for (const cell of pair) {
       if (cell.r < 0 || cell.r >= rows || cell.c < 0 || cell.c >= cols || grid[cell.r][cell.c] !== 0) {
@@ -200,42 +210,46 @@ export function computeBoardLayout(
       }
     }
     if (ok) {
-      for (const cell of pair) grid[cell.r][cell.c] = curRank;
+      for (const cell of pair) grid[cell.r][cell.c] = 3;
       const minC = Math.min(...pair.map((c) => c.c)), maxC = Math.max(...pair.map((c) => c.c));
       const minR = Math.min(...pair.map((c) => c.r)), maxR = Math.max(...pair.map((c) => c.r));
       const x = colX[minC], y = rowY[minR];
       let w = 0, h = 0;
       for (let c = minC; c <= maxC; c++) w += colW[c];
       for (let r = minR; r <= maxR; r++) h += rowH[r];
+      const centerX = x + w / 2, centerY = y + h / 2;
+      const dist = Math.hypot((centerY - height / 2) / height, (centerX - width / 2) / width);
 
-      slots[curRank] = {
-        rank: curRank,
-        tier: getRankTier(curRank),
+      rawBlocks.push({
+        minC,
+        maxC,
+        minR,
+        maxR,
         x,
         y,
         w,
         h,
         area: w * h,
-        batch: 3,
-        batchName: 'ELITE',
-      };
-      curRank++;
+        dist,
+        tierHint: 'elite',
+      });
+      eliteCount++;
     }
   }
 
-  // 4. Batch 4 (Ranks 16 - 40: Vanguard) & Batch 5 (Ranks 41 - 100: Perimeter)
+  // 4. Distribute remaining cards in concentric rings outward
   const unassigned: { r: number; c: number; dist: number }[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (grid[r][c] === 0) {
-        const dist = Math.hypot(r - centerR, (c - centerC) * 0.85);
+        const dist = Math.hypot((r - centerR) / rows, ((c - centerC) * 0.85) / cols);
         unassigned.push({ r, c, dist });
       }
     }
   }
   unassigned.sort((a, b) => a.dist - b.dist);
 
-  const slotsNeeded = count - curRank + 1;
+  const slotsNeeded = count - rawBlocks.length;
   const extraCells = Math.max(0, unassigned.length - slotsNeeded);
 
   const cellUsed: boolean[][] = Array.from({ length: rows }, () => Array(cols).fill(false));
@@ -246,19 +260,16 @@ export function computeBoardLayout(
     const { r, c } = cell;
     if (grid[r][c] !== 0 || cellUsed[r][c]) continue;
 
-    // Evaluate both pairing directions
     const canPairH = c + 1 < cols && grid[r][c + 1] === 0 && !cellUsed[r][c + 1];
     const canPairV = r + 1 < rows && grid[r + 1][c] === 0 && !cellUsed[r + 1][c];
     const ratioH = canPairH ? (colW[c] + colW[c + 1]) / rowH[r] : 0;
     const ratioV = canPairV ? colW[c] / (rowH[r] + rowH[r + 1]) : 0;
 
-    // Strictly enforce natural aspect ratios (must be between 0.45 and 2.20, never 2:6 or 4:1)
-    const validH = canPairH && ratioH >= 0.45 && ratioH <= 2.20;
-    const validV = canPairV && ratioV >= 0.45 && ratioV <= 2.20;
+    const validH = canPairH && ratioH >= 0.40 && ratioH <= 2.50;
+    const validV = canPairV && ratioV >= 0.40 && ratioV <= 2.50;
 
     let chosenDir: 'H' | 'V' | null = null;
     if (validH && validV) {
-      // Pick direction closest to 1.0 (golden balanced card)
       chosenDir = Math.abs(ratioH - 1.0) <= Math.abs(ratioV - 1.0) ? 'H' : 'V';
     } else if (validH) {
       chosenDir = 'H';
@@ -269,80 +280,76 @@ export function computeBoardLayout(
     if (chosenDir === 'H') {
       cellUsed[r][c] = true;
       cellUsed[r][c + 1] = true;
-      grid[r][c] = curRank;
-      grid[r][c + 1] = curRank;
+      grid[r][c] = 4;
+      grid[r][c + 1] = 4;
       const x = colX[c], y = rowY[r];
       const w = colW[c] + colW[c + 1], h = rowH[r];
-      const batch = curRank <= 40 ? 4 : 5;
-      const batchName = batch === 4 ? 'VANGUARD' : 'BASE';
-      slots[curRank] = {
-        rank: curRank,
-        tier: getRankTier(curRank),
-        x,
-        y,
-        w,
-        h,
-        area: w * h,
-        batch,
-        batchName,
-      };
-      curRank++;
+      const centerX = x + w / 2, centerY = y + h / 2;
+      const dist = Math.hypot((centerY - height / 2) / height, (centerX - width / 2) / width);
+      rawBlocks.push({ minC: c, maxC: c + 1, minR: r, maxR: r, x, y, w, h, area: w * h, dist });
       pairsMade++;
     } else if (chosenDir === 'V') {
       cellUsed[r][c] = true;
       cellUsed[r + 1][c] = true;
-      grid[r][c] = curRank;
-      grid[r + 1][c] = curRank;
+      grid[r][c] = 4;
+      grid[r + 1][c] = 4;
       const x = colX[c], y = rowY[r];
       const w = colW[c], h = rowH[r] + rowH[r + 1];
-      const batch = curRank <= 40 ? 4 : 5;
-      const batchName = batch === 4 ? 'VANGUARD' : 'BASE';
-      slots[curRank] = {
-        rank: curRank,
-        tier: getRankTier(curRank),
-        x,
-        y,
-        w,
-        h,
-        area: w * h,
-        batch,
-        batchName,
-      };
-      curRank++;
+      const centerX = x + w / 2, centerY = y + h / 2;
+      const dist = Math.hypot((centerY - height / 2) / height, (centerX - width / 2) / width);
+      rawBlocks.push({ minC: c, maxC: c, minR: r, maxR: r + 1, x, y, w, h, area: w * h, dist });
       pairsMade++;
     }
   }
 
+  // Remaining single cells radiate outward to perimeter
   for (const cell of unassigned) {
     const { r, c } = cell;
     if (grid[r][c] === 0 && !cellUsed[r][c]) {
-      if (curRank <= count) {
-        grid[r][c] = curRank;
-        const x = colX[c], y = rowY[r];
-        const w = colW[c], h = rowH[r];
-        const batch = curRank <= 40 ? 4 : 5;
-        const batchName = batch === 4 ? 'VANGUARD' : 'BASE';
-        slots[curRank] = {
-          rank: curRank,
-          tier: getRankTier(curRank),
-          x,
-          y,
-          w,
-          h,
-          area: w * h,
-          batch,
-          batchName,
-        };
-        curRank++;
-      }
+      grid[r][c] = 5;
+      const x = colX[c], y = rowY[r];
+      const w = colW[c], h = rowH[r];
+      const centerX = x + w / 2, centerY = y + h / 2;
+      const dist = Math.hypot((centerY - height / 2) / height, (centerX - width / 2) / width);
+      rawBlocks.push({ minC: c, maxC: c, minR: r, maxR: r, x, y, w, h, area: w * h, dist });
     }
   }
 
-  // Strictly enforce Rule 2: Monotonic Decreasing Area (#1 > #2 > ... > #100)
-  for (let r = 1; r < count; r++) {
-    if (slots[r + 1] && slots[r] && slots[r + 1].area >= slots[r].area) {
-      slots[r + 1].area = slots[r].area - 1.0;
+  // 5. Strictly enforce Note 1: lower slot grid should always be higher area than higher slot:
+  // Area(#r) >= Area(#r+1) for all r = 1..100.
+  // And Note 2: Concentric distribution outward from center: closer to center gets lower rank.
+  rawBlocks.sort((a, b) => {
+    // Primarily: physical area descending
+    if (Math.abs(b.area - a.area) > 0.1) {
+      return b.area - a.area;
     }
+    // Secondarily: closest to center gets lower slot rank
+    return a.dist - b.dist;
+  });
+
+  let prevArea = Infinity;
+  for (let i = 0; i < Math.min(count, rawBlocks.length); i++) {
+    const rank = i + 1;
+    const b = rawBlocks[i];
+    const tier = getRankTier(rank);
+    const batch = rank === 1 ? 1 : rank <= 5 ? 2 : rank <= 15 ? 3 : rank <= 40 ? 4 : 5;
+    const batchName = batch === 1 ? 'KING' : batch === 2 ? 'CHAMPION' : batch === 3 ? 'ELITE' : batch === 4 ? 'VANGUARD' : 'BASE';
+
+    // Strictly enforce monotonic area decreasing
+    const area = Math.min(b.area, prevArea - 0.5);
+    prevArea = area;
+
+    slots[rank] = {
+      rank,
+      tier,
+      x: b.x,
+      y: b.y,
+      w: b.w,
+      h: b.h,
+      area,
+      batch,
+      batchName,
+    };
   }
 
   if (process.env.NODE_ENV !== 'production') {
