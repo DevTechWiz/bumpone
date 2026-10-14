@@ -148,7 +148,7 @@ describe('POST /api/purchase/create content stripping', () => {
     categoriesB.single = vi.fn().mockResolvedValue({ data: { id: UUID_P }, error: null });
 
     const projectsB: any = {};
-    for (const m of ['select', 'eq', 'insert', 'update', 'delete']) projectsB[m] = vi.fn(() => projectsB);
+    for (const m of ['select', 'eq', 'insert', 'update', 'delete', 'order', 'limit']) projectsB[m] = vi.fn(() => projectsB);
     projectsB.single = vi.fn().mockResolvedValue({ data: { id: UUID_P }, error: null });
     projectsB.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
 

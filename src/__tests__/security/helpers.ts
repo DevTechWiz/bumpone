@@ -14,7 +14,7 @@ export const builders: Record<string, any> = {};
 // update…select) resolve to the configured result.
 export function makeBuilder(result: QueryResult) {
   const builder: any = {};
-  for (const m of ['select', 'eq', 'neq', 'ilike', 'or', 'order', 'not', 'lte', 'gt', 'in', 'is', 'insert', 'update', 'upsert', 'delete']) {
+  for (const m of ['select', 'eq', 'neq', 'ilike', 'or', 'order', 'not', 'lt', 'lte', 'gt', 'in', 'is', 'insert', 'update', 'upsert', 'delete']) {
     builder[m] = vi.fn(() => builder);
   }
   builder.maybeSingle = vi.fn(() => Promise.resolve(result));

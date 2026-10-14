@@ -101,18 +101,63 @@ export async function POST(request: NextRequest) {
       if (!project) return NextResponse.json({ error: 'Project not found or not owned by you' }, { status: 403 });
       currentValueMinor = Number(project.current_active_value_minor);
     } else {
-      const { data: project, error } = await supabaseAdmin.from('projects').insert({
-        user_id: user.id,
+      // Draft reuse (orphan prevention): recycle the user's most recent
+      // unpaid, unapproved draft instead of inserting a new project row on
+      // every checkout attempt. A draft is eligible only if no paid quote
+      // references it, so a project awaiting webhook credit is never reused.
+      // (List + limit(1) instead of maybeSingle: the lookup must tolerate
+      // pre-existing duplicate drafts without throwing.)
+      let draftId: string | null = null;
+      const { data: draftRows } = await supabaseAdmin
+        .from('projects')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_active', false)
+        .eq('moderation_status', 'pending')
+        .eq('total_paid_minor', 0)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const candidateId =
+        Array.isArray(draftRows) && draftRows.length > 0
+          ? ((draftRows[0] as { id?: unknown }).id as string | undefined) ?? null
+          : null;
+      if (candidateId) {
+        const { data: paidRows } = await supabaseAdmin
+          .from('purchase_quotes')
+          .select('id')
+          .eq('project_id', candidateId)
+          .eq('status', 'paid')
+          .limit(1);
+        const hasPaid = Array.isArray(paidRows) ? paidRows.length > 0 : paidRows != null;
+        if (!hasPaid) draftId = candidateId;
+      }
+      const draftFields = {
         title: input.title,
         handle: sanitizedInputHandle.length >= 2 ? sanitizedInputHandle : `creator_${user.id.slice(0, 8)}`,
         image_path: input.imageUrl,
         destination_url: input.linkUrl,
         category_id: category.id,
-        is_active: false,
-        moderation_status: 'pending', // SEC-018: Newly created projects require moderation approval
-      }).select('id').single();
-      if (error || !project) throw new Error('Unable to create draft project');
-      projectId = project.id;
+      };
+      if (draftId) {
+        const { data: project, error } = await supabaseAdmin
+          .from('projects')
+          .update(draftFields)
+          .eq('id', draftId)
+          .eq('user_id', user.id)
+          .select('id')
+          .single();
+        if (error || !project) throw new Error('Unable to reuse draft project');
+        projectId = (project as { id: string }).id;
+      } else {
+        const { data: project, error } = await supabaseAdmin.from('projects').insert({
+          user_id: user.id,
+          ...draftFields,
+          is_active: false,
+          moderation_status: 'pending', // SEC-018: Newly created projects require moderation approval
+        }).select('id').single();
+        if (error || !project) throw new Error('Unable to create draft project');
+        projectId = (project as { id: string }).id;
+      }
     }
     const { data: target } = await supabaseAdmin.from('projects').select('current_active_value_minor').eq('current_rank', input.targetRank).eq('is_active', true).eq('moderation_status', 'approved').maybeSingle();
     const requiredMinor = requiredQuoteAmountMinor(
