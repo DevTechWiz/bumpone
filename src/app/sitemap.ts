@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { listBlogPosts } from '@/lib/blog';
 
 export const revalidate = 3600; // Cache sitemap for 1 hour
 
@@ -14,6 +15,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: 'hourly',
       priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/blog`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.8,
     },
     {
       url: `${baseUrl}/contact`,
@@ -61,7 +68,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }));
 
-    return [...staticRoutes, ...projectRoutes];
+    // Blog routes: static prerender-friendly content. listBlogPosts() already
+    // degrades to an empty list when fs is unavailable, so this stays
+    // best-effort and cannot break the sitemap generator.
+    const blogRoutes: MetadataRoute.Sitemap = listBlogPosts().map((post) => ({
+      url: `${baseUrl}/blog/${post.slug}`,
+      lastModified: new Date(`${post.date}T00:00:00Z`),
+      changeFrequency: 'monthly',
+      priority: 0.6,
+    }));
+
+    return [...staticRoutes, ...blogRoutes, ...projectRoutes];
   } catch (error) {
     console.warn('Failed to query dynamic projects for sitemap, falling back to static routes:', error);
     return staticRoutes;

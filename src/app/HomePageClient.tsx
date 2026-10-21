@@ -1860,6 +1860,8 @@ export function HomePageClient({
             <div className="w-full px-4 py-3 border-t border-white/[0.08] bg-[#101115] flex items-center justify-between text-[11px] text-neutral-400 font-mono shrink-0">
               <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Terms</a>
               <span>&bull;</span>
+              <a href="/blog" className="hover:text-amber-400 transition-colors">Blog</a>
+              <span>&bull;</span>
               <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Privacy</a>
               <span>&bull;</span>
               <a href="/refund" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">Refunds</a>
@@ -1948,6 +1950,8 @@ export function HomePageClient({
               <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Terms
               </a>
+              <span>&bull;</span>
+              <a href="/blog" className="hover:text-amber-400 transition-colors">Blog</a>
               <span>&bull;</span>
               <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-amber-400 transition-colors">
                 Privacy
