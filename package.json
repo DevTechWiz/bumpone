@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "prebuild": "node scripts/build-blog-manifest.js",
+    "prebuild:cf": "node scripts/build-blog-manifest.js",
     "build": "next build",
     "build:cf": "opennextjs-cloudflare build",
     "deploy:cf": "opennextjs-cloudflare deploy",

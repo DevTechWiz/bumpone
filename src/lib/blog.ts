@@ -10,6 +10,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { marked } from 'marked';
 import { z } from 'zod';
+import manifestPosts from './blog-manifest.json';
 
 const CONTENT_DIR = join(process.cwd(), 'content', 'blog');
 
@@ -85,7 +86,14 @@ export function listBlogPosts(): BlogPost[] {
   try {
     files = readdirSync(CONTENT_DIR).filter((f) => f.endsWith('.md'));
   } catch {
-    return [];
+    return (manifestPosts as BlogPost[])
+      .filter((p) => p.status === 'approved')
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }
+  if (files.length === 0) {
+    return (manifestPosts as BlogPost[])
+      .filter((p) => p.status === 'approved')
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
   return files
     .map(readPost)
