@@ -6,6 +6,7 @@ import { allowRequest } from '@/lib/rateLimit';
 import { readJsonWithLimit, newRequestId } from '@/lib/requestGuard';
 import { stripControlChars } from '@/lib/textSanitize';
 import { securityLog } from '@/lib/securityLogger';
+import { invalidateBoardCache } from '@/lib/boardCache';
 
 const schema = z.object({
   projectId: z.string().uuid(),
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
   if (!updated?.length) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   await supabaseAdmin.rpc('recalculate_board_ranks');
+  invalidateBoardCache();
   const { error: auditError } = await supabaseAdmin.from('admin_audit_log').insert({
     admin_user_id: auth.user.id,
     admin_identifier: auth.user.id,

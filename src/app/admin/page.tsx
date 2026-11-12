@@ -6,7 +6,14 @@ import Image from 'next/image';
 import { Skeleton } from '../../components/ui';
 
 type TopEntry = { rank: number; id?: string; title?: string; handle?: string; active_value: number };
-type QueueEntry = { id: string; title?: string; handle?: string; created_at?: string };
+type QueueEntry = {
+  id: string;
+  title?: string;
+  handle?: string;
+  destination_url?: string;
+  image_path?: string;
+  created_at?: string;
+};
 type PurchaseEntry = {
   amount: number;
   status: string;
@@ -53,6 +60,9 @@ type Stats = {
   activeProfiles: number;
   openReports: number;
   purchasesPaused: boolean;
+  freeClaimsEnabled?: boolean;
+  freeClaimsLimit?: number;
+  minBumpUsd?: number;
   totalProfiles?: number;
   totalPurchases?: number;
   successfulPayments?: number;
@@ -73,6 +83,8 @@ export default function AdminPage() {
   const [projectId, setProjectId] = useState('');
   const [reason, setReason] = useState('');
   const [pauseReason, setPauseReason] = useState('');
+  const [updatingConfig, setUpdatingConfig] = useState(false);
+  const [newLimit, setNewLimit] = useState<string>('');
 
   // Support Desk State
   const [messages, setMessages] = useState<ContactMessage[]>([]);
@@ -161,12 +173,98 @@ export default function AdminPage() {
     const actionReason = pauseReason.trim().length >= 3
       ? pauseReason.trim()
       : (stats.purchasesPaused ? 'Resumed by admin' : 'Emergency pause by admin');
-    const res = await fetch('/api/admin/emergency', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paused: !stats.purchasesPaused, reason: actionReason }),
-    });
-    if (res.ok) { setPauseReason(''); setError(null); await load(); } else setError('Could not update purchase state.');
+    const prevPaused = stats.purchasesPaused;
+    const nextPaused = !prevPaused;
+
+    // 1. Optimistic UI update — immediate zero-lag toggle
+    setStats((prev) => (prev ? { ...prev, purchasesPaused: nextPaused } : null));
+    setError(null);
+
+    try {
+      const res = await fetch('/api/admin/emergency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paused: nextPaused, reason: actionReason }),
+      });
+      if (res.ok) {
+        setPauseReason('');
+      } else {
+        // Revert on failure
+        setStats((prev) => (prev ? { ...prev, purchasesPaused: prevPaused } : null));
+        setError('Could not update purchase state.');
+      }
+    } catch {
+      setStats((prev) => (prev ? { ...prev, purchasesPaused: prevPaused } : null));
+      setError('Network error while updating purchase state.');
+    }
+  };
+
+  const toggleFreeClaims = async () => {
+    if (!stats) return;
+    const previousState = stats.freeClaimsEnabled;
+    const nextState = !previousState;
+
+    // 1. Optimistic UI update — immediate zero-lag switch
+    setStats((prev) => (prev ? { ...prev, freeClaimsEnabled: nextState } : null));
+    setError(null);
+    setUpdatingConfig(true);
+
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          freeClaimsEnabled: nextState,
+          reason: `Admin ${nextState ? 'enabled' : 'disabled'} free claims from admin panel`,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        // Revert on failure
+        setStats((prev) => (prev ? { ...prev, freeClaimsEnabled: previousState } : null));
+        setError(errData.error || 'Could not update free claims state. Check database migration.');
+      }
+    } catch {
+      setStats((prev) => (prev ? { ...prev, freeClaimsEnabled: previousState } : null));
+      setError('Network error while updating free claims.');
+    } finally {
+      setUpdatingConfig(false);
+    }
+  };
+
+  const updateFreeClaimsLimit = async (limitVal: number) => {
+    if (!stats || isNaN(limitVal) || limitVal < 1) return;
+    const previousLimit = stats.freeClaimsLimit;
+
+    // 1. Optimistic UI update — immediate zero-lag switch
+    setStats((prev) => (prev ? { ...prev, freeClaimsLimit: limitVal } : null));
+    setNewLimit('');
+    setError(null);
+    setUpdatingConfig(true);
+
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          freeClaimsLimit: limitVal,
+          reason: `Admin updated free claims capacity limit to ${limitVal}`,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        // Revert on failure
+        setStats((prev) => (prev ? { ...prev, freeClaimsLimit: previousLimit } : null));
+        setError(errData.error || 'Could not update free claims limit. Check database migration.');
+      }
+    } catch {
+      setStats((prev) => (prev ? { ...prev, freeClaimsLimit: previousLimit } : null));
+      setError('Network error while updating free claims limit.');
+    } finally {
+      setUpdatingConfig(false);
+    }
   };
   const moderate = async (status: 'approved' | 'suspended' | 'rejected', id?: string) => {
     const target = id ?? projectId;
@@ -238,13 +336,148 @@ export default function AdminPage() {
             <div className="flex flex-wrap gap-4 text-sm text-neutral-300">
               <span>Active-value range: {stats.valueRange ? `$${stats.valueRange.min} – $${stats.valueRange.max}` : '—'}</span>
             </div>
-            <div className="space-y-2 rounded border border-rose-900/60 bg-rose-950/20 p-4">
-              <p className="text-sm text-neutral-300">Emergency purchase control — takes effect on the next checkout attempt; already-paid transactions keep settling via webhooks.</p>
-              <input className="w-full rounded bg-black p-2" placeholder="Reason (optional, defaults automatically)" value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} />
-              <button onClick={pause} className="rounded bg-rose-600 px-4 py-2">
-                {stats.purchasesPaused ? 'Resume purchases' : 'Pause purchases'}
-              </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2 rounded border border-rose-900/60 bg-rose-950/20 p-4 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white mb-1">🚨 Emergency Killswitch</h3>
+                  <p className="text-xs text-neutral-300">Takes effect on next checkout; already-paid transactions keep settling via webhooks.</p>
+                </div>
+                <input className="w-full rounded bg-black p-2 text-xs border border-white/10" placeholder="Reason (optional)" value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} />
+                <button onClick={pause} className="rounded bg-rose-600 hover:bg-rose-500 text-white font-bold px-4 py-2 text-xs cursor-pointer">
+                  {stats.purchasesPaused ? 'Resume Purchases' : 'Pause All Purchases'}
+                </button>
+              </div>
+
+              <div className="space-y-3 rounded border border-emerald-900/60 bg-emerald-950/20 p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <span>🎁 Free Launch Claims</span>
+                    </h3>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${stats.freeClaimsEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-zinc-800 text-zinc-400'}`}>
+                      {stats.freeClaimsEnabled ? 'ACTIVE' : 'DISABLED'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-300">
+                    Max capacity limit: <strong>{stats.freeClaimsLimit ?? 50}</strong> slots. Live claimed: <strong>{stats.activeProfiles}</strong> slots.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1 border-t border-emerald-900/40">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    className="w-28 rounded bg-black p-1.5 text-xs text-white border border-white/10"
+                    placeholder={`Limit (${stats.freeClaimsLimit ?? 50})`}
+                    value={newLimit}
+                    onChange={(e) => setNewLimit(e.target.value)}
+                  />
+                  <button
+                    onClick={() => updateFreeClaimsLimit(parseInt(newLimit))}
+                    disabled={updatingConfig || !newLimit}
+                    className="rounded bg-white/10 hover:bg-white/20 text-white px-2.5 py-1.5 text-xs font-semibold disabled:opacity-40 cursor-pointer"
+                  >
+                    Set Limit
+                  </button>
+                  <button
+                    onClick={toggleFreeClaims}
+                    disabled={updatingConfig}
+                    className={`ml-auto rounded px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                      stats.freeClaimsEnabled
+                        ? 'bg-rose-700 hover:bg-rose-600 text-white'
+                        : 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950'
+                    }`}
+                  >
+                    {updatingConfig ? 'Saving…' : stats.freeClaimsEnabled ? 'Turn OFF' : 'Turn ON'}
+                  </button>
+                </div>
+              </div>
             </div>
+            {/* Automated Pending Moderation Queue */}
+            <section className="space-y-4 rounded border border-amber-500/20 bg-amber-500/[0.02] p-5">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>🛡️ Pending Moderation Queue</span>
+                  </h2>
+                  <span className="rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-mono font-bold text-amber-300">
+                    {stats.moderationQueue?.length || 0} Pending
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={load}
+                  className="rounded border border-white/10 px-2 py-1 text-xs text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {(stats.moderationQueue?.length ?? 0) === 0 ? (
+                <p className="text-xs text-neutral-500 py-3">✓ All clear! No pending projects awaiting moderation.</p>
+              ) : (
+                <div className="space-y-3">
+                  {stats.moderationQueue?.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-white/10 bg-black/40 hover:border-white/20 transition-all"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {item.image_path ? (
+                          <img
+                            src={item.image_path}
+                            alt=""
+                            className="h-10 w-10 rounded-lg object-cover bg-white/5 border border-white/10 shrink-0"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-xs text-neutral-500 shrink-0">
+                            No Logo
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white truncate">{item.title || 'Untitled'}</h4>
+                            {item.handle && <span className="text-xs text-neutral-400 font-mono">@{item.handle}</span>}
+                          </div>
+                          {item.destination_url && (
+                            <a
+                              href={item.destination_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-amber-400 hover:underline truncate block max-w-md"
+                            >
+                              {item.destination_url}
+                            </a>
+                          )}
+                          <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                            ID: {item.id} · {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => moderate('rejected', item.id)}
+                          className="rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-800/40 text-rose-300 px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moderate('approved', item.id)}
+                          className="rounded bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-bold cursor-pointer transition-colors shadow-sm"
+                        >
+                          Approve (Go Live)
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <section className="space-y-3 rounded border border-white/10 p-4">
               <h2>Moderate project by UUID</h2>
               <div className="flex flex-wrap gap-2">

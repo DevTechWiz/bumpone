@@ -7,7 +7,7 @@
     "prebuild": "node scripts/build-blog-manifest.js",
     "prebuild:cf": "node scripts/build-blog-manifest.js",
     "build": "next build",
-    "build:cf": "opennextjs-cloudflare build",
+    "build:cf": "opennextjs-cloudflare build --dangerouslyUseUnsupportedNextVersion",
     "deploy:cf": "opennextjs-cloudflare deploy",
     "start": "next start",
     "test": "vitest run",

@@ -9,6 +9,9 @@ export interface BoardClientResponse {
   sort?: string;
   category?: string;
   purchasesPaused?: boolean;
+  freeClaimsActive?: boolean;
+  freeClaimsLimit?: number;
+  minBumpUsd?: number;
 }
 
 interface ClientCacheEntry {

@@ -29,6 +29,7 @@ export interface GridCellProps {
   isHighlighted?: boolean;
   isDimmed?: boolean;
   isClient?: boolean;
+  freeClaimsActive?: boolean;
 }
 
 const GridCellComponent: React.FC<GridCellProps> = ({
@@ -41,6 +42,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
   isHighlighted = false,
   isDimmed = false,
   isClient = false,
+  freeClaimsActive = true,
 }) => {
   const [imageError, setImageError] = useState(false);
   const [isHoveredLocal, setIsHoveredLocal] = useState(false);
@@ -91,6 +93,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
   const reactionTotal = (r?.fire || 0) + (r?.eyes || 0) + (r?.heart || 0) + (r?.laugh || 0);
 
   const isOpenSlot = slot.id.startsWith('open-slot-') || slot.activeValue === 0;
+  const isSlotFree = isOpenSlot && freeClaimsActive;
 
   return (
     <div
@@ -200,7 +203,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
               : 'px-[clamp(1px,1.5cqi,3.5px)] py-px text-[clamp(4.5px,6.5cqi,8px)] font-medium border border-white/[0.08] text-zinc-300'
           }`}
         >
-          ${isOpenSlot ? 10 : (slot.activeValue >= 1000 ? `${(slot.activeValue / 1000).toFixed(1)}k` : slot.activeValue)}
+          {isSlotFree ? 'FREE' : (slot.activeValue >= 1000 ? `$${(slot.activeValue / 1000).toFixed(1)}k` : `$${isOpenSlot ? 10 : slot.activeValue}`)}
         </span>
       </div>
 
@@ -237,11 +240,11 @@ const GridCellComponent: React.FC<GridCellProps> = ({
                 💎 #{slot.rank} CHAMPION
               </span>
               <span className="text-[clamp(7.5px,3.8cqi,12px)] font-mono font-bold text-purple-200 shrink-0">
-                ${formatNumber(isOpenSlot ? 10 : slot.activeValue)}
+                {isSlotFree ? 'FREE' : `$${formatNumber(isOpenSlot ? 10 : slot.activeValue)}`}
               </span>
             </div>
             <h3 className="text-[clamp(8px,4.2cqi,14px)] font-bold text-white truncate drop-shadow-sm">
-              {isOpenSlot ? `Claim Rank #${slot.rank}` : slot.title}
+              {isSlotFree ? `Claim Rank #${slot.rank} (FREE)` : isOpenSlot ? `Claim Rank #${slot.rank} ($10)` : slot.title}
             </h3>
           </div>
         </div>
@@ -252,7 +255,7 @@ const GridCellComponent: React.FC<GridCellProps> = ({
         <div className="absolute bottom-[clamp(2px,1cqi,4px)] left-[clamp(2px,1cqi,4px)] right-[clamp(2px,1cqi,4px)] z-10 pointer-events-none">
           <div className="bg-black/75 backdrop-blur-sm rounded px-[clamp(2px,1.5cqi,6px)] py-0.5 border border-sky-400/30 truncate">
             <p className="text-[clamp(6px,4.5cqi,10px)] font-medium text-white truncate leading-tight">
-              {isOpenSlot ? `Claim #${slot.rank} ($10)` : slot.title}
+              {isSlotFree ? `Claim #${slot.rank} (FREE)` : isOpenSlot ? `Claim #${slot.rank} ($10)` : slot.title}
             </p>
           </div>
         </div>
@@ -275,13 +278,13 @@ const GridCellComponent: React.FC<GridCellProps> = ({
               </h4>
             </div>
             <span className="text-[clamp(7px,4cqi,12px)] font-mono font-bold text-neutral-200 shrink-0">
-              ${formatNumber(isOpenSlot ? 10 : slot.activeValue)}
+              {isSlotFree ? 'FREE' : `$${formatNumber(isOpenSlot ? 10 : slot.activeValue)}`}
             </span>
           </div>
 
           <div className="flex items-center justify-between gap-1 text-[clamp(6.5px,3.8cqi,10px)] text-zinc-400 truncate">
             <span className="truncate">
-              {isOpenSlot ? '⚡ Click to claim for $10' : (slot.category ? `${slot.category} · ` : '') + (slot.bidderName ? `By ${slot.bidderName}` : 'Anonymous')}
+              {isOpenSlot ? (isSlotFree ? '⚡ Click to claim for FREE ($0)' : '⚡ Click to claim for $10') : (slot.category ? `${slot.category} · ` : '') + (slot.bidderName ? `By ${slot.bidderName}` : 'Anonymous')}
             </span>
           </div>
 

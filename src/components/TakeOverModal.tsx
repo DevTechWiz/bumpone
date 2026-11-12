@@ -71,6 +71,7 @@ export interface TakeOverModalProps {
   hasBackdrop?: boolean;
   onBack?: () => void;
   onRequireAuth?: () => void;
+  freeClaimsActive?: boolean;
 }
 
 const CATEGORY_ICON = Tag;
@@ -90,6 +91,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   preselectedTargetSlot,
   onSubmitTopUp,
   hasBackdrop = true,
+  freeClaimsActive = true,
 }) => {
   const { user, profile } = useAuth();
   const [mode, setMode] = useState<'new' | 'existing'>('new');
@@ -107,6 +109,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width?: number; height?: number; aspectRatio?: number }>({});
   const [isDragging, setIsDragging] = useState(false);
+  const [claimSuccessData, setClaimSuccessData] = useState<{ title: string; handle: string; rank: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const prevOpenRef = useRef(false);
@@ -252,7 +255,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setMode('new');
           const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
           const needed = isTargetEmpty
-            ? MIN_TOP_UP
+            ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
             : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue + 10);
           setTopUpStr(String(needed));
           setTitle('');
@@ -290,7 +293,10 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           if (firstProj.category) setCategory(firstProj.category);
           if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
         }
-        const floorNeeded = currentSlots.length < 100 ? MIN_TOP_UP : Math.max(MIN_TOP_UP, entryFloor) + 10;
+        const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
+        const floorNeeded = occupiedCount < 100
+          ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
+          : Math.max(MIN_TOP_UP, entryFloor) + 10;
         setTopUpStr(String(floorNeeded));
         const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
         if (defaultH) {
@@ -300,10 +306,12 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       setErrorMsg(null);
       setFailed(false);
       setImageError(false);
+      setClaimSuccessData(null);
     }
 
     if (!isOpen) {
       initializedSlotIdRef.current = null;
+      setClaimSuccessData(null);
     }
     prevOpenRef.current = isOpen;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -366,12 +374,14 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       if (preselectedTargetSlot) {
         const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
         const needed = isTargetEmpty
-          ? MIN_TOP_UP
+          ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
           : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue + 10);
         setTopUpStr(String(needed));
       } else {
         const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
-        const floorNeeded = occupiedCount < 100 ? MIN_TOP_UP : Math.max(MIN_TOP_UP, entryFloor) + 10;
+        const floorNeeded = occupiedCount < 100
+          ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
+          : Math.max(MIN_TOP_UP, entryFloor) + 10;
         setTopUpStr(String(floorNeeded));
       }
     } else if (existingHandles.length > 0) {
@@ -419,13 +429,15 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           : '@creator';
 
   const boardValues = React.useMemo(() => {
-    const pool = mode === 'existing' && holder ? currentSlots.filter((s) => s.id !== holder.id) : currentSlots;
+    const pool = mode === 'existing' && holder
+      ? currentSlots.filter((s) => s.id !== holder.id && !s.id.startsWith('open-slot-'))
+      : currentSlots.filter((s) => !s.id.startsWith('open-slot-'));
     return pool.map((s) => s.activeValue).sort((a, b) => b - a);
   }, [currentSlots, mode, holder]);
 
   // Live projection: recompute rank against the CURRENT board (quotes never reserve).
   const projectedRank = React.useMemo(() => {
-    if (resultingValue <= 0) return null;
+    if (resultingValue < 0) return null;
     return recomputeRankValues(boardValues, resultingValue);
   }, [resultingValue, boardValues]);
 
@@ -439,9 +451,45 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   // Only new project bids displace the current occupant of #100 off the board into #101 (existing top-ups reorder internally)
   const _willDisplaceOccupantOf100 = mode === 'new' && victimSlot100 && projectedRank && projectedRank <= 100;
 
+  const currentSlotMatch = currentSlots.find((s) => s.id === (holder?.id || holderId));
+  const currentRank = mode === 'existing' && holder
+    ? (currentSlotMatch?.rank ?? (preselectedTargetSlot && preselectedTargetSlot.id === holder.id ? preselectedTargetSlot.rank : null))
+    : null;
+
+  const isKingHolder = currentRank === 1;
+  const isTop5Holder = currentRank != null && currentRank >= 2 && currentRank <= 5;
+  const isTop10Holder = currentRank != null && currentRank >= 6 && currentRank <= 10;
+
+  const displayImageUrl =
+    imageUrl ||
+    holder?.imageUrl ||
+    (holder as any)?.image_path ||
+    (holder as any)?.image_url ||
+    currentSlotMatch?.imageUrl ||
+    (preselectedTargetSlot && (preselectedTargetSlot.id === holderId || preselectedTargetSlot.id === holder?.id) ? preselectedTargetSlot.imageUrl : '');
+
+  const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
+
+  const isTargetMine = Boolean(
+    preselectedTargetSlot && existingHandles.some((h) => h.id === preselectedTargetSlot.id)
+  );
+
+  const isTargetEmpty = Boolean(
+    preselectedTargetSlot
+      ? (!preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-'))
+      : occupiedCount < 100
+  );
+
+  const canClaimFree = freeClaimsActive && mode === 'new' && isTargetEmpty && existingHandles.length === 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (parsedTopUp < MIN_TOP_UP) {
+    if (parsedTopUp === 0) {
+      if (!canClaimFree) {
+        setErrorMsg(`Minimum top-up is $${MIN_TOP_UP}. Payments and active values use whole USD only.`);
+        return;
+      }
+    } else if (parsedTopUp < MIN_TOP_UP) {
       setErrorMsg(`Minimum top-up is $${MIN_TOP_UP}. Payments and active values use whole USD only.`);
       return;
     }
@@ -477,8 +525,47 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     }
 
     if (mode === 'new' && (!projectedRank || projectedRank > 100)) {
-      const minNeeded = currentSlots.length < 100 ? MIN_TOP_UP : Math.max(MIN_TOP_UP, entryFloor) + 10;
+      const minNeeded = currentSlots.length < 100 ? (canClaimFree ? 0 : MIN_TOP_UP) : Math.max(MIN_TOP_UP, entryFloor) + 10;
       setErrorMsg(`Your top-up of $${parsedTopUp} is below the board floor ($${Math.max(MIN_TOP_UP, entryFloor)}). Top up at least $${minNeeded} to enter the 100-slot wall.`);
+      return;
+    }
+
+    // Handle $0 Free Claim Path
+    if (parsedTopUp === 0 && canClaimFree) {
+      setIsSubmitting(true);
+      setErrorMsg(null);
+      try {
+        const res = await fetch('/api/purchase/claim-free', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title.trim(),
+            handle: effectiveHandle,
+            linkUrl: finalUrl,
+            imageUrl: effectiveImageUrl,
+            category,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({ error: 'Failed to claim free slot.' }));
+
+        if (!res.ok) {
+          setErrorMsg(data.error || 'Failed to claim free slot.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        setClaimSuccessData({
+          title: title.trim(),
+          handle: effectiveHandle,
+          rank: projectedRank || occupiedCount + 1,
+        });
+      } catch (err: any) {
+        console.error('Free slot claim error:', err);
+        setErrorMsg('Network error. Unable to claim slot. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -575,23 +662,6 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     }
   };
 
-  const currentSlotMatch = currentSlots.find((s) => s.id === (holder?.id || holderId));
-  const currentRank = mode === 'existing' && holder
-    ? (currentSlotMatch?.rank ?? (preselectedTargetSlot && preselectedTargetSlot.id === holder.id ? preselectedTargetSlot.rank : null))
-    : null;
-
-  const isKingHolder = currentRank === 1;
-  const isTop5Holder = currentRank != null && currentRank >= 2 && currentRank <= 5;
-  const isTop10Holder = currentRank != null && currentRank >= 6 && currentRank <= 10;
-
-  const displayImageUrl =
-    imageUrl ||
-    holder?.imageUrl ||
-    (holder as any)?.image_path ||
-    (holder as any)?.image_url ||
-    currentSlotMatch?.imageUrl ||
-    (preselectedTargetSlot && (preselectedTargetSlot.id === holderId || preselectedTargetSlot.id === holder?.id) ? preselectedTargetSlot.imageUrl : '');
-
   const kingSlot = currentSlots[0];
   const top5Slot = currentSlots[4] || currentSlots[currentSlots.length - 1];
   const top10Slot = currentSlots[9] || currentSlots[currentSlots.length - 1];
@@ -608,22 +678,13 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     ? Math.max(MIN_TOP_UP, top10Slot.activeValue - currentValue + 10)
     : MIN_TOP_UP;
 
-  const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
   const floorNeeded = occupiedCount < 100
-    ? MIN_TOP_UP
+    ? (canClaimFree ? 0 : MIN_TOP_UP)
     : Math.max(MIN_TOP_UP * 2, Math.max(MIN_TOP_UP, entryFloor) - currentValue + 10);
-
-  const isTargetMine = Boolean(
-    preselectedTargetSlot && existingHandles.some((h) => h.id === preselectedTargetSlot.id)
-  );
-
-  const isTargetEmpty = Boolean(
-    preselectedTargetSlot && (!preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-'))
-  );
 
   const targetSlotNeeded = preselectedTargetSlot
     ? isTargetEmpty
-      ? MIN_TOP_UP
+      ? (canClaimFree ? 0 : MIN_TOP_UP)
       : isTargetMine
         ? preselectedTargetSlot.rank > 100
           ? Math.max(MIN_TOP_UP, (occupiedCount < 100 ? 0 : Math.max(MIN_TOP_UP, entryFloor)) - currentValue + 10)
@@ -800,7 +861,15 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     let p1Badge = occupiedCount < 100 ? 'OPEN' : 'FLOOR';
     let p1Hint = 'Live Wall';
 
-    if (preselectedTargetSlot && !isTargetMine && preselectedTargetSlot.rank > 1 && targetSlotNeeded != null) {
+    if (canClaimFree) {
+      p1Amount = 0;
+      p1Label = isTargetEmpty && preselectedTargetSlot ? `Claim Free #${preselectedTargetSlot.rank}` : 'Claim Free Slot';
+      p1Subtitle = 'Free Launch Promo';
+      p1Theme = 'emerald';
+      p1Icon = 'sparkles';
+      p1Badge = 'FREE';
+      p1Hint = '$0 Claim';
+    } else if (preselectedTargetSlot && !isTargetMine && preselectedTargetSlot.rank > 1 && targetSlotNeeded != null) {
       p1Amount = targetSlotNeeded;
       p1Label = isTargetEmpty ? `Claim #${preselectedTargetSlot.rank}` : `Beat #${preselectedTargetSlot.rank}`;
       p1Subtitle = isTargetEmpty ? 'Open Turf' : preselectedTargetSlot.title;
@@ -818,7 +887,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       p1Hint = 'Beat #100';
     }
 
-    const p2Amount = Math.max(p1Amount + 10, top10Needed);
+    const p2Amount = Math.max(canClaimFree ? 10 : p1Amount + 10, top10Needed);
     const p3Amount = Math.max(p2Amount + 10, top5Needed);
     const p4Amount = Math.max(p3Amount + 10, kingNeeded);
 
@@ -875,6 +944,9 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     currentSlots.length,
     preselectedTargetSlot,
     isTargetMine,
+    isTargetEmpty,
+    canClaimFree,
+    occupiedCount,
     targetSlotNeeded,
     top10Needed,
     top5Needed,
@@ -885,23 +957,29 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
     ? preselectedTargetSlot && preselectedTargetSlot.rank > 100
       ? `Reclaim "${preselectedTargetSlot?.title}" to Billboard`
       : `Top Up "${preselectedTargetSlot?.title}" (Rank #${preselectedTargetSlot?.rank})`
-    : preselectedTargetSlot
-      ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
-      : mode === 'existing' && holder
-        ? `Bump "${holder.title}"`
-        : 'Bump Billboard Spot';
+    : canClaimFree && preselectedTargetSlot
+      ? `Claim Free Slot #${preselectedTargetSlot.rank}`
+      : canClaimFree
+        ? 'Claim Free Launch Slot'
+        : preselectedTargetSlot
+          ? `Bump Slot #${preselectedTargetSlot.rank} — ${preselectedTargetSlot.title}`
+          : mode === 'existing' && holder
+            ? `Bump "${holder.title}"`
+            : 'Bump Billboard Spot';
 
   const modalSubtitle = isTargetMine
     ? preselectedTargetSlot && preselectedTargetSlot.rank > 100
       ? `Top up active value to restore your project into the live top 100 billboard. Your preserved active value is $${preselectedTargetSlot.activeValue}.`
       : `Top up active value to propel "${preselectedTargetSlot?.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
-    : preselectedTargetSlot
-      ? `Place at least $${Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) + 10} to claim Billboard Rank #${preselectedTargetSlot.rank}.`
-      : mode === 'existing' && holder
-        ? isKingHolder
-          ? `Defend and cement your #1 King spot on the billboard. Minimum top-up $${MIN_TOP_UP}.`
-          : `Top up active value to propel "${holder.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
-        : `Minimum entry is $${MIN_TOP_UP}. To bump any filled slot, add at least +$${MIN_TOP_UP}.`;
+    : canClaimFree
+      ? 'Claim this open slot for $0 during our launch promo! 1 free slot per creator.'
+      : preselectedTargetSlot
+        ? `Place at least $${Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue) + 10} to claim Billboard Rank #${preselectedTargetSlot.rank}.`
+        : mode === 'existing' && holder
+          ? isKingHolder
+            ? `Defend and cement your #1 King spot on the billboard. Minimum top-up $${MIN_TOP_UP}.`
+            : `Top up active value to propel "${holder.title}" higher on the billboard. Minimum top-up $${MIN_TOP_UP}.`
+          : `Minimum entry is $${MIN_TOP_UP}. To bump any filled slot, add at least +$${MIN_TOP_UP}.`;
 
   return (
     <Modal
@@ -949,6 +1027,37 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
               className="w-full sm:w-auto text-xs text-slate-400 hover:text-white"
             >
               Browse Billboard
+            </Button>
+          </div>
+        </div>
+      ) : claimSuccessData ? (
+        <div className="py-8 px-4 text-center space-y-5">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-3xl shadow-lg shadow-emerald-500/20">
+            🎉
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-black text-white tracking-tight">
+              Free Slot Claimed!
+            </h3>
+            <p className="text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+              <span className="font-semibold text-emerald-400">{claimSuccessData.title}</span> has been submitted for admin review and reserved at projected rank <span className="font-bold text-white font-mono">#{claimSuccessData.rank}</span>.
+            </p>
+            <div className="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-slate-400 max-w-sm mx-auto">
+              🛡️ Moderator review protects the billboard from spam and malicious links. Once approved, your slot goes live automatically.
+            </div>
+          </div>
+          <div className="pt-2 flex justify-center">
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              onClick={() => {
+                setClaimSuccessData(null);
+                onClose();
+              }}
+              className="font-bold px-8 py-2.5 shadow-lg shadow-emerald-500/20 bg-emerald-400 hover:bg-emerald-300 text-zinc-950 border-emerald-300"
+            >
+              Back to Billboard
             </Button>
           </div>
         </div>
@@ -1196,12 +1305,21 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
             </div>
           </div>
 
+          {canClaimFree && (
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-2.5">
+              <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-emerald-200">
+                <span className="font-semibold text-emerald-300">Free Launch Slot:</span> Claim an empty slot for <span className="font-bold underline">$0</span>! Limit 1 free slot per creator. Future rank bumps or overtaking slots cost $10.
+              </div>
+            </div>
+          )}
+
           {/* 1. Top-up Amount */}
           <div className="space-y-1.5">
             <Input
-              label="1. Top-Up Amount ($ USD)"
+              label={canClaimFree ? "1. Slot Entry Amount ($ USD)" : "1. Top-Up Amount ($ USD)"}
               type="number"
-              min={MIN_TOP_UP}
+              min={canClaimFree ? 0 : MIN_TOP_UP}
               step="1"
               required
               value={topUpStr}
@@ -1210,10 +1328,26 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                 setErrorMsg(null);
               }}
               leftAddon={<DollarSign className="w-4 h-4 text-slate-400" />}
-              placeholder="Enter at least $10"
+              placeholder={canClaimFree ? "0 for free, or $10+ to rank higher" : "Enter at least $10"}
             />
-            <div className="flex items-center gap-1.5 pt-0.5">
+            <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
               <span className="text-[10px] text-slate-400 font-mono">Quick Stepper:</span>
+              {canClaimFree && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTopUpStr('0');
+                    setErrorMsg(null);
+                  }}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-medium transition-all cursor-pointer ${
+                    parsedTopUp === 0
+                      ? 'bg-emerald-500 text-zinc-950 font-bold border border-emerald-400 shadow-sm'
+                      : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/30'
+                  }`}
+                >
+                  $0 Free
+                </button>
+              )}
               {[10, 25, 50, 100].map((inc) => (
                 <button
                   key={inc}
@@ -1524,16 +1658,35 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
                   variant="primary"
                   size="lg"
                   disabled={isSubmitting}
-                  leftIcon={<Zap className="w-4 h-4 fill-zinc-950" />}
+                  leftIcon={
+                    parsedTopUp === 0 && canClaimFree ? (
+                      <Sparkles className="w-4 h-4 fill-zinc-950" />
+                    ) : (
+                      <Zap className="w-4 h-4 fill-zinc-950" />
+                    )
+                  }
                   rightIcon={<ArrowRight className="w-4 h-4" />}
+                  className={
+                    parsedTopUp === 0 && canClaimFree
+                      ? 'bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-bold border-emerald-300 shadow-lg shadow-emerald-500/20'
+                      : undefined
+                  }
                 >
-                  {isSubmitting ? 'Securing Checkout…' : `Top Up & Bump ($${parsedTopUp || MIN_TOP_UP})`}
+                  {isSubmitting
+                    ? parsedTopUp === 0 && canClaimFree
+                      ? 'Submitting Claim…'
+                      : 'Securing Checkout…'
+                    : parsedTopUp === 0 && canClaimFree
+                      ? 'Claim Free Slot ($0)'
+                      : `Top Up & Bump ($${parsedTopUp || MIN_TOP_UP})`}
                 </Button>
               </div>
             </div>
           )}
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Payment buys an immediate digital visibility service — not ownership, investment, or a wallet balance. Ranking is dynamic and recomputed when payment confirms. All purchases are final, instantaneously delivered, and strictly non-refundable.
+            {parsedTopUp === 0 && canClaimFree
+              ? 'Free Launch Promo: 1 free slot claim per creator account. Submitted projects are reviewed by moderators before appearing live on the billboard.'
+              : 'Payment buys an immediate digital visibility service — not ownership, investment, or a wallet balance. Ranking is dynamic and recomputed when payment confirms. All purchases are final, instantaneously delivered, and strictly non-refundable.'}
           </p>
         </form>
       )}

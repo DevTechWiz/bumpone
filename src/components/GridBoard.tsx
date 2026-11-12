@@ -17,6 +17,7 @@ export interface GridBoardProps {
   hoveredRank?: number | null;
   onHoverRank?: (rank: number | null) => void;
   onOrientationChange?: (orientation: GridOrientation) => void;
+  freeClaimsActive?: boolean;
 }
 
 const GridBoardComponent: React.FC<GridBoardProps> = ({
@@ -28,6 +29,7 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   hoveredRank,
   onHoverRank,
   onOrientationChange,
+  freeClaimsActive = true,
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [mounted, setMounted] = useState<boolean>(false);
@@ -293,6 +295,7 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
                   isHighlighted={isHighlighted}
                   isDimmed={isDimmed}
                   isClient={mounted}
+                  freeClaimsActive={freeClaimsActive}
                   style={style}
                   onClick={handleCellClick}
                   onHover={handleCellHover}

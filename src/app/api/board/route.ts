@@ -13,7 +13,7 @@ import {
 import { allowRequest } from '@/lib/rateLimit';
 import { clientIp, newRequestId } from '@/lib/requestGuard';
 import { safeExternalUrl } from '@/lib/urls';
-import { isPurchasesPaused } from '@/lib/pauseState';
+import { getDynamicBoardConfig } from '@/lib/boardConfig';
 
 const VALID_SORTS = ['power', 'popular', 'trending'] as const;
 // Category names are human labels (letters/digits/space/&/_/-), max 50 chars —
@@ -124,10 +124,11 @@ async function fetchAndCacheBoard(
       query = query.order('updated_at', { ascending: false }).order('current_active_value_minor', { ascending: false });
     }
 
-    const [projectResult, purchasesPaused] = await Promise.all([
+    const [projectResult, dynamicConfig] = await Promise.all([
       query.limit(limit),
-      isPurchasesPaused(),
+      getDynamicBoardConfig(),
     ]);
+    const purchasesPaused = dynamicConfig.purchasesPaused;
     const { data: projectData, error: projectErr } = projectResult;
     const data: any[] | null = projectData as any;
     const error = projectErr;
@@ -200,6 +201,9 @@ async function fetchAndCacheBoard(
         sort,
         category: category || 'All',
         purchasesPaused,
+        freeClaimsActive: !purchasesPaused && dynamicConfig.freeClaimsEnabled && profiles.length < dynamicConfig.freeClaimsLimit,
+        freeClaimsLimit: dynamicConfig.freeClaimsLimit,
+        minBumpUsd: dynamicConfig.minBumpUsd,
       };
 
       const rawJson = JSON.stringify(payload);
@@ -210,12 +214,16 @@ async function fetchAndCacheBoard(
     }
   }
 
+  const fallbackConfig = await getDynamicBoardConfig();
   const fallbackPayload = {
     profiles: [],
     total: 0,
     sort,
     category: category || 'All',
-    purchasesPaused: await isPurchasesPaused(),
+    purchasesPaused: fallbackConfig.purchasesPaused,
+    freeClaimsActive: !fallbackConfig.purchasesPaused && fallbackConfig.freeClaimsEnabled,
+    freeClaimsLimit: fallbackConfig.freeClaimsLimit,
+    minBumpUsd: fallbackConfig.minBumpUsd,
   };
   const rawJson = JSON.stringify(fallbackPayload);
   const etag = 'W/"empty-0"';

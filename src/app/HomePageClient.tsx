@@ -167,6 +167,7 @@ export function HomePageClient({
     return !(initialProfiles && initialProfiles.length > 0);
   });
   const [hasMounted, setHasMounted] = useState<boolean>(false);
+  const [freeClaimsActive, setFreeClaimsActive] = useState<boolean>(true);
 
   useEffect(() => {
     setHasMounted(true);
@@ -203,6 +204,9 @@ export function HomePageClient({
             });
             safeSetJSON(STORAGE_KEY_PROFILES, data.profiles);
             sessionSetJSON('bumped_board_cache', data.profiles);
+            if (typeof data.freeClaimsActive === 'boolean') {
+              setFreeClaimsActive(data.freeClaimsActive);
+            }
 
             const sorted = sortBoard(data.profiles);
             if (sorted.length > 100) {
@@ -1878,6 +1882,7 @@ export function HomePageClient({
           <GridBoard
             slots={slots}
             isLoading={isBoardLoading && slots.length === 0}
+            freeClaimsActive={freeClaimsActive}
             onSlotClick={handleSlotClick}
             highlightedRank={highlightedRank}
             matchingRanks={matchingRanks}
@@ -2037,6 +2042,7 @@ export function HomePageClient({
           categories={[...CATEGORIES]}
           existingHandles={existingHandles}
           preselectedTargetSlot={targetSlotToBump}
+          freeClaimsActive={freeClaimsActive}
           onRequireAuth={() => {
             setIsTakeOverOpen(false);
             setIsAuthOpen(true);

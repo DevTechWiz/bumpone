@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/adminAuth';
-import { isPurchasesPaused } from '@/lib/pauseState';
+import { getDynamicBoardConfig } from '@/lib/boardConfig';
 import { allowRequest } from '@/lib/rateLimit';
 
 export async function GET() {
@@ -80,7 +80,7 @@ export async function GET() {
     // docs/15: moderation queue entries the admin can act on directly.
     supabaseAdmin
       .from('projects')
-      .select('id, title, handle, created_at')
+      .select('id, title, handle, destination_url, image_path, created_at')
       .eq('moderation_status', 'pending')
       .order('created_at', { ascending: false })
       .limit(50),
@@ -171,12 +171,17 @@ export async function GET() {
     };
   });
 
+  const dynamicConfig = await getDynamicBoardConfig();
+
   return NextResponse.json(
     {
       totalRevenue,
       activeProfiles: activeProfiles || 0,
       openReports: openReports || 0,
-      purchasesPaused: await isPurchasesPaused(),
+      purchasesPaused: dynamicConfig.purchasesPaused,
+      freeClaimsEnabled: dynamicConfig.freeClaimsEnabled,
+      freeClaimsLimit: dynamicConfig.freeClaimsLimit,
+      minBumpUsd: dynamicConfig.minBumpUsd,
       totalProfiles: totalProfiles || 0,
       totalPurchases: totalPurchases || 0,
       successfulPayments,
