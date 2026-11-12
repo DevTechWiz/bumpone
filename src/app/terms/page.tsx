@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Terms & Conditions - BumpOne.lol",
   description:
     "Official Terms and Conditions for digital billboard services, project listings, and directory placements on BumpOne.lol.",
+  alternates: {
+    canonical: "https://bumpone.lol/terms",
+  },
 };
 
 export default function TermsPage() {

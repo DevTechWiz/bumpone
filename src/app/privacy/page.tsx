@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Privacy Policy & DPDP Act Compliance - BumpOne.lol",
   description:
     "Privacy Policy, DPDP Act 2023/2026 compliance, GDPR, CCPA disclosures, and Google API Limited Use terms for BumpOne.lol.",
+  alternates: {
+    canonical: "https://bumpone.lol/privacy",
+  },
 };
 
 export default function PrivacyPage() {

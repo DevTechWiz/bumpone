@@ -21,6 +21,7 @@ const BlogFrontmatterSchema = z.object({
   slug: z.string().trim().min(1).max(120).regex(/^[a-z0-9-]+$/, 'slug must be kebab-case'),
   keywords: z.array(z.string().max(80)).max(10).default([]),
   status: z.enum(['draft', 'blocked', 'approved']),
+  author: z.string().max(80).default('BumpOne Editorial Team'),
 });
 
 export type BlogPost = z.infer<typeof BlogFrontmatterSchema> & { "body": string };

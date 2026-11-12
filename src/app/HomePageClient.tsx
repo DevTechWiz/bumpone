@@ -790,9 +790,9 @@ export function HomePageClient({
                       const promotedItem = bumpEvt.promotedItem;
                       const isMyProject = Boolean(
                         viewer &&
-                          droppedItem &&
-                          (profilesRef.current.some((p) => p.id === droppedItem.id && p.owner_id === viewer.id) ||
-                            (userAuthHandle && droppedItem.bidderName?.replace(/^@/, '').toLowerCase() === userAuthHandle.toLowerCase()))
+                        droppedItem &&
+                        (profilesRef.current.some((p) => p.id === droppedItem.id && p.owner_id === viewer.id) ||
+                          (userAuthHandle && droppedItem.bidderName?.replace(/^@/, '').toLowerCase() === userAuthHandle.toLowerCase()))
                       );
                       const isKingDrop = bumpEvt.previousRank === 1 && bumpEvt.newRank !== 1;
                       const isGraveyardDrop = bumpEvt.newRank > 100;
@@ -801,8 +801,8 @@ export function HomePageClient({
                         const alertTitle = isGraveyardDrop
                           ? `🚨 Graveyard Alert: ${droppedItem.title} dropped to #101!`
                           : isKingDrop
-                          ? `👑 King Overtaken: ${promotedItem.title} took Rank #1!`
-                          : `⚡ Billboard Alert: ${droppedItem.title} displaced to #${bumpEvt.newRank}`;
+                            ? `👑 King Overtaken: ${promotedItem.title} took Rank #1!`
+                            : `⚡ Billboard Alert: ${droppedItem.title} displaced to #${bumpEvt.newRank}`;
 
                         showBrowserRankAlert({
                           title: alertTitle,
@@ -1442,10 +1442,17 @@ export function HomePageClient({
             />
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white m-0 inline-flex items-center">
-              BumpOne<span className="text-amber-400 font-semibold">.lol</span>
-              <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
-            </h1>
+            {viewingProfileId || initialViewingProfileId ? (
+              <div className="text-sm sm:text-base font-extrabold tracking-tight text-white m-0 inline-flex items-center">
+                BumpOne<span className="text-amber-400 font-semibold">.lol</span>
+                <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
+              </div>
+            ) : (
+              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white m-0 inline-flex items-center">
+                BumpOne<span className="text-amber-400 font-semibold">.lol</span>
+                <span className="sr-only"> - The 100-Slot Digital Billboard & Live Attention Grid</span>
+              </h1>
+            )}
             <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-full bg-white/[0.06] text-neutral-300 border border-white/[0.1]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Top 100
             </span>
@@ -1644,7 +1651,7 @@ export function HomePageClient({
             className="text-xs font-bold py-1 px-2.5 whitespace-nowrap"
           >
             {slots[0] ? (
-              <span>BUMP #1 <span className="font-mono text-[11px] opacity-90 font-normal">(${ (slots[0]?.activeValue ?? 100) + 10})</span></span>
+              <span>BUMP #1 <span className="font-mono text-[11px] opacity-90 font-normal">(${(slots[0]?.activeValue ?? 100) + 10})</span></span>
             ) : (
               <span>BUMP #1</span>
             )}
@@ -2021,11 +2028,11 @@ export function HomePageClient({
           onBack={
             viewingProfileId
               ? () => {
-                  setIsTakeOverOpen(false);
-                  setTargetSlotToBump(null);
-                }
+                setIsTakeOverOpen(false);
+                setTargetSlotToBump(null);
+              }
               : targetSlotToBump
-              ? () => {
+                ? () => {
                   const slotToRestore = targetSlotToBump;
                   setIsTakeOverOpen(false);
                   setTargetSlotToBump(null);
@@ -2035,7 +2042,7 @@ export function HomePageClient({
                     setSelectedSlot(slotToRestore);
                   }
                 }
-              : undefined
+                : undefined
           }
           currentSlots={slots}
           entryFloor={entryFloor}

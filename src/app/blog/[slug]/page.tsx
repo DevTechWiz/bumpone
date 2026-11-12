@@ -14,6 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const post = getBlogPostBySlug(slug);
   if (!post) return { title: "Not found" };
+  const ogImageUrl = "https://bumpone.lol/opengraph-image";
   return {
     title: post.title,
     description: post.description,
@@ -25,6 +26,20 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       description: post.description,
       publishedTime: `${post.date}T00:00:00Z`,
       url: `https://bumpone.lol/blog/${post.slug}`,
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.description,
+      images: [ogImageUrl],
     },
   };
 }
@@ -42,13 +57,50 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const post = getBlogPostBySlug(slug);
   if (!post) notFound();
 
+  const authorName = post.author || "BumpOne Editorial Team";
+  const articleJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.description,
+    datePublished: `${post.date}T00:00:00Z`,
+    dateModified: `${post.date}T00:00:00Z`,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": `https://bumpone.lol/blog/${post.slug}`,
+    },
+    author: {
+      "@type": "Organization",
+      name: authorName,
+      url: "https://bumpone.lol",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "BumpOne",
+      url: "https://bumpone.lol",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://bumpone.lol/bumpone-logo.png",
+      },
+    },
+    image: "https://bumpone.lol/opengraph-image",
+  };
+
   return (
     <main className="min-h-screen bg-[#0A0B0E] text-neutral-200 font-sans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd).replace(/</g, '\\u003c') }}
+      />
       <article className="mx-auto w-full max-w-3xl px-5 py-14">
         <header className="mb-8">
-          <time dateTime={post.date} className="font-mono text-[11px] text-neutral-500">
-            {formatDate(post.date)}
-          </time>
+          <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-500">
+            <time dateTime={post.date}>
+              {formatDate(post.date)}
+            </time>
+            <span>•</span>
+            <span className="text-neutral-400">{authorName}</span>
+          </div>
           <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">{post.title}</h1>
           <p className="mt-3 text-[15px] leading-relaxed text-neutral-400">{post.description}</p>
         </header>

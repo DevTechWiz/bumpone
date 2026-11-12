@@ -56,6 +56,7 @@ export function applySecurityHeaders(res: NextResponse, csp: string | null): Nex
   res.headers.set('X-Frame-Options', 'DENY');
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), browsing-topics=()');
+  res.headers.set('X-XSS-Protection', '0');
   if (process.env.NODE_ENV === 'production') {
     res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
@@ -63,6 +64,26 @@ export function applySecurityHeaders(res: NextResponse, csp: string | null): Nex
 }
 
 export async function middleware(request: NextRequest) {
+  const hostname = request.nextUrl.hostname;
+
+  // Canonical apex domain redirect: 301 www.bumpone.lol -> bumpone.lol
+  if (hostname === 'www.bumpone.lol') {
+    const url = request.nextUrl.clone();
+    url.hostname = 'bumpone.lol';
+    url.protocol = 'https:';
+    url.port = '';
+    return NextResponse.redirect(url, 301);
+  }
+
+  // Canonical protocol redirect: 301 http -> https in production
+  const proto = request.headers.get('x-forwarded-proto');
+  if (process.env.NODE_ENV === 'production' && proto === 'http') {
+    const url = request.nextUrl.clone();
+    url.protocol = 'https:';
+    url.port = '';
+    return NextResponse.redirect(url, 301);
+  }
+
   const csp = buildContentSecurityPolicy();
 
   let supabaseResponse = NextResponse.next({

@@ -28,6 +28,18 @@ export default async function HomePage() {
       {kingImageUrl && (
         <link rel="preload" as="image" href={kingImageUrl} fetchPriority="high" />
       )}
+      <nav className="sr-only" aria-label="Active Ranked Projects Directory">
+        <h2>Ranked Projects on BumpOne Billboard</h2>
+        <ul>
+          {sorted.slice(0, 100).map((p, idx) => (
+            <li key={p.id}>
+              <a href={`/project/${p.id}`}>
+                #{idx + 1} {p.name} - {p.category} (${p.active_value})
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
       <HomePageClient initialProfiles={initialProfiles} />
     </>
   );

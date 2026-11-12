@@ -3,6 +3,8 @@ import { getProject } from "@/lib/getProject";
 import { getBoardProfiles } from "@/lib/getBoard";
 import { HomePageClient } from "@/app/HomePageClient";
 
+export const revalidate = 60; // Cache project showcase at edge for 60s (ISR)
+
 export async function generateMetadata({
   params,
 }: {
@@ -68,6 +70,10 @@ export default async function ProjectShowcasePage({
     ? project.imageUrl.replace(/w=\d+/, "w=600")
     : project?.imageUrl;
 
+  const totalReactions = project?.reactions
+    ? (project.reactions.fire || 0) + (project.reactions.eyes || 0) + (project.reactions.heart || 0) + (project.reactions.laugh || 0)
+    : 0;
+
   const projectJsonLd = project
     ? {
         "@context": "https://schema.org",
@@ -77,6 +83,16 @@ export default async function ProjectShowcasePage({
         applicationCategory: project.category || "BusinessApplication",
         url: `${baseUrl}/project/${id}`,
         ...(project.imageUrl ? { image: project.imageUrl } : {}),
+        ...(project.linkUrl ? { installUrl: project.linkUrl } : {}),
+        ...(totalReactions > 0
+          ? {
+              interactionStatistic: {
+                "@type": "InteractionCounter",
+                interactionType: "https://schema.org/LikeAction",
+                userInteractionCount: totalReactions,
+              },
+            }
+          : {}),
       }
     : null;
 

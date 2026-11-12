@@ -29,6 +29,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
+      url: `${baseUrl}/llms-full.txt`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.8,
+    },
+    {
       url: `${baseUrl}/contact`,
       lastModified: now,
       changeFrequency: 'monthly',
@@ -68,8 +74,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: project.updated_at
         ? new Date(project.updated_at)
         : project.created_at
-        ? new Date(project.created_at)
-        : now,
+          ? new Date(project.created_at)
+          : now,
       changeFrequency: 'daily',
       priority: 0.8,
     }));

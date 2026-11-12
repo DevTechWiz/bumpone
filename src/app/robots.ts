@@ -8,7 +8,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/api/badge', '/llms.txt', '/llms-full.txt'],
+        allow: ['/', '/api/badge', '/api/board', '/llms.txt', '/llms-full.txt'],
         disallow: [
           '/admin',
           '/admin/*',
@@ -20,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
       },
       {
         userAgent: 'Googlebot',
-        allow: ['/', '/api/badge', '/llms.txt', '/llms-full.txt'],
+        allow: ['/', '/api/badge', '/api/board', '/llms.txt', '/llms-full.txt'],
         disallow: [
           '/admin',
           '/admin/*',

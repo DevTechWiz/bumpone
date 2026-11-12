@@ -35,6 +35,7 @@ if (fs.existsSync(contentDir)) {
       slug: front.slug || f.replace(/\.md$/, '').toLowerCase(),
       keywords,
       status: front.status,
+      author: front.author || 'BumpOne Editorial Team',
       body,
     });
   }

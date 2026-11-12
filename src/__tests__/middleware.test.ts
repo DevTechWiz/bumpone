@@ -88,6 +88,23 @@ describe('middleware admin gating (SEC-017)', () => {
     expect(res.status).toBe(200);
   });
 
+  it('redirects www.bumpone.lol to apex bumpone.lol with 301', async () => {
+    const req = new NextRequest('https://www.bumpone.lol/blog');
+    const res = await middleware(req);
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://bumpone.lol/blog');
+  });
+
+  it('redirects plain http to https in production with 301', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const req = new NextRequest('http://bumpone.lol/terms', {
+      headers: { 'x-forwarded-proto': 'http' },
+    });
+    const res = await middleware(req);
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://bumpone.lol/terms');
+  });
+
   it('exposes a matcher that includes /admin and /api/admin', () => {
     expect(config.matcher.length).toBeGreaterThan(0);
     // The matcher is a broad allowlist with explicit static exclusions;

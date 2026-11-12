@@ -130,6 +130,20 @@ const GridCellComponent: React.FC<GridCellProps> = ({
       } w-full h-full box-border ${activeBorder} ${className}`}
     >
       {/* Background Image / Fallback */}
+      {!isOpenSlot && (
+        <a
+          href={`/project/${slot.id}`}
+          onClick={(e) => {
+            if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+              e.preventDefault();
+            }
+          }}
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-2 focus:py-1 focus:bg-black focus:text-amber-400 focus:rounded focus:border focus:border-amber-400"
+          tabIndex={0}
+        >
+          {slot.title} (Rank #{slot.rank})
+        </a>
+      )}
       {!imageError && slot.imageUrl ? (
         <div className="absolute inset-0 w-full h-full overflow-hidden bg-[#0a0a0c]">
           {/* Blurred backdrop image to seamlessly fill letterbox/pillarbox space on top featured slots */}
