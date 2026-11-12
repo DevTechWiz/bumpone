@@ -200,7 +200,7 @@ export function HomePageClient({
 
     // Live background sync: server is always the authoritative source of truth
     const fetchLiveBoard = () => {
-      fetchBoardClient({ limit: 120 })
+      fetchBoardClient({ limit: 120, forceFresh: true })
         .then((data) => {
           if (data && Array.isArray(data.profiles)) {
             setProfiles(() => {
@@ -683,6 +683,9 @@ export function HomePageClient({
           forceFresh,
         });
         if (isMounted && data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          if (typeof data.freeClaimsActive === 'boolean') {
+            setFreeClaimsActive(data.freeClaimsActive);
+          }
           setProfiles(data.profiles);
           const sorted = sortBoard(data.profiles);
           if (sorted.length > 100) {

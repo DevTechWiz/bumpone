@@ -227,7 +227,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           } else {
             setTopUpStr(String(MIN_TOP_UP));
           }
-        } else if (existingHandles.length > 0) {
+        } else if (!isTargetEmpty && existingHandles.length > 0) {
           // Rival slot clicked: user owns projects, allow them to outbid with their first project
           setMode('existing');
           const firstProj = existingHandles[0];
@@ -245,17 +245,14 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
           setLinkUrl(firstProj.linkUrl || (firstProj as any).destination_url || slotMatch?.linkUrl || '');
           if (firstProj.category) setCategory(firstProj.category);
           if (firstProj.handle) setCreatorHandle(firstProj.handle.replace(/^@/, ''));
-          const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
-          const needed = isTargetEmpty
-            ? MIN_TOP_UP
-            : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue - firstProj.activeValue + 10);
+          const needed = Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue - firstProj.activeValue + 10);
           setTopUpStr(String(needed));
         } else {
-          // No projects owned yet: bid a new project to pass the target
+          // Empty slot or user owns no projects: bid a new project to claim or pass the target
           setMode('new');
           const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
           const needed = isTargetEmpty
-            ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
+            ? (freeClaimsActive ? 0 : MIN_TOP_UP)
             : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue + 10);
           setTopUpStr(String(needed));
           setTitle('');
@@ -295,7 +292,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
         }
         const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
         const floorNeeded = occupiedCount < 100
-          ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
+          ? (freeClaimsActive ? 0 : MIN_TOP_UP)
           : Math.max(MIN_TOP_UP, entryFloor) + 10;
         setTopUpStr(String(floorNeeded));
         const defaultH = profile?.handle || user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || '';
@@ -374,13 +371,13 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       if (preselectedTargetSlot) {
         const isTargetEmpty = !preselectedTargetSlot.activeValue || preselectedTargetSlot.id.startsWith('open-slot-');
         const needed = isTargetEmpty
-          ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
+          ? (freeClaimsActive ? 0 : MIN_TOP_UP)
           : Math.max(MIN_TOP_UP, preselectedTargetSlot.activeValue + 10);
         setTopUpStr(String(needed));
       } else {
         const occupiedCount = currentSlots.filter((s) => !s.id.startsWith('open-slot-')).length;
         const floorNeeded = occupiedCount < 100
-          ? (existingHandles.length === 0 ? 0 : MIN_TOP_UP)
+          ? (freeClaimsActive ? 0 : MIN_TOP_UP)
           : Math.max(MIN_TOP_UP, entryFloor) + 10;
         setTopUpStr(String(floorNeeded));
       }
@@ -480,7 +477,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
       : occupiedCount < 100
   );
 
-  const canClaimFree = freeClaimsActive && mode === 'new' && isTargetEmpty && existingHandles.length === 0;
+  const canClaimFree = freeClaimsActive && mode === 'new' && isTargetEmpty;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

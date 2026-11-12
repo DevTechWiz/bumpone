@@ -4,6 +4,8 @@ import { sortBoard } from '@/lib/board';
 import { getDynamicBoardConfig } from '@/lib/boardConfig';
 import { HomePageClient } from './HomePageClient';
 
+export const revalidate = 30;
+
 export const metadata: Metadata = {
   title: {
     absolute: 'BumpOne.lol - The 100-Slot Digital Billboard & Developer Showcase',

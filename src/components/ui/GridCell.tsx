@@ -230,15 +230,15 @@ const GridCellComponent: React.FC<GridCellProps> = ({
                 <Crown className="w-[clamp(9px,3.2cqi,16px)] h-[clamp(9px,3.2cqi,16px)] text-amber-400 shrink-0" /> CENTER KING #1
               </span>
               <span className="text-[clamp(8.5px,3.5cqi,14px)] font-mono font-bold text-amber-200 shrink-0">
-                ${formatNumber(isOpenSlot ? 10 : slot.activeValue)}
+                {isSlotFree ? 'FREE' : `$${formatNumber(isOpenSlot ? 10 : slot.activeValue)}`}
               </span>
             </div>
             <h3 className="text-[clamp(9px,3.8cqi,16px)] font-extrabold text-white truncate drop-shadow-sm">
-              {isOpenSlot ? '👑 Claim King #1 Crown' : slot.title}
+              {isSlotFree ? '👑 Claim King #1 Crown (FREE)' : isOpenSlot ? '👑 Claim King #1 Crown' : slot.title}
             </h3>
             {slot.bidderName && (
               <p className="text-[clamp(7.5px,2.5cqi,12px)] text-slate-300 truncate">
-                {isOpenSlot ? 'Available for $10' : `by ${slot.bidderName}`}
+                {isOpenSlot ? (isSlotFree ? '⚡ Available for FREE' : 'Available for $10') : `by ${slot.bidderName}`}
               </p>
             )}
           </div>
