@@ -142,6 +142,7 @@ export interface HomePageClientProps {
   initialViewingProfileId?: string | null;
   initialViewingProfileMode?: 'user' | 'project';
   initialProject?: Profile | null;
+  initialFreeClaimsActive?: boolean;
 }
 
 export function HomePageClient({
@@ -149,6 +150,7 @@ export function HomePageClient({
   initialViewingProfileId,
   initialViewingProfileMode = 'user',
   initialProject,
+  initialFreeClaimsActive = false,
 }: HomePageClientProps) {
   // 1. Core state: profiles (canonical domain) + off-board keep-list.
   // Initial states start consistent between server & client to prevent hydration mismatch.
@@ -167,7 +169,13 @@ export function HomePageClient({
     return !(initialProfiles && initialProfiles.length > 0);
   });
   const [hasMounted, setHasMounted] = useState<boolean>(false);
-  const [freeClaimsActive, setFreeClaimsActive] = useState<boolean>(true);
+  const [freeClaimsActive, setFreeClaimsActive] = useState<boolean>(initialFreeClaimsActive);
+
+  useEffect(() => {
+    if (initialFreeClaimsActive !== undefined) {
+      setFreeClaimsActive(initialFreeClaimsActive);
+    }
+  }, [initialFreeClaimsActive]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -232,7 +240,7 @@ export function HomePageClient({
 
     let timer: NodeJS.Timeout | undefined;
     if (initialProfiles && initialProfiles.length > 0) {
-      timer = setTimeout(fetchLiveBoard, 4000);
+      timer = setTimeout(fetchLiveBoard, 1000);
     } else {
       fetchLiveBoard();
     }

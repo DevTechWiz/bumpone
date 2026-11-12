@@ -8,7 +8,7 @@ export interface DynamicBoardConfig {
 }
 
 const DEFAULT_CONFIG: DynamicBoardConfig = {
-  freeClaimsEnabled: true,
+  freeClaimsEnabled: false,
   freeClaimsLimit: 50,
   minBumpUsd: 10,
   purchasesPaused: false,
@@ -43,7 +43,7 @@ export async function getDynamicBoardConfig(): Promise<DynamicBoardConfig> {
 
     return {
       purchasesPaused: Boolean(data.purchases_paused),
-      freeClaimsEnabled: data.free_claims_enabled !== undefined ? Boolean(data.free_claims_enabled) : true,
+      freeClaimsEnabled: Boolean(data.free_claims_enabled),
       freeClaimsLimit: typeof data.free_claims_limit === 'number' ? data.free_claims_limit : 50,
       minBumpUsd: typeof data.min_bump_usd === 'number' ? data.min_bump_usd : 10,
     };

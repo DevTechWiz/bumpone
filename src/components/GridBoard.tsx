@@ -29,7 +29,7 @@ const GridBoardComponent: React.FC<GridBoardProps> = ({
   hoveredRank,
   onHoverRank,
   onOrientationChange,
-  freeClaimsActive = true,
+  freeClaimsActive = false,
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [mounted, setMounted] = useState<boolean>(false);

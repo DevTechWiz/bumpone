@@ -91,7 +91,7 @@ export const TakeOverModal: React.FC<TakeOverModalProps> = ({
   preselectedTargetSlot,
   onSubmitTopUp,
   hasBackdrop = true,
-  freeClaimsActive = true,
+  freeClaimsActive = false,
 }) => {
   const { user, profile } = useAuth();
   const [mode, setMode] = useState<'new' | 'existing'>('new');

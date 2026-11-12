@@ -67,14 +67,17 @@ export async function fetchBoardClient(options?: {
 
   // 2. Check sessionStorage fallback (instant 0ms hydration for cold component mounts)
   if (!forceFresh && !cached && typeof window !== 'undefined' && category === 'All' && sort === 'power') {
-    const sessionData = sessionGetJSON<Profile[]>(SESSION_CACHE_KEY);
-    if (sessionData && Array.isArray(sessionData) && sessionData.length > 0) {
+    const rawSession = sessionGetJSON<any>(SESSION_CACHE_KEY);
+    const sessionProfiles = Array.isArray(rawSession) ? rawSession : rawSession?.profiles;
+    if (sessionProfiles && Array.isArray(sessionProfiles) && sessionProfiles.length > 0) {
       const response: BoardClientResponse = {
-        profiles: sessionData,
-        total: sessionData.length,
+        profiles: sessionProfiles,
+        total: sessionProfiles.length,
         sort,
         category,
         purchasesPaused: false,
+        freeClaimsActive: typeof rawSession?.freeClaimsActive === 'boolean' ? rawSession.freeClaimsActive : false,
+        freeClaimsLimit: rawSession?.freeClaimsLimit,
       };
       clientCache.set(cacheKey, { data: response, timestamp: now - (CLIENT_CACHE_TTL_MS / 2) });
       return response;
@@ -127,7 +130,11 @@ export async function fetchBoardClient(options?: {
           // Mirror top default board to sessionStorage
           if (category === 'All' && sort === 'power' && typeof window !== 'undefined') {
             try {
-              sessionSetJSON(SESSION_CACHE_KEY, data.profiles);
+              sessionSetJSON(SESSION_CACHE_KEY, {
+                profiles: data.profiles,
+                freeClaimsActive: data.freeClaimsActive,
+                freeClaimsLimit: data.freeClaimsLimit,
+              });
             } catch {}
           }
           return data;

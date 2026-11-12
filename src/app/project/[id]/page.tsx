@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getProject } from "@/lib/getProject";
 import { getBoardProfiles } from "@/lib/getBoard";
+import { getDynamicBoardConfig } from "@/lib/boardConfig";
 import { HomePageClient } from "@/app/HomePageClient";
 
 export const revalidate = 60; // Cache project showcase at edge for 60s (ISR)
@@ -61,10 +62,15 @@ export default async function ProjectShowcasePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [project, initialProfiles] = await Promise.all([
+  const [project, initialProfiles, dynamicConfig] = await Promise.all([
     getProject(id),
     getBoardProfiles(120),
+    getDynamicBoardConfig(),
   ]);
+  const initialFreeClaimsActive =
+    !dynamicConfig.purchasesPaused &&
+    dynamicConfig.freeClaimsEnabled &&
+    initialProfiles.length < dynamicConfig.freeClaimsLimit;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bumpone.lol';
   const preloadImgUrl = project?.imageUrl?.includes("images.unsplash.com") && project.imageUrl.includes("w=")
     ? project.imageUrl.replace(/w=\d+/, "w=600")
@@ -112,6 +118,7 @@ export default async function ProjectShowcasePage({
         initialViewingProfileId={id}
         initialViewingProfileMode="project"
         initialProject={project}
+        initialFreeClaimsActive={initialFreeClaimsActive}
       />
     </>
   );

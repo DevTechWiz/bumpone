@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getBoardProfiles } from '@/lib/getBoard';
 import { sortBoard } from '@/lib/board';
+import { getDynamicBoardConfig } from '@/lib/boardConfig';
 import { HomePageClient } from './HomePageClient';
 
 export const metadata: Metadata = {
@@ -15,9 +16,17 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const initialProfiles = await getBoardProfiles(120);
+  const [initialProfiles, dynamicConfig] = await Promise.all([
+    getBoardProfiles(120),
+    getDynamicBoardConfig(),
+  ]);
   const sorted = sortBoard(initialProfiles);
   const kingSlot = sorted[0];
+
+  const initialFreeClaimsActive =
+    !dynamicConfig.purchasesPaused &&
+    dynamicConfig.freeClaimsEnabled &&
+    initialProfiles.length < dynamicConfig.freeClaimsLimit;
 
   const kingImageUrl = kingSlot?.imageUrl?.includes('images.unsplash.com') && kingSlot.imageUrl.includes('w=')
     ? kingSlot.imageUrl.replace(/w=\d+/, 'w=400')
@@ -40,7 +49,10 @@ export default async function HomePage() {
           ))}
         </ul>
       </nav>
-      <HomePageClient initialProfiles={initialProfiles} />
+      <HomePageClient
+        initialProfiles={initialProfiles}
+        initialFreeClaimsActive={initialFreeClaimsActive}
+      />
     </>
   );
 }
