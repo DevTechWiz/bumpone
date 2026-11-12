@@ -18,7 +18,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 export function buildContentSecurityPolicy(): string | null {
   if (process.env.NODE_ENV !== 'production') return null;
 
-  const connectSources = ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co', 'https://accounts.google.com'];
+  const connectSources = [
+    "'self'",
+    'https://*.supabase.co',
+    'wss://*.supabase.co',
+    'https://accounts.google.com',
+    'https://cloudflareinsights.com',
+  ];
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (supabaseUrl) {
@@ -31,7 +37,7 @@ export function buildContentSecurityPolicy(): string | null {
 
   return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://accounts.google.com",
+    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",

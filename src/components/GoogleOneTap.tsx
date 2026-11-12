@@ -34,8 +34,11 @@ async function generateNonce(): Promise<{ rawNonce: string; hashedNonce: string 
   return { rawNonce, hashedNonce };
 }
 
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '991881014010-3o60g98nqent0bc6em2kqb0ahu0b88s9.apps.googleusercontent.com';
+
 export const GoogleOneTap: React.FC<GoogleOneTapProps> = ({
-  clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+  clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID,
   disabled = false,
 }) => {
   useEffect(() => {
